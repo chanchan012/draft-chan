@@ -18,9 +18,9 @@ The dev entry point is `npm run dev`. For an existing Chromium binary, set PLAYW
 
 ## External services
 
-Copy .env.example to .env.local for local Next development. Supply both Clerk keys to enable identity, both Upstash REST variables to enable distributed throttling, and a Neon DATABASE_URL to use persistence. Configure the same variables in Vercel separately for each environment. Rebuild after changing the public Clerk key. Set the Clerk allowed origins and redirect URLs for the chosen domains.
+Copy .env.example to .env.local for local Next development. Supply both Clerk keys to enable identity, both Upstash REST variables to enable distributed throttling, and a Neon DATABASE_URL to use persistence. Vercel Production has the Upstash pair and Preview has the Clerk development pair. Both have a sensitive DATABASE_URL targeting the same `draft` database through the `draft_app` role. Clerk Production requires a domain you control. Inngest event and signing keys are pending for M1.2.
 
-Drizzle Kit reads DATABASE_URL from the shell. Before M1.2 CRUD, with the intended Neon database selected, run:
+The initial Drizzle migration is already applied to `draft`. For future migrations, provide a direct database owner connection in the shell as DATABASE_URL and run:
 
 ```sh
 npm run db:migrate
@@ -53,4 +53,4 @@ curl -sS -o /dev/null -w '%{http_code}\n' https://draft-chan.vercel.app/api/acco
 PLAYWRIGHT_BASE_URL=https://draft-chan.vercel.app npm run test:e2e
 ```
 
-Expected responses are a guest identity and HTTP 401. In a managed network, configure the Playwright runner to use the environment's outbound HTTPS proxy and certificate trust. Credentialed sign-in, live database writes and multi-instance rate limiting remain to be verified after provisioning. There are no Inngest, CAD geometry, export or MCP endpoints in this release.
+Expected responses are a guest identity and HTTP 401. In a managed network, configure the Playwright runner to use the environment's outbound HTTPS proxy and certificate trust. Credentialed sign-in and multi-instance rate limiting remain to be verified. M1.2 should test owner-scoped CRUD against the floorplans schema. Production and Preview access the same data, so use their configured Clerk identity boundaries for all writes. There are no Inngest, CAD geometry, export or MCP endpoints in this release.

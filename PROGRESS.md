@@ -13,11 +13,13 @@ Released on 2026-11-18. The verified application merge is `0a0adcde04ab7fb14818d
 | Deploy | Local production build passed. Vercel preview and production reached READY. All 25 browser/API checks passed on the production domain. |
 | Document | Architecture and resume handoff include the schema, runtime boundaries, commands and remaining integration work. |
 
-[Production](https://draft-chan.vercel.app) · [Feature preview](https://draft-chan-bpu2xal38-chanchans-projects-aada625f.vercel.app) · [Application merge](https://github.com/chanchan012/draft-chan/commit/0a0adcde04ab7fb14818dbdcea9e570e89d977b2)
+[Production](https://draft-chan.vercel.app) · [Feature preview](https://draft-chan-git-feature-11-fo-a3a98b-chanchans-projects-aada625f.vercel.app) · [Application merge](https://github.com/chanchan012/draft-chan/commit/0a0adcde04ab7fb14818dbdcea9e570e89d977b2)
 
 ## Verification boundary
 
-Production runs the read-only guest demo and process-local rate limiter. The guest session endpoint returned HTTP 200 and the account endpoint returned HTTP 401. Tests exercise Clerk integration with a substituted authentication provider. Real Clerk login, distributed Redis enforcement, and the Neon migration require provisioned credentials. The SQL migration was generated and reviewed, and remains unapplied to a live database.
+Production runs the read-only guest demo with Upstash rate limiting. The guest session endpoint returned HTTP 200 and the account endpoint returned HTTP 401. Preview uses the Draft Clerk development instance and the process-local limiter. The Preview sign-in page loaded successfully. Credentialed sign-in and multi-instance rate-limit enforcement still need end-to-end checks.
+
+Production and Preview use the same Neon database, `draft`, with the `draft_app` runtime role. The initial Drizzle migration is applied and recorded in the migration ledger. The runtime role can read and write floorplans and lacks schema creation permission.
 
 The viewport matrix covers 1440×900, 768×1024, 390×844, 320×568 and 844×390. The production browser run used the managed network proxy with runner-local certificate handling. Separate HTTPS smoke requests using the system trust store verified the production origin. The post-release Vercel runtime error check returned zero errors.
 
