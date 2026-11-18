@@ -18,7 +18,7 @@ The dev entry point is `npm run dev`. For an existing Chromium binary, set PLAYW
 
 ## External services
 
-Copy .env.example to .env.local for local Next development. Supply both Clerk keys to enable identity, both Upstash REST variables to enable distributed throttling, and a Neon DATABASE_URL to use persistence. Vercel Production has the Upstash pair and Preview has the Clerk development pair. Both have a sensitive DATABASE_URL targeting the same `draft` database through the `draft_app` role. Clerk Production requires a domain you control. Inngest event and signing keys are pending for M1.2.
+Copy .env.example to .env.local for local Next development. Supply both Clerk keys to enable identity, both Upstash REST variables to enable distributed throttling, and a Neon DATABASE_URL to use persistence. Production and Preview share the Clerk development pair and the same `draft` database through the `draft_app` role. Production also has the Upstash pair and Inngest event and signing keys. Live Preview job testing needs Preview Inngest credentials when M1.2 adds the job endpoint.
 
 The initial Drizzle migration is already applied to `draft`. For future migrations, provide a direct database owner connection in the shell as DATABASE_URL and run:
 

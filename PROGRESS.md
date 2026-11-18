@@ -17,7 +17,7 @@ Released on 2026-11-18. The verified application merge is `0a0adcde04ab7fb14818d
 
 ## Verification boundary
 
-Production runs the read-only guest demo with Upstash rate limiting. The guest session endpoint returned HTTP 200 and the account endpoint returned HTTP 401. Preview uses the Draft Clerk development instance and the process-local limiter. The Preview sign-in page loaded successfully. Credentialed sign-in and multi-instance rate-limit enforcement still need end-to-end checks.
+Production and Preview use the same Draft Clerk development instance. Production uses Upstash rate limiting and Preview uses the process-local limiter. The guest session endpoint returned HTTP 200 and the account endpoint returned HTTP 401. Credentialed sign-in and multi-instance rate-limit enforcement still need end-to-end checks.
 
 Production and Preview use the same Neon database, `draft`, with the `draft_app` runtime role. The initial Drizzle migration is applied and recorded in the migration ledger. The runtime role can read and write floorplans and lacks schema creation permission.
 
