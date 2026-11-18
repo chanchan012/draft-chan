@@ -17,3 +17,9 @@ The Upstash limiter allows 60 requests per 60-second sliding window. It uses the
 The Drizzle source of truth is db/schema.ts. Its checked-in SQL migration creates the display_unit enum (mm, in) and floorplans table. Each row contains a UUID id, Clerk owner_id, name, display unit, nonnegative revision, JSONB graph and timestamptz creation/update times. The owner and update time form a composite index. Graph version 1 has arrays for walls, rooms, openings, fixtures and dimensions. The default graph is empty. Future CRUD must scope every query by the verified owner, update updated_at on writes and compare revisions for concurrent updates.
 
 The Neon HTTP adapter connects lazily through DATABASE_URL. M1.1 performs no database writes at runtime. Migrations run explicitly against the chosen database.
+
+## Deployed M1.1 topology
+
+GitHub repository chanchan012/draft-chan supplies the tested branches to the Vercel Next.js project draft-chan. Vercel serves the static landing page and image assets, dynamic sign-in/sign-up routes, the Next proxy and the Hono catch-all function. The production domain is https://draft-chan.vercel.app. This release uses the guest path and process-local throttling. Live credentials for Clerk, Neon and Upstash have not been configured.
+
+The migration is db/migrations/0000_broad_spyke.sql with its Drizzle snapshot and journal. There are no other tables in M1.1. The dashboard, background job endpoint, SSE endpoint, versioned command engine and MCP transports are future subgoals.
