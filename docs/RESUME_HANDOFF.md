@@ -97,15 +97,23 @@ npm start
 
 With the optimized server running, use `PLAYWRIGHT_BASE_URL=http://127.0.0.1:3000 npm run test:e2e`. The release passed 38 Vitest checks and 45 Playwright checks across 1440×900, 768×1024, 390×844, 320×568, and 844×390.
 
-## Start M3.1
+## M3.1 release checkpoint
+
+The feature head is `6e2b4fa5974dd3b102f01bef353201cbb1561d25` on `feature/3.1-fixtures-clearance`. The application merge is `fa9444f7c5ffac8487b2e60aa537e9f0997858d5`. Production deployment `dpl_FaJ7Dm9GnhXcyLHWxcv8apmoecGG` and Preview deployment `dpl_E8HKZ1Gz9Xp3BjKkLwTLrt44oBRS` reached READY. [Dashboard](https://draft-chan.vercel.app/dashboard) · [Feature preview](https://draft-chan-5iza3rjcb-chanchans-projects-aada625f.vercel.app)
+
+In Studio choose Fixture or Utility, then use the Inspector to select the template and apply its settings before placement. The Inspector controls layer visibility. Select an item to edit or remove it. Choose Clearance and select a finding to view its 2D evidence. The graph remains version 1 and uses migrations through 0001. Typed `fixtures` and new `utilities` are part of the owner-scoped save snapshot, and earlier callers may omit them. The checker uses the published metric doorway and walkway benchmarks and the modeled geometry as described in the architecture.
+
+Run `npm test -- tests/clearance.unit.test.ts` for the focused geometry and placement tests. Strict TypeScript, 46 Vitest checks, the production build and 50 Playwright checks passed across five viewports. The authenticated editing suite uses a browser fixture with intercepted RPC. PGlite exercises the actual database path. The deployed signed-out Studio redirect preserved the intended destination and graph GET and PATCH returned HTTP 401.
+
+## Start M3.2
 
 ```sh
 git switch main
 git pull --ff-only
-git switch -c feature/3.1-fixtures-clearance
+git switch -c feature/3.2-exports
 npm ci
 npm run typecheck
 npm test
 ```
 
-Brief the fixture and overlay record shapes before building. Extend the command store and Studio snapshot validator with the new editable fields, preserving existing doors and graph metadata. Use the existing wall centerlines, thickness, door swing geometry, and rooms as inputs to the clearance checks. Run collision and accessibility cases in Vitest and the full Studio browser matrix.
+Brief the export request and storage model before building the BOM, DXF and SVG pipeline. Read the owner-scoped graph at its saved revision. Reuse the authored wall runs, door gaps, fixture catalog and utility layers for output geometry and quantities. Use the existing Inngest handler and test revision handling, job retries, format syntax and Studio status flows.

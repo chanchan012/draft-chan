@@ -98,6 +98,21 @@ Released 2026-11-19. Feature commit `74eb6e6525256dafc77b9f9c3be488431ca1e5f8` o
 
 [Dashboard](https://draft-chan.vercel.app/dashboard) · [Application merge](https://github.com/chanchan012/draft-chan/commit/5b277b4f8049fd29f2924267478b6e14d9f7bc04)
 
+## M3.1 · Fixtures, utility layers, and clearance review
+
+Released 2026-11-19. Feature commit `6e2b4fa5974dd3b102f01bef353201cbb1561d25` on `feature/3.1-fixtures-clearance` was merged as `fa9444f7c5ffac8487b2e60aa537e9f0997858d5`.
+
+| Phase | Result |
+| --- | --- |
+| Brief | Add editable furnishing templates, independent electrical and plumbing layers, and geometry-based clearance checks. |
+| Build | Added 12 fixture and six utility templates, grouped Inspector controls, undoable placement, isometric fixture rendering, and selectable audit findings. |
+| Test | Strict TypeScript, 46 Vitest tests, and 50 Playwright checks passed. The browser matrix covered touch placement, parameter changes, fixture persistence in the browser fixture, independent overlay visibility and visible clearance evidence. PGlite exercised owner-scoped persistence. |
+| Merge | The tested feature tree was merged and pushed to GitHub main. |
+| Deploy | The Next build passed. Preview `dpl_E8HKZ1Gz9Xp3BjKkLwTLrt44oBRS` and Production `dpl_FaJ7Dm9GnhXcyLHWxcv8apmoecGG` reached READY. Private redirect and unsigned graph RPC smoke checks passed. |
+| Document | Architecture and handoff record the typed version 1 collections, geometry coverage and export starting point. |
+
+[Dashboard](https://draft-chan.vercel.app/dashboard) · [Application merge](https://github.com/chanchan012/draft-chan/commit/fa9444f7c5ffac8487b2e60aa537e9f0997858d5)
+
 ## Next subgoal
 
-M3.1 adds parametric fixtures, electrical and plumbing overlays, and walkway and door-clearance checks to Studio.
+M3.2 adds the bill of materials and background blueprint exports.
