@@ -1,0 +1,231 @@
+.dash-page {
+  height: 100dvh;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+.dash-scroll {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  overscroll-behavior: contain;
+}
+.dash-content {
+  width: min(92%, 1360px);
+  margin: auto;
+  padding: clamp(24px, 5vh, 70px) 0 48px;
+}
+.dash-heading,
+.dash-controls,
+.dash-form-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+.dash-heading {
+  padding-bottom: 24px;
+  border-bottom: 1px solid var(--line);
+}
+.dash-heading h1 {
+  font-size: clamp(38px, 5vw, 74px);
+  letter-spacing: -0.07em;
+  font-weight: 520;
+  line-height: 1.1;
+  margin-top: 10px;
+}
+.dash-controls {
+  margin: 24px 0 14px;
+}
+.dash-controls h2 {
+  font-weight: 550;
+  font-size: 20px;
+  letter-spacing: -0.05em;
+}
+.dash-controls small {
+  font: 12px var(--mono);
+  color: var(--muted);
+}
+.dash-search {
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+}
+.dash-search input {
+  font-size: 13px;
+  min-width: 0;
+  width: 135px;
+}
+.dash-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 245px), 1fr));
+  gap: 14px;
+}
+.dash-card,
+.dash-empty,
+.dash-study {
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  overflow: hidden;
+  background: #fcfcf9;
+}
+.dash-card {
+  text-align: left;
+}
+.dash-card:hover {
+  border-color: #949b89;
+}
+.dash-preview {
+  height: 140px;
+  display: grid;
+  place-items: center;
+  background-color: #f4f6ee;
+  color: var(--muted);
+}
+.dash-preview img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+.dash-card-body {
+  padding: 14px;
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 6px;
+  align-items: center;
+}
+.dash-card-body strong {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-weight: 570;
+}
+.dash-card-body span,
+.dash-empty p,
+.dash-study p,
+.dash-modal p {
+  font-size: 14px;
+  color: var(--muted);
+  line-height: 1.65;
+}
+.dash-empty {
+  padding: 28px;
+}
+.dash-empty svg {
+  color: var(--accent);
+  margin-bottom: 12px;
+}
+.dash-empty h3 {
+  font-weight: 580;
+}
+.dash-study {
+  margin-top: 25px;
+  display: grid;
+  grid-template-columns: 1fr 1.2fr;
+  align-items: stretch;
+}
+.dash-study > div:first-child {
+  padding: clamp(18px, 3.5vw, 55px);
+  align-self: center;
+}
+.dash-study h2 {
+  font:
+    italic clamp(28px, 3.2vw, 53px) Georgia,
+    serif;
+  letter-spacing: -0.05em;
+  margin: 12px 0;
+}
+.study-image {
+  max-height: 260px;
+  min-height: 180px;
+  background-color: #f4f6ee;
+  display: grid;
+  place-items: center;
+}
+.study-image img {
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  object-fit: contain;
+  mix-blend-mode: multiply;
+}
+.dash-modal {
+  width: min(440px, 94vw);
+  overflow: auto;
+}
+.dash-modal h2 {
+  overflow-wrap: anywhere;
+}
+.dash-modal form > label,
+.dash-dims label {
+  display: grid;
+  gap: 6px;
+  margin: 14px 0;
+  font-size: 13px;
+}
+.dash-modal input,
+.dash-modal select {
+  padding: 9px;
+  border: 1px solid #b6bcae;
+  border-radius: 4px;
+  background: white;
+  min-width: 0;
+  width: 100%;
+}
+.dash-dims {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+.dash-form-actions {
+  justify-content: flex-end;
+  margin-top: 24px;
+  font-size: 13px;
+}
+.dash-error {
+  padding: 15px;
+  color: #943b23;
+}
+.dash-error button {
+  text-decoration: underline;
+}
+.dash-page .back {
+  margin-left: auto;
+}
+.dash-form-actions .back {
+  margin-right: auto;
+  margin-left: 0;
+}
+.dash-modal .dash-preview + p {
+  margin-top: 12px;
+}
+@media (max-width: 600px) {
+  .dash-controls {
+    flex-wrap: wrap;
+  }
+  .dash-heading {
+    align-items: flex-end;
+  }
+  .dash-study {
+    grid-template-columns: 1fr;
+  }
+  .study-image {
+    height: 170px;
+    grid-row: 1;
+  }
+  .dash-content {
+    width: calc(100% - 32px);
+  }
+  .dash-search input {
+    width: 110px;
+  }
+  .dash-page .primary {
+    white-space: nowrap;
+  }
+  .dash-card-body span {
+    font-size: 12px;
+  }
+}

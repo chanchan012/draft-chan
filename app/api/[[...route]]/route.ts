@@ -21,3 +21,6 @@ const authenticate: IdentityMiddleware = async (c, next) => {
 const api = createApi(authenticate, configuredLimiter());
 export type AppType = typeof api;
 export const GET = handle(api);
+export const POST = handle(api);
+export const PATCH = handle(api);
+export const DELETE = handle(api);

@@ -20,6 +20,7 @@ export const floorplans = pgTable(
     name: text("name").notNull(),
     unit: displayUnit("unit").notNull().default("mm"),
     revision: integer("revision").notNull().default(0),
+    thumbnail: text("thumbnail"),
     graph: jsonb("graph")
       .notNull()
       .default({
