@@ -1,4 +1,5 @@
-import type { DisplayUnit, Point, Wall } from "./model";
+import type { DisplayUnit, Fixture, Point, Utility, Wall } from "./model";
+import { fixtureFootprint, bounds } from "./footprints";
 import { wallLength } from "./openings";
 
 export interface Viewport {
@@ -101,8 +102,10 @@ export function fitCamera(
   walls: readonly Wall[],
   viewport: Viewport,
   isometric = false,
+  fixtures: readonly Fixture[] = [],
+  utilities: readonly Utility[] = [],
 ): Camera {
-  if (!walls.length)
+  if (!walls.length && !fixtures.length && (isometric || !utilities.length))
     return {
       x: 0,
       y: 0,
@@ -125,12 +128,19 @@ export function fitCamera(
         : bounds;
     }),
   );
-  const xs = points.map((p) => p.x);
-  const ys = points.map((p) => p.y);
-  const left = Math.min(...xs),
-    right = Math.max(...xs),
-    top = Math.min(...ys),
-    bottom = Math.max(...ys);
+  for (const fixture of fixtures) {
+    const footprint = fixtureFootprint(fixture);
+    points.push(
+      ...(isometric
+        ? footprint.flatMap((corner) => [
+            projectIso(corner),
+            projectIso(corner, fixture.heightMm),
+          ])
+        : footprint),
+    );
+  }
+  if (!isometric) points.push(...utilities.map(({ position }) => position));
+  const { left, right, top, bottom } = bounds(points);
   return {
     x: (left + right) / 2,
     y: (top + bottom) / 2,

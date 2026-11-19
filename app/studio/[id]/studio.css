@@ -176,7 +176,9 @@
   outline-offset: -2px;
 }
 .studio-canvas.tool-wall,
-.studio-canvas.tool-door {
+.studio-canvas.tool-door,
+.studio-canvas.tool-fixture,
+.studio-canvas.tool-utility {
   cursor: crosshair;
 }
 .studio-canvas.tool-pan {
@@ -533,5 +535,178 @@
   }
   .studio-tools button {
     min-height: 36px;
+  }
+}
+
+.studio-audit-toggle[aria-pressed="true"] {
+  background: var(--studio-dark);
+  color: #fff;
+}
+.cad-fixture {
+  stroke: #6e5944;
+  fill: #e6d5b9;
+  stroke-width: 1.25px;
+}
+.cad-fixture path,
+.cad-fixture ellipse {
+  fill: #f4e7cc;
+  stroke-width: 1px;
+}
+.cad-fixture.is-selected {
+  stroke: #a84023;
+  stroke-width: 2px;
+}
+.cad-iso-fixture .cad-top {
+  fill: #e6d5b9;
+}
+.cad-iso-fixture .cad-face {
+  fill: #bb9e75;
+}
+.cad-iso-fixture .cad-cap {
+  fill: #a68a67;
+}
+.cad-utility {
+  color: #77602d;
+}
+.cad-utility[data-layer="plumbing"] {
+  color: #285e67;
+}
+.cad-utility rect,
+.cad-utility circle {
+  fill: var(--paper);
+  stroke: currentColor;
+  stroke-width: 1.35px;
+}
+.cad-utility.is-selected rect,
+.cad-utility.is-selected circle {
+  stroke-width: 2.7px;
+}
+.cad-utility text {
+  fill: currentColor;
+  text-anchor: middle;
+  dominant-baseline: central;
+  font: 650 10px var(--mono);
+}
+.cad-audit-shape path,
+.cad-audit-shape line {
+  stroke: #ac4826;
+  stroke-width: 2.5;
+  stroke-dasharray: 5 3;
+  fill: #f3a27955;
+}
+.cad-audit-shape .cad-audit-dimension {
+  fill: none;
+  stroke-dasharray: none;
+}
+.studio-field-pair,
+.studio-fields-compact {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+}
+.studio-layers label {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+}
+.studio-layers input {
+  width: 16px;
+  height: 16px;
+  min-height: 0;
+  accent-color: var(--studio-dark);
+  appearance: auto;
+}
+.studio-layer-key {
+  width: 10px;
+  height: 10px;
+  border: 1px solid currentColor;
+  border-radius: 2px;
+  color: #77602d;
+}
+.studio-layer-key.plumbing {
+  border-radius: 50%;
+  color: #285e67;
+}
+.studio-audit-summary {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font-weight: 620;
+  font-size: 13px;
+  margin-bottom: 11px;
+}
+.studio-audit-note {
+  font-size: 12px;
+  color: #555c50;
+  line-height: 1.5;
+}
+.studio-audit-note a {
+  color: #8d361e;
+  text-decoration: underline;
+}
+.studio-audit-list {
+  margin-top: 13px;
+  display: grid;
+  gap: 7px;
+}
+.studio-audit-list button {
+  display: grid;
+  grid-template-columns: 16px minmax(0, 1fr);
+  gap: 6px;
+  width: 100%;
+  padding: 8px;
+  border: 1px solid var(--studio-rule);
+  border-radius: 5px;
+  text-align: left;
+  background: #fcfbf6;
+}
+.studio-audit-list button > span {
+  display: grid;
+  gap: 3px;
+}
+.studio-audit-list button[aria-pressed="true"] {
+  border-color: #b15c3d;
+  background: #f9e9de;
+}
+.studio-audit-list strong {
+  font-weight: 650;
+  font-size: 12px;
+}
+.studio-audit-list span span {
+  font-size: 11px;
+  color: #555c50;
+}
+.studio-audit-list .studio-audit-measure {
+  color: #8d361e;
+  font-family: var(--mono);
+}
+
+@media (max-width: 540px) {
+  .studio-audit-toggle span,
+  .studio-segment svg {
+    display: none;
+  }
+  .studio-controls {
+    gap: 3px;
+  }
+  .studio-controls button {
+    padding-inline: 5px;
+  }
+  .studio-workbench {
+    grid-template-rows: 49px minmax(0, 1fr);
+  }
+  .studio-tools {
+    gap: 3px;
+    padding-inline: 5px;
+  }
+  .studio-tools button {
+    grid-auto-flow: row;
+    place-items: center;
+    min-width: 0;
+    gap: 2px;
+    font-size: 10px;
+  }
+  .studio-inspector {
+    top: 49px;
   }
 }

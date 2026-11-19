@@ -3,6 +3,9 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Box,
+  Armchair,
+  Zap,
+  ScanLine,
   DoorOpen,
   Hand,
   LayoutGrid,
@@ -16,6 +19,12 @@ import {
 } from "lucide-react";
 import { useStore } from "zustand";
 import { gridSteps, unitFactor } from "@/lib/plans/cad";
+import {
+  utilityCatalog,
+  type UtilityKind,
+  type UtilityLayer,
+} from "@/lib/plans/catalog";
+import { checkClearances } from "@/lib/plans/clearance";
 import { createDraftPlanStore } from "@/lib/plans/command-store";
 import { authModalHref } from "@/lib/auth-navigation";
 import type { DraftActor, PlanCommand, Point } from "@/lib/plans/model";
@@ -26,11 +35,20 @@ import {
 import type { Selection } from "./drawing";
 import { Inspector, type DoorSettings, type WallSettings } from "./inspector";
 import { Surface, type Tool } from "./surface";
+import { AuditPanel } from "./audit-panel";
+import {
+  FixtureFields,
+  UtilityFields,
+  Layers,
+  fixtureDefaults,
+} from "./placement-fields";
 
 const tools = [
   { id: "select", label: "Select", icon: MousePointer2, shortcut: "V" },
   { id: "wall", label: "Wall", icon: Ruler, shortcut: "W" },
   { id: "door", label: "Door", icon: DoorOpen, shortcut: "D" },
+  { id: "fixture", label: "Fixture", icon: Armchair, shortcut: "F" },
+  { id: "utility", label: "Utility", icon: Zap, shortcut: "U" },
   { id: "pan", label: "Pan", icon: Hand, shortcut: "H" },
 ] as const;
 
@@ -58,11 +76,22 @@ export function Studio({
     hinge: "start",
     swing: "left",
   });
+  const [fixture, setFixture] = useState(() => fixtureDefaults("sofa"));
+  const [utility, setUtility] = useState<UtilityKind>("outlet");
+  const [layers, setLayers] = useState({ electrical: true, plumbing: true });
+  const [auditOpen, setAuditOpen] = useState(false);
+  const [finding, setFinding] = useState<string>();
+  const audit = useMemo(
+    () => (auditOpen ? checkClearances(plan) : undefined),
+    [plan, auditOpen],
+  );
+  const issue = audit?.issues.find(({ id }) => id === finding);
   const [selection, setSelection] = useState<Selection | null>(null);
   const [message, setMessage] = useState("");
   const [saveState, setSaveState] = useState<
     "idle" | "saving" | "error" | "conflict" | "auth"
   >("idle");
+  const auditControl = useRef<HTMLButtonElement>(null);
   const saving = useRef(false);
   const revision = useRef(initial.revision);
   const snapshot = useMemo(() => studioSnapshot(plan, unit), [plan, unit]);
@@ -79,6 +108,14 @@ export function Studio({
       ? plan.openings.find((d) => d.id === selection.id)
       : undefined;
 
+  const activeFixture =
+    selection?.kind === "fixture"
+      ? plan.fixtures.find(({ id }) => id === selection.id)
+      : undefined;
+  const activeUtility =
+    selection?.kind === "utility"
+      ? plan.utilities.find(({ id }) => id === selection.id)
+      : undefined;
   const save = useCallback(async () => {
     if (!dirty || saving.current || saveState === "conflict") return;
     saving.current = true;
@@ -146,6 +183,8 @@ export function Studio({
 
   const switchTool = useCallback((next: Tool) => {
     setTool(next);
+    setAuditOpen(false);
+    setFinding(undefined);
     setSelection(null);
     setMessage("");
     if (next !== "pan") setIso(false);
@@ -198,6 +237,37 @@ export function Studio({
       type: "wall.add",
       wall: { id: crypto.randomUUID(), ...wall, start, end },
     });
+  }
+
+  function ensureLayer(template: UtilityKind) {
+    const layer = utilityCatalog[template].layer;
+    setLayers((visible) =>
+      visible[layer] ? visible : { ...visible, [layer]: true },
+    );
+  }
+
+  function place(kind: "fixture" | "utility", position: Point) {
+    const id = crypto.randomUUID();
+    if (kind === "utility") ensureLayer(utility);
+    const added =
+      kind === "fixture"
+        ? command({
+            type: "fixture.add",
+            fixture: { ...fixture, position, id },
+          })
+        : command({
+            type: "utility.add",
+            utility: { template: utility, position, id },
+          });
+    if (added) {
+      setSelection({ kind, id });
+      setTool("select");
+    }
+  }
+  function toggleLayer(layer: UtilityLayer) {
+    setLayers((visible) => ({ ...visible, [layer]: !visible[layer] }));
+    if (activeUtility && utilityCatalog[activeUtility.template].layer === layer)
+      setSelection(null);
   }
 
   const status =
@@ -286,12 +356,33 @@ export function Studio({
           </button>
         </div>
         <button
+          className="studio-audit-toggle"
+          ref={auditControl}
+          aria-label="Check clearances"
+          title="Check clearances"
+          aria-pressed={auditOpen}
+          onClick={() => {
+            const open = !auditOpen || !inspectorOpen;
+            setAuditOpen(open);
+            setInspectorOpen(open);
+            setFinding(undefined);
+            if (open) setIso(false);
+          }}
+        >
+          <ScanLine size={17} />
+          <span>Clearance</span>
+        </button>
+        <button
           className="studio-inspector-toggle"
           aria-pressed={inspectorOpen}
           aria-controls="studio-inspector"
           aria-label="Inspector"
           title="Inspector"
-          onClick={() => setInspectorOpen(!inspectorOpen)}
+          onClick={() => {
+            setInspectorOpen(!inspectorOpen || auditOpen);
+            setAuditOpen(false);
+            setFinding(undefined);
+          }}
         >
           <PanelRight size={19} />
         </button>
@@ -322,6 +413,9 @@ export function Studio({
           unit={unit}
           thicknessMm={wall.thicknessMm}
           selection={selection}
+          layers={layers}
+          issue={issue}
+          onPlace={place}
           onSelect={setSelection}
           onWall={drawWall}
           onDoor={(wallId, offsetMm) =>
@@ -341,39 +435,113 @@ export function Studio({
           <button
             className="studio-inspector-close"
             aria-label="Close inspector"
-            onClick={() => setInspectorOpen(false)}
+            onClick={() => {
+              setInspectorOpen(false);
+              setAuditOpen(false);
+              setFinding(undefined);
+            }}
           >
             <X size={18} />
           </button>
-          <Inspector
-            plan={plan}
-            tool={tool}
-            unit={unit}
-            gridIndex={gridIndex}
-            wall={wall}
-            door={door}
-            activeWall={activeWall}
-            activeDoor={activeDoor}
-            onUnit={setUnit}
-            onGrid={setGridIndex}
-            onWall={(changes) =>
-              activeWall
-                ? command({ type: "wall.update", id: activeWall.id, changes })
-                : setWall(changes)
-            }
-            onDoor={(changes) =>
-              activeDoor
-                ? command({ type: "door.update", id: activeDoor.id, changes })
-                : setDoor(changes)
-            }
-            onRemove={() => {
-              if (activeWall)
-                command({ type: "wall.remove", id: activeWall.id });
-              if (activeDoor)
-                command({ type: "door.remove", id: activeDoor.id });
-              setSelection(null);
-            }}
-          />
+          {audit ? (
+            <AuditPanel
+              {...audit}
+              selected={finding}
+              unit={unit}
+              onIssue={(id) => {
+                setIso(false);
+                setFinding(id);
+                if (window.matchMedia("(max-width: 900px)").matches) {
+                  setInspectorOpen(false);
+                  auditControl.current?.focus();
+                }
+              }}
+            />
+          ) : (
+            <Inspector
+              plan={plan}
+              tool={tool}
+              unit={unit}
+              gridIndex={gridIndex}
+              wall={wall}
+              door={door}
+              activeWall={activeWall}
+              activeDoor={activeDoor}
+              onUnit={setUnit}
+              onGrid={setGridIndex}
+              onWall={(changes) =>
+                activeWall
+                  ? command({ type: "wall.update", id: activeWall.id, changes })
+                  : setWall(changes)
+              }
+              onDoor={(changes) =>
+                activeDoor
+                  ? command({ type: "door.update", id: activeDoor.id, changes })
+                  : setDoor(changes)
+              }
+              layers={<Layers layers={layers} onToggle={toggleLayer} />}
+              placementSelected={
+                activeFixture
+                  ? "fixture"
+                  : activeUtility
+                    ? "utility"
+                    : undefined
+              }
+              placementFields={
+                activeFixture || tool === "fixture" ? (
+                  <FixtureFields
+                    key={JSON.stringify([activeFixture ?? fixture, unit])}
+                    unit={unit}
+                    value={activeFixture ?? fixture}
+                    active={activeFixture}
+                    onSet={(value, position) => {
+                      if (activeFixture && position)
+                        command({
+                          type: "fixture.update",
+                          id: activeFixture.id,
+                          changes: { ...value, position },
+                        });
+                      else {
+                        setFixture(value);
+                        setInspectorOpen(false);
+                      }
+                    }}
+                  />
+                ) : activeUtility || tool === "utility" ? (
+                  <UtilityFields
+                    key={JSON.stringify([activeUtility ?? utility, unit])}
+                    unit={unit}
+                    value={activeUtility?.template ?? utility}
+                    active={activeUtility}
+                    onSet={(template, position) => {
+                      ensureLayer(template);
+                      if (activeUtility && position)
+                        command({
+                          type: "utility.update",
+                          id: activeUtility.id,
+                          changes: { template, position },
+                        });
+                      else {
+                        setUtility(template);
+                        setInspectorOpen(false);
+                      }
+                    }}
+                  />
+                ) : undefined
+              }
+              onRemove={() => {
+                if (activeWall)
+                  command({ type: "wall.remove", id: activeWall.id });
+                if (activeDoor)
+                  command({ type: "door.remove", id: activeDoor.id });
+                if (activeFixture)
+                  command({ type: "fixture.remove", id: activeFixture.id });
+                if (activeUtility)
+                  command({ type: "utility.remove", id: activeUtility.id });
+                setSelection(null);
+              }}
+            />
+          )}
         </aside>
         {(message || saveState === "conflict" || saveState === "auth") && (
           <div role="alert" className="studio-message">

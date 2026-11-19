@@ -12,22 +12,27 @@ import {
   fitCamera,
   modelPoint,
   snapWallPoint,
+  snapPoint,
   unitFactor,
   wallHit,
   zoomCamera,
   type Camera,
   type Viewport,
 } from "@/lib/plans/cad";
+import { utilityCatalog, type UtilityLayer } from "@/lib/plans/catalog";
+import { bounds, fixtureFootprint } from "@/lib/plans/footprints";
+import type { ClearanceIssue } from "@/lib/plans/clearance";
 import { doorBounds } from "@/lib/plans/openings";
 import type { DisplayUnit, DraftPlanState, Point } from "@/lib/plans/model";
 import {
   DrawingGrid,
+  ClearanceDrawing,
   IsometricDrawing,
   PlanDrawing,
   type Selection,
 } from "./drawing";
 
-export type Tool = "select" | "wall" | "door" | "pan";
+export type Tool = "select" | "wall" | "door" | "fixture" | "utility" | "pan";
 type SurfaceProps = {
   plan: DraftPlanState;
   tool: Tool;
@@ -37,7 +42,10 @@ type SurfaceProps = {
   unit: DisplayUnit;
   thicknessMm: number;
   selection: Selection | null;
+  layers: Record<UtilityLayer, boolean>;
+  issue?: ClearanceIssue;
   onSelect(value: Selection | null): void;
+  onPlace(tool: "fixture" | "utility", point: Point): void;
   onWall(start: Point, end: Point): boolean;
   onDoor(wallId: string, offsetMm: number): void;
 };
@@ -54,23 +62,35 @@ export function Surface({
   unit,
   thicknessMm,
   selection,
+  layers,
+  issue,
   onSelect,
+  onPlace,
   onWall,
   onDoor,
 }: SurfaceProps) {
   const surface = useRef<HTMLDivElement>(null);
   const svg = useRef<SVGSVGElement>(null);
   const gesture = useRef<Gesture | null>(null);
-  const initial = useRef(plan.walls);
+  const initial = useRef(plan);
   const [size, setSize] = useState<Viewport>({ width: 640, height: 480 });
   const [planCamera, setPlanCamera] = useState<Camera | null>(null);
   const [isoCamera, setIsoCamera] = useState<Camera | null>(null);
   const [anchor, setAnchor] = useState<Point | null>(null);
   const [cursor, setCursor] = useState<Point | null>(null);
   const setCamera = iso ? setIsoCamera : setPlanCamera;
+  const geometry = iso ? plan : initial.current;
   const camera =
     (iso ? isoCamera : planCamera) ??
-    fitCamera(iso ? plan.walls : initial.current, size, iso);
+    fitCamera(
+      geometry.walls,
+      size,
+      iso,
+      geometry.fixtures,
+      geometry.utilities.filter(
+        (marker) => layers[utilityCatalog[marker.template].layer],
+      ),
+    );
   const center = { x: size.width / 2, y: size.height / 2 };
   const origin = {
     x: center.x - camera.x * camera.scale,
@@ -95,6 +115,20 @@ export function Surface({
   useEffect(() => {
     setIsoCamera(null);
   }, [plan]);
+
+  useEffect(() => {
+    if (!issue || iso) return;
+    const points = issue.segment ?? issue.polygons?.flat();
+    if (!points?.length) return;
+    const { left, right, top, bottom } = bounds(points);
+    setPlanCamera((current) => ({
+      x: (left + right) / 2,
+      y: (top + bottom) / 2,
+      scale: current?.scale ?? camera.scale,
+    }));
+    // Centering is an explicit audit selection. Subsequent pan and zoom remain available.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [issue?.id, iso]);
 
   function screen(event: { clientX: number; clientY: number }) {
     const bounds = svg.current!.getBoundingClientRect();
@@ -146,6 +180,35 @@ export function Surface({
       else if (!same(anchor, end) && onWall(anchor, end)) setAnchor(null);
       setCursor(end);
       return;
+    }
+    if (tool === "fixture" || tool === "utility") {
+      onPlace(tool, snapPoint(point, grid));
+      return;
+    }
+    if (tool === "select") {
+      const marker = plan.utilities.find(
+        (item) =>
+          layers[utilityCatalog[item.template].layer] &&
+          Math.hypot(point.x - item.position.x, point.y - item.position.y) <=
+            10 / camera.scale,
+      );
+      if (marker) {
+        onSelect({ kind: "utility", id: marker.id });
+        return;
+      }
+      const fixture = plan.fixtures.findLast((item) => {
+        const edge = bounds(fixtureFootprint(item));
+        return (
+          point.x >= edge.left &&
+          point.x <= edge.right &&
+          point.y >= edge.top &&
+          point.y <= edge.bottom
+        );
+      });
+      if (fixture) {
+        onSelect({ kind: "fixture", id: fixture.id });
+        return;
+      }
     }
     const hit = wallHit(point, plan.walls, 11 / camera.scale);
     if (tool === "door") {
@@ -303,8 +366,14 @@ export function Surface({
           {iso ? (
             <IsometricDrawing plan={plan} />
           ) : (
-            <PlanDrawing plan={plan} selection={selection} />
+            <PlanDrawing
+              plan={plan}
+              selection={selection}
+              layers={layers}
+              scale={camera.scale}
+            />
           )}
+          {!iso && <ClearanceDrawing issue={issue} scale={camera.scale} />}
           {preview && (
             <line
               className="cad-preview"
@@ -348,16 +417,19 @@ export function Surface({
           </text>
         )}
       </svg>
-      {!plan.walls.length && !start && (
-        <div className="studio-empty">
-          <strong>A blank drawing</strong>
-          <span>
-            {iso
-              ? "Draw a wall in 2D to see it here."
-              : "Choose Wall to start drawing."}
-          </span>
-        </div>
-      )}
+      {!plan.walls.length &&
+        !plan.fixtures.length &&
+        !plan.utilities.length &&
+        !start && (
+          <div className="studio-empty">
+            <strong>A blank drawing</strong>
+            <span>
+              {iso
+                ? "Draw a wall in 2D to see it here."
+                : "Choose Wall to start drawing."}
+            </span>
+          </div>
+        )}
       <div className="studio-scale" aria-hidden="true">
         {scaleText} {unit}
         {scaleWidth >= 12 && <i style={{ width: scaleWidth }} />}
@@ -368,7 +440,19 @@ export function Surface({
         </button>
         <button
           aria-label="Fit drawing"
-          onClick={() => setCamera(fitCamera(plan.walls, size, iso))}
+          onClick={() =>
+            setCamera(
+              fitCamera(
+                plan.walls,
+                size,
+                iso,
+                plan.fixtures,
+                plan.utilities.filter(
+                  (item) => layers[utilityCatalog[item.template].layer],
+                ),
+              ),
+            )
+          }
         >
           <Focus size={16} />
         </button>
