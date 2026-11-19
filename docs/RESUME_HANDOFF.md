@@ -14,7 +14,7 @@ npm run build
 npm start
 ```
 
-The dev entry point is `npm run dev`. For an existing Chromium binary, set PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH. Set PLAYWRIGHT_BASE_URL to test an already running server. The foundation browser suite expects guest configuration.
+The dev entry point is `npm run dev`. For an existing Chromium binary, set PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH. Set PLAYWRIGHT_BASE_URL to test an already running server. The public and signed-out checks can use an unconfigured local Clerk instance. The dashboard browser fixture mounts the real client component, uses the application styles, and intercepts RPC. Set PLAYWRIGHT_CHECK_CLERK=1 against a configured deployment to verify the embedded Clerk inputs and primary actions.
 
 ## External services
 
@@ -35,14 +35,7 @@ Source is at https://github.com/chanchan012/draft-chan. The feature branch is fe
 | Vercel production | dpl_73izYCFeEo1eKSxYQbtsV9fpHqqM | https://draft-chan.vercel.app |
 | Vercel feature preview | dpl_7TBRpH7XoV772hfwFU9c3kkjX3xE | https://draft-chan-bpu2xal38-chanchans-projects-aada625f.vercel.app |
 
-The Vercel project ID is prj_TTJ9f3B8EwiM9e76d8iknhBTSPBx. Recheck guest production behavior with:
-
-```sh
-curl -fsS https://draft-chan.vercel.app/api/session
-curl -sS -o /dev/null -w '%{http_code}\n' https://draft-chan.vercel.app/api/account
-```
-
-Expected responses are a guest identity and HTTP 401. In a managed network, configure the Playwright runner to use the environment's outbound HTTPS proxy and certificate trust. Credentialed sign-in and multi-instance rate limiting remain to be verified. M1.2 should test owner-scoped CRUD against the floorplans schema. Production and Preview access the same data, so use their configured Clerk identity boundaries for all writes. The M1.2 checkpoint below supersedes the initial dashboard and Inngest status.
+The Vercel project ID is prj_TTJ9f3B8EwiM9e76d8iknhBTSPBx. The current unsigned smoke commands are recorded in the authentication checkpoint below.
 
 ## M1.2 release checkpoint
 
@@ -50,7 +43,22 @@ The application merge is 32746d1d4463b0c926dec17a0381c0cdce5ec0cb. Production de
 
 The shared Neon database draft has migration 0001 applied with Drizzle timestamp 1795051066909 and hash 8f776ab5daa1754cff217c662c7144d92113909faa43173ff5978bb4e358d695. The application role can update the thumbnail column. For a fresh database, run the checked-in migrations with a schema owner using the instructions above.
 
-Inngest Production is synced to https://draft-chan.vercel.app/api/inngest. Event 01M7RPRD41WAYN0R9VC6C1QN9S produced completed run 01M7RPRD8YA57T0ZMCKY0D1VA2 and a stored SVG. The disposable plan was removed. Preview has Clerk and Neon available. Live Preview thumbnail jobs require separate Inngest environment configuration. The checkout's Vitest worker tests use PGlite and its browser suite uses guest configuration plus intercepted member RPC responses. Live credentialed browser CRUD remains unverified because automated sign-up stopped at Clerk verification.
+Inngest Production is synced to https://draft-chan.vercel.app/api/inngest. Event 01M7RPRD41WAYN0R9VC6C1QN9S produced completed run 01M7RPRD8YA57T0ZMCKY0D1VA2 and a stored SVG. The disposable plan was removed. Preview has Clerk and Neon available. Live Preview thumbnail jobs require separate Inngest environment configuration. Vitest worker tests use PGlite. The browser suite uses a dashboard fixture with intercepted member RPC responses. Live credentialed browser CRUD remains unverified because automated sign-up stopped at Clerk verification.
+
+## Authentication and responsive layout checkpoint
+
+The auth-only workspace and responsive Clerk forms are live from merge `e22bac18d799a75078840e3cfdf902066eb52c40`. Vercel production deployment `dpl_HSsmeYW6y2q2Xt5GxRiuByNrAg3T` and feature preview `dpl_2MBdxhC7RQRi8LphqZK4mbMzMaie` reached READY. Both use the existing Clerk development instance. The release requires no schema migration or new environment variables.
+
+Recheck the current signed-out boundary with:
+
+```sh
+curl -sSI https://draft-chan.vercel.app/dashboard
+curl -sSI https://draft-chan.vercel.app/studio/example
+curl -sS -i https://draft-chan.vercel.app/api/session
+PLAYWRIGHT_CHECK_CLERK=1 PLAYWRIGHT_BASE_URL=https://draft-chan.vercel.app npm run test:e2e
+```
+
+Expect page redirects to Draft’s /sign-in and HTTP 401 with a JSON error from the API. All 35 Playwright checks passed locally and on production. The layout matrix covers 1440×900, 768×1024, 390×844, 320×568 and 844×390. To run from a managed network, use PLAYWRIGHT_PROXY_SERVER if needed and configure the runner’s certificate trust. Live sign-in and sign-up form rendering passed. Credentialed live browser CRUD still needs an authenticated test session. Fixtures cover the signed-in UI and PGlite verifies owner-scoped writes.
 
 ## Start M2.1
 

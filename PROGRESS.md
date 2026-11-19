@@ -15,7 +15,7 @@ Released on 2026-11-18. The verified application merge is `0a0adcde04ab7fb14818d
 
 [Production](https://draft-chan.vercel.app) · [Feature preview](https://draft-chan-git-feature-11-fo-a3a98b-chanchans-projects-aada625f.vercel.app) · [Application merge](https://github.com/chanchan012/draft-chan/commit/0a0adcde04ab7fb14818dbdcea9e570e89d977b2)
 
-## Verification boundary
+## M1.1 verification boundary
 
 Production and Preview use the same Draft Clerk development instance. Production uses Upstash rate limiting and Preview uses the process-local limiter. The guest session endpoint returned HTTP 200 and the account endpoint returned HTTP 401. Credentialed sign-in and multi-instance rate-limit enforcement still need end-to-end checks.
 
@@ -39,6 +39,21 @@ Released 2026-11-19. The feature commit is `6cf6dc3` on `feature/1.2-dashboard`.
 The public dashboard fit a 390×844 viewport. The signed-out plan endpoint returned HTTP 401 and the dashboard sign-in action loaded Clerk. Automated signup reached Clerk request verification, leaving the live credentialed browser CRUD flow unverified. Production job run `01M7RPRD8YA57T0ZMCKY0D1VA2` returned `written: true`. The test plan held a 443-character SVG with a room polygon and was deleted after inspection.
 
 [Public dashboard](https://draft-chan.vercel.app/dashboard) · [M1.2 preview](https://draft-chan-iksc4g24o-chanchans-projects-aada625f.vercel.app/dashboard) · [Design reference](DESIGN.md)
+
+## Pre-M2.1 · Auth-only workspace
+
+Released 2026-11-19. The final application merge is `e22bac18d799a75078840e3cfdf902066eb52c40` and the feature branch is `fix/auth-only-workspace`.
+
+| Phase | Result |
+| --- | --- |
+| Brief | Remove guest access, protect private pages, and improve auth and responsive layouts. |
+| Build | Form & Function Studio’s frontend craft and design language guided the new Clerk screens. The public landing shows a static preview. Clerk protects dashboard and studio paths, Hono verifies workspace requests independently, and the interactive sample lives in the dashboard. |
+| Test | Strict TypeScript and 15 Vitest tests passed. All 35 Playwright checks passed locally and in production across five viewport sizes. Production checks loaded the live Clerk forms, verified private redirects and API responses, and used mocked member RPC for dashboard interactions. |
+| Merge | Feature branch and final merge pushed to GitHub after testing. |
+| Deploy | Standard Next build passed. Preview `dpl_2MBdxhC7RQRi8LphqZK4mbMzMaie` and Production `dpl_HSsmeYW6y2q2Xt5GxRiuByNrAg3T` reached READY. No schema or credential changes were required. |
+| Document | Architecture and handoff record private routes, smoke commands, and the credentialed verification boundary. |
+
+[Sign in](https://draft-chan.vercel.app/sign-in) · [Final application merge](https://github.com/chanchan012/draft-chan/commit/e22bac18d799a75078840e3cfdf902066eb52c40)
 
 ## Next subgoal
 
