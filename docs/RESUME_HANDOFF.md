@@ -153,15 +153,31 @@ npm start
 
 With the optimized server running, use `PLAYWRIGHT_BASE_URL=http://127.0.0.1:3000 npm run test:e2e`. The release passed 53 Vitest tests and 65 Playwright checks. Signed-in browser flows use fixtures. An Inngest test-engine run exercised the renderer against isolated PGlite for both formats and checked duplicate execution. Production verified registered functions and HTTP 401 on unsigned BOM, status, queue, and download requests. The connector blocked creation of a disposable production test record, so render execution was verified in the isolated test database.
 
-## Start M4.1
+## M4.1 release checkpoint
+
+The feature head is `8da112dd6a4d3ee5aefa03353281e36f798a65a0` on `feature/4.1-live-sync`. The application merge is `224f7f114329d38c355eca938d3e5a6efb087c91`. Vercel Production `dpl_965TcbFEbyj7XwK4Snd7AudvLLaH` and Preview `dpl_5L8wo86LgKkoFWY7KzzstesCGh9o` reached READY. [Dashboard](https://draft-chan.vercel.app/dashboard) · [Feature preview](https://draft-chan-4lfvrur7f-chanchans-projects-aada625f.vercel.app)
+
+Open the same floorplan in two signed-in Studio tabs to see cursors and saved revisions propagate. The right rail shows the number of other active editors. Autosave uses the current saved revision and preserves conflicting local edits in the open tab. Save still commits immediately when the editor can write. The graph is version 1 and uses the shared Neon database through migration 0002. Production has the existing Upstash REST pair. Preview and unconfigured local environments use the process-local presence bus and reconcile revisions through Neon.
+
+```sh
+npm run typecheck
+npm test -- tests/live.unit.test.ts
+npm test
+npm run build
+npm start
+```
+
+With the optimized server running, use `PLAYWRIGHT_BASE_URL=http://127.0.0.1:3000 npm run test:e2e`. All 58 Vitest tests and 70 Playwright checks passed. Signed-in two-tab browser tests use fixtures, the Hono tests exercise owner-scoped Neon behavior through PGlite, and the separate Redis 8 test exercised the lease script and REST SDK through a loopback gateway. The Production smoke checks covered HTTP 401 for unsigned SSE and cursor requests and confirmed the sign-in return URL.
+
+## Start M4.2
 
 ```sh
 git switch main
 git pull --ff-only
-git switch -c feature/4.1-live-sync
+git switch -c feature/4.2-mcp
 npm ci
 npm run typecheck
 npm test
 ```
 
-Brief the owner-scoped SSE stream, Redis presence and change distribution, and Neon autosave contract. Preserve revision checking and keep export jobs tied to their saved snapshots. Verify concurrent saves, multi-client updates, and rate-limit behavior before deployment.
+Brief the HTTP and stdio MCP transports, owner authorization, and the required resources and tools. Reuse the graph geometry and export queue, and keep tool edits revision-checked with server-verified author attribution. Publish committed revisions on the owner-scoped channel and use `publishPlanPresence` for trusted AI cursors. Verify a two-bedroom layout and furnishings from the MCP client with the Studio observing the changes.

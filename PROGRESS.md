@@ -158,6 +158,21 @@ Released 2026-11-19. Feature commit `72b1874fb8d6a1ded83fa2fd3518de5fe06c53bd` o
 
 [Dashboard](https://draft-chan.vercel.app/dashboard) · [Application merge](https://github.com/chanchan012/draft-chan/commit/8cf2fe53a56563eba2c6c921e0293c0abde14b47) · [Feature preview](https://draft-chan-cqpg6ee5f-chanchans-projects-aada625f.vercel.app)
 
+## M4.1 · Live sync, cursor presence, and autosave
+
+Released 2026-11-19. Feature commit `8da112dd6a4d3ee5aefa03353281e36f798a65a0` on `feature/4.1-live-sync` was merged as `224f7f114329d38c355eca938d3e5a6efb087c91`.
+
+| Phase | Result |
+| --- | --- |
+| Brief | Sync authorized Studio clients, show human and AI cursors, and save edits through Neon revision checks. |
+| Build | Added floorplan-scoped Hono SSE, Upstash Pub/Sub and presence leases, debounced autosave, and conflict handling for concurrent editors. |
+| Test | Strict TypeScript, 58 Vitest tests, and 70 Playwright checks passed. The five-viewport browser matrix exercised two-tab autosave, cursors, reconnect behavior, and the existing editor. An isolated Redis 8 test verified the SDK adapter, lease expiry, publications, and owner isolation. |
+| Merge | The tested feature tree was merged and pushed to GitHub main. |
+| Deploy | Vercel Preview `dpl_5L8wo86LgKkoFWY7KzzstesCGh9o` and Production `dpl_965TcbFEbyj7XwK4Snd7AudvLLaH` reached READY. Production returned HTTP 401 on unsigned live and presence requests and preserved the Studio sign-in destination. |
+| Document | Architecture and handoff record the sync contract, conflict rules and MCP integration points. |
+
+[Dashboard](https://draft-chan.vercel.app/dashboard) · [Application merge](https://github.com/chanchan012/draft-chan/commit/224f7f114329d38c355eca938d3e5a6efb087c91) · [Feature preview](https://draft-chan-4lfvrur7f-chanchans-projects-aada625f.vercel.app)
+
 ## Next subgoal
 
-M4.1 adds Human and AI presence, real-time sync over SSE and Upstash Redis, and revision-checked Neon autosave.
+M4.2 adds the authenticated HTTP MCP server, stdio CLI, resources, tools, and Studio setup modal.
