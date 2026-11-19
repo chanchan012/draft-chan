@@ -1,6 +1,6 @@
 import { z } from "zod";
 
-import { polygonSchema } from "./model";
+import { polygonSchema, wallSchema } from "./model";
 import { polygonAreaMm2 } from "./polygon";
 export { initialGraph } from "./plan-state";
 
@@ -43,11 +43,19 @@ export function areaM2(graph: unknown) {
 }
 export function thumbnailSvg(graph: unknown) {
   const rooms = roomBoundaries(graph);
+  const decoded = z.object({ walls: z.array(z.unknown()) }).safeParse(graph);
+  const walls = decoded.success
+    ? decoded.data.walls.flatMap((raw) => {
+        const wall = wallSchema.safeParse(raw);
+        return wall.success ? [wall.data] : [];
+      })
+    : [];
   let shapes = '<path d="M148 84h24m-12-12v24" fill="none" stroke="#969d88"/>';
-  if (rooms.length) {
+  if (rooms.length || walls.length) {
     const points = rooms
       .flatMap(({ polygon, holes = [] }) => [polygon, ...holes])
       .flat();
+    points.push(...walls.flatMap((wall) => [wall.start, wall.end]));
     let xmin = Infinity,
       ymin = Infinity,
       xmax = -Infinity,
@@ -80,6 +88,14 @@ export function thumbnailSvg(graph: unknown) {
         return `<path ${style} fill-rule="evenodd" d="${path}"/>`;
       })
       .join("");
+    if (!rooms.length) {
+      shapes = walls
+        .map(
+          ({ start, end }) =>
+            `<path d="M${project(start)}L${project(end)}" fill="none" stroke="#4b5145" stroke-width="3"/>`,
+        )
+        .join("");
+    }
   }
   return (
     '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 168"><defs><pattern id="g" width="12" height="12" patternUnits="userSpaceOnUse"><path d="M12 0H0V12" fill="none" stroke="#dadfd3" stroke-width=".7"/></pattern></defs><rect width="320" height="168" fill="#f4f6ee"/><rect width="320" height="168" fill="url(#g)"/>' +

@@ -8,6 +8,12 @@ import {
   type PlanCard,
 } from "../plans/geometry";
 import type { z } from "zod";
+import { loadDraftPlan } from "../plans/plan-state";
+import {
+  applyStudioSnapshot,
+  type StudioDocument,
+  type StudioSave,
+} from "../plans/studio-document";
 
 type Row = typeof floorplans.$inferSelect;
 function card(row: Row): PlanCard {
@@ -38,6 +44,53 @@ export const plans = {
       .from(floorplans)
       .where(owned(owner, id));
     return row ? card(row) : null;
+  },
+  async getStudio(owner: string, id: string): Promise<StudioDocument | null> {
+    const [row] = await openDatabase()
+      .select()
+      .from(floorplans)
+      .where(owned(owner, id));
+    if (!row) return null;
+    const { name, revision, unit } = row;
+    return { id, name, revision, unit, graph: loadDraftPlan(row.graph) };
+  },
+  async saveStudio(owner: string, id: string, input: StudioSave) {
+    const db = openDatabase();
+    const atRevision = and(
+      owned(owner, id),
+      eq(floorplans.revision, input.revision),
+    );
+    const [row] = await db
+      .select({ graph: floorplans.graph })
+      .from(floorplans)
+      .where(atRevision);
+    if (!row) return { status: "conflict" } as const;
+    let graph;
+    try {
+      graph = applyStudioSnapshot(loadDraftPlan(row.graph), input, {
+        kind: "human",
+        id: owner,
+      });
+    } catch (error) {
+      return {
+        status: "invalid",
+        error: error instanceof Error ? error.message : "Invalid geometry",
+      } as const;
+    }
+    const [saved] = await db
+      .update(floorplans)
+      .set({
+        graph,
+        unit: input.unit,
+        revision: sql`${floorplans.revision}+1`,
+        thumbnail: null,
+        updatedAt: new Date(),
+      })
+      .where(atRevision)
+      .returning({ revision: floorplans.revision });
+    return saved
+      ? ({ status: "saved", revision: saved.revision } as const)
+      : ({ status: "conflict" } as const);
   },
   async create(owner: string, input: z.infer<typeof newPlan>) {
     const [row] = await openDatabase()

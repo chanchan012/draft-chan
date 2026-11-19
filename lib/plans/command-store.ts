@@ -9,21 +9,25 @@ import { createStore } from "zustand/vanilla";
 import {
   actorSchema,
   compareText,
-  wallCommandSchema,
+  doorSchema,
+  openingLimit,
+  planCommandSchema,
+  wallLimit,
   wallSchema,
   type DraftActor,
   type DraftPlanState,
   type Wall,
-  type WallCommand,
+  type PlanCommand,
 } from "./model";
 import { initialGraph, loadDraftPlan } from "./plan-state";
+import { validateOpenings } from "./openings";
 import { solveWallTopology } from "./wall-topology";
 
 enablePatches();
 
 type CommandEntry = {
   readonly actor: DraftActor;
-  readonly command: WallCommand;
+  readonly command: PlanCommand;
   readonly patches: Patch[];
   readonly inverse: Patch[];
 };
@@ -31,7 +35,7 @@ type DraftStore = {
   readonly plan: DraftPlanState;
   readonly past: readonly CommandEntry[];
   readonly future: readonly CommandEntry[];
-  execute(command: WallCommand, actor: DraftActor): boolean;
+  execute(command: PlanCommand, actor: DraftActor): boolean;
   undo(): boolean;
   redo(): boolean;
 };
@@ -53,11 +57,51 @@ export function createDraftPlanStore(input: unknown = initialGraph()) {
     past: [],
     future: [],
     execute(input, author) {
-      const command = wallCommandSchema.parse(input);
+      const command = planCommandSchema.parse(input);
       const actor = actorSchema.parse(author);
       const { plan, past } = get();
       const [next, patches, inverse] = produceWithPatches(plan, (draft) => {
+        if (command.type === "door.add") {
+          if (draft.openings.length >= openingLimit)
+            throw new Error("This plan has reached the opening limit.");
+          draft.openings.push(
+            doorSchema.parse({
+              ...command.door,
+              createdBy: actor,
+              updatedBy: actor,
+            }),
+          );
+          draft.openings.sort((a, b) => compareText(a.id, b.id));
+          validateOpenings(draft.walls, draft.openings);
+          return;
+        }
+        if (command.type === "door.update" || command.type === "door.remove") {
+          const index = draft.openings.findIndex(
+            (door) => door.id === command.id,
+          );
+          if (index === -1) throw new Error("Door not found.");
+          if (command.type === "door.remove") draft.openings.splice(index, 1);
+          else {
+            const door = draft.openings[index];
+            const updated = doorSchema.parse({
+              ...door,
+              ...command.changes,
+              updatedBy: actor,
+            });
+            if (
+              door.widthMm === updated.widthMm &&
+              door.hinge === updated.hinge &&
+              door.swing === updated.swing
+            )
+              return;
+            draft.openings[index] = updated;
+            validateOpenings(draft.walls, draft.openings);
+          }
+          return;
+        }
         if (command.type === "wall.add") {
+          if (draft.walls.length >= wallLimit)
+            throw new Error("This plan has reached the wall limit.");
           if (draft.walls.some((wall) => wall.id === command.wall.id)) {
             throw new Error("A wall with that ID already exists.");
           }
@@ -74,6 +118,9 @@ export function createDraftPlanStore(input: unknown = initialGraph()) {
           if (index === -1) throw new Error("Wall not found.");
           if (command.type === "wall.remove") {
             draft.walls.splice(index, 1);
+            draft.openings = draft.openings.filter(
+              (door) => door.wallId !== command.id,
+            );
           } else {
             const wall = draft.walls[index];
             const updated = wallSchema.parse({
@@ -85,6 +132,7 @@ export function createDraftPlanStore(input: unknown = initialGraph()) {
             draft.walls[index] = updated;
           }
         }
+        validateOpenings(draft.walls, draft.openings);
         draft.rooms = solveWallTopology(draft.walls).rooms;
       });
       if (!patches.length) return false;

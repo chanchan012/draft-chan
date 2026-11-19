@@ -22,7 +22,7 @@ export const actorSchema = z.strictObject({
 });
 export type DraftActor = z.infer<typeof actorSchema>;
 
-const wallInput = wallParameters.extend({ id: identifier }).strict();
+export const wallInput = wallParameters.extend({ id: identifier }).strict();
 function hasLength({ start, end }: { start: Point; end: Point }) {
   return start.x !== end.x || start.y !== end.y;
 }
@@ -45,6 +45,41 @@ export const wallCommandSchema = z.discriminatedUnion("type", [
 ]);
 export type WallCommand = z.infer<typeof wallCommandSchema>;
 
+export const doorInput = z.strictObject({
+  id: identifier,
+  wallId: identifier,
+  offsetMm: z.int().nonnegative(),
+  widthMm: z.int().min(100).max(10_000),
+  hinge: z.enum(["start", "end"]),
+  swing: z.enum(["left", "right"]),
+});
+export const doorSchema = doorInput.extend({
+  createdBy: actorSchema.optional(),
+  updatedBy: actorSchema.optional(),
+});
+export type Door = z.infer<typeof doorSchema>;
+
+export const planCommandSchema = z.union([
+  wallCommandSchema,
+  z.discriminatedUnion("type", [
+    z.strictObject({ type: z.literal("door.add"), door: doorInput }),
+    z.strictObject({
+      type: z.literal("door.update"),
+      id: identifier,
+      changes: doorInput
+        .pick({ widthMm: true, hinge: true, swing: true })
+        .partial(),
+    }),
+    z.strictObject({ type: z.literal("door.remove"), id: identifier }),
+  ]),
+]);
+export type PlanCommand = z.infer<typeof planCommandSchema>;
+
+export const displayUnits = z.enum(["mm", "in"]);
+export type DisplayUnit = z.infer<typeof displayUnits>;
+export const wallLimit = 512;
+export const openingLimit = 1024;
+
 export const roomSchema = z.object({
   id: z.string().min(1),
   polygon: polygonSchema,
@@ -56,7 +91,7 @@ export const draftPlanSchema = z.looseObject({
   version: z.literal(1),
   walls: z.array(wallSchema),
   rooms: z.array(roomSchema),
-  openings: z.array(z.unknown()),
+  openings: z.array(doorSchema),
   fixtures: z.array(z.unknown()),
   dimensions: z.array(z.unknown()),
 });
