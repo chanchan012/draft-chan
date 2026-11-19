@@ -6,6 +6,7 @@ import type {
   StudioDocument,
   StudioSave,
 } from "../../lib/plans/studio-document";
+import type { Blueprint, BlueprintRequest } from "../../lib/plans/exports";
 
 test.use({ hasTouch: true });
 
@@ -270,6 +271,125 @@ test("keeps unsaved drawing after a revision conflict", async ({ page }) => {
   await expect(
     page.getByRole("button", { name: "Save", exact: true }),
   ).toBeDisabled();
+});
+
+test("exports a saved revision and tracks blueprint retries and downloads", async ({
+  page,
+}) => {
+  const edits = await studio(page);
+  const jobs = new Map<string, { job: Blueprint; polls: number }>();
+  let svgRequests = 0;
+  let dxfDownloads = 0;
+  await page.route(
+    (url) => {
+      const path = `/api/floorplans/${id}/exports`;
+      return url.pathname === path || url.pathname.startsWith(path + "/");
+    },
+    async (route) => {
+      const url = new URL(route.request().url());
+      if (url.pathname.endsWith("/download")) {
+        const record = [...jobs.values()].find(({ job }) =>
+          url.pathname.includes(job.id),
+        );
+        const extension = record?.job.format;
+        if (!extension) return route.fulfill({ status: 404 });
+        if (extension === "dxf" && ++dxfDownloads === 1)
+          return route.fulfill({
+            status: 401,
+            json: { error: "Sign in required" },
+          });
+        return route.fulfill({
+          headers: {
+            "Content-Disposition": `attachment; filename="corner-study-r1.${extension}"`,
+          },
+          body:
+            extension === "dxf"
+              ? "0\nEOF\n"
+              : '<svg xmlns="http://www.w3.org/2000/svg"/>',
+        });
+      }
+      if (route.request().method() === "POST") {
+        const input = route.request().postDataJSON() as BlueprintRequest;
+        expect(input.revision).toBe(1);
+        const key = `${input.format}:${input.revision}`;
+        const job: Blueprint = {
+          ...input,
+          id: jobs.get(key)?.job.id ?? crypto.randomUUID(),
+          status:
+            input.format === "svg" && ++svgRequests === 1
+              ? "failed"
+              : "pending",
+        };
+        jobs.set(key, { job, polls: 0 });
+        return route.fulfill({ status: 202, json: job });
+      }
+      const revision = Number(url.searchParams.get("revision"));
+      const list = [...jobs.values()].filter(
+        ({ job }) => job.revision === revision,
+      );
+      for (const entry of list) {
+        if (entry.job.status === "pending" && ++entry.polls === 2)
+          entry.job.status = "ready";
+      }
+      return route.fulfill({ json: list.map(({ job }) => job) });
+    },
+  );
+  await page.route(`**/api/floorplans/${id}/bom?revision=1`, (route) =>
+    route.fulfill({
+      contentType: "text/csv",
+      body: "Category,Item,Dimensions (mm),Unit,Quantity\r\n",
+    }),
+  );
+
+  await page.getByRole("button", { name: "Wall", exact: true }).click();
+  await point(page, 0.2, 0.47);
+  await point(page, 0.8, 0.47);
+  await page.getByRole("button", { name: "Exports", exact: true }).click();
+  const exports = page.getByRole("complementary", { name: "Exports" });
+  await expect(exports.getByText("Saved revision 0")).toBeVisible();
+  await expect(
+    exports.getByText("Save your changes to export the latest drawing."),
+  ).toBeVisible();
+  await expect(exports.getByRole("button", { name: "CSV" })).toBeDisabled();
+  await expect(
+    exports.getByRole("button", { name: "Generate DXF" }),
+  ).toBeDisabled();
+  await page.getByRole("button", { name: "Save", exact: true }).click();
+  await expect(exports.getByText("Saved revision 1")).toBeVisible();
+  expect(edits).toHaveLength(1);
+  const [csv] = await Promise.all([
+    page.waitForEvent("download"),
+    exports.getByRole("button", { name: "CSV" }).click(),
+  ]);
+  expect(csv.suggestedFilename()).toBe("corner-study-r1-bom.csv");
+
+  await exports.getByRole("button", { name: "Generate DXF" }).click();
+  await expect(exports.getByText("Queued or rendering…")).toBeVisible();
+  const dxfDownload = exports.getByRole("button", { name: "Download DXF" });
+  await expect(dxfDownload).toBeVisible({ timeout: 10_000 });
+  await dxfDownload.click();
+  await expect(exports.getByRole("alert")).toHaveText("Sign in required");
+  const [dxf] = await Promise.all([
+    page.waitForEvent("download"),
+    dxfDownload.click(),
+  ]);
+  expect(dxf.suggestedFilename()).toBe("corner-study-r1.dxf");
+
+  await exports.getByRole("button", { name: "Generate SVG" }).click();
+  await expect(exports.getByText("Export failed")).toBeVisible();
+  await exports.getByRole("button", { name: "Retry SVG" }).click();
+  const svgDownload = exports.getByRole("button", { name: "Download SVG" });
+  await expect(svgDownload).toBeVisible({ timeout: 10_000 });
+  const [svg] = await Promise.all([
+    page.waitForEvent("download"),
+    svgDownload.click(),
+  ]);
+  expect(svg.suggestedFilename()).toBe("corner-study-r1.svg");
+  await frame(page);
+  await exports.getByRole("button", { name: "Close exports" }).click();
+  await expect(
+    page.getByRole("button", { name: "Exports", exact: true }),
+  ).toBeFocused();
 });
 
 test("places, edits, audits and reloads catalog items and utility layers", async ({

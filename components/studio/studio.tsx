@@ -5,6 +5,7 @@ import {
   Box,
   Armchair,
   ChevronLeft,
+  FileDown,
   Layers3,
   Zap,
   ScanLine,
@@ -46,6 +47,7 @@ import { Inspector, type DoorSettings, type WallSettings } from "./inspector";
 import { Surface, type Tool } from "./surface";
 import { AuditPanel } from "./audit-panel";
 import { StudioPanel } from "./studio-panel";
+import { ExportPanel } from "./export-panel";
 import {
   FixtureFields,
   UtilityFields,
@@ -62,6 +64,7 @@ const tools = [
   { id: "pan", label: "Pan", icon: Hand, shortcut: "H" },
 ] as const;
 const overlayPanels = "(max-width: 1000px)";
+type RightPanel = "inspector" | "clearance" | "exports";
 
 export function Studio({
   initial,
@@ -77,7 +80,7 @@ export function Studio({
   const [tool, setTool] = useState<Tool>("select");
   const [ortho, setOrtho] = useState(true);
   const [iso, setIso] = useState(false);
-  const [inspectorOpen, setInspectorOpen] = useState(false);
+  const [rightPanel, setRightPanel] = useState<RightPanel | null>(null);
   const [layersOpen, setLayersOpen] = useState(false);
   const [zoomSlot, setZoomSlot] = useState<HTMLDivElement | null>(null);
   const [wall, setWall] = useState<WallSettings>({
@@ -92,11 +95,11 @@ export function Studio({
   const [fixture, setFixture] = useState(() => fixtureDefaults("sofa"));
   const [utility, setUtility] = useState<UtilityKind>("outlet");
   const [layers, setLayers] = useState({ electrical: true, plumbing: true });
-  const [auditOpen, setAuditOpen] = useState(false);
   const [finding, setFinding] = useState<string>();
+  const showClearance = rightPanel === "clearance" || finding !== undefined;
   const audit = useMemo(
-    () => (auditOpen ? checkClearances(plan) : undefined),
-    [plan, auditOpen],
+    () => (showClearance ? checkClearances(plan) : undefined),
+    [plan, showClearance],
   );
   const issue = audit?.issues.find(({ id }) => id === finding);
   const [picked, setSelection] = useState<readonly Selection[]>([]);
@@ -119,6 +122,7 @@ export function Studio({
   >("idle");
   const auditControl = useRef<HTMLButtonElement>(null);
   const inspectorControl = useRef<HTMLButtonElement>(null);
+  const exportsControl = useRef<HTMLButtonElement>(null);
   const layerControl = useRef<HTMLButtonElement>(null);
   const saving = useRef(false);
   const revision = useRef(initial.revision);
@@ -212,7 +216,7 @@ export function Studio({
   const switchTool = useCallback((next: Tool) => {
     setTool(next);
     if (next !== "select") setMulti(false);
-    setAuditOpen(false);
+    setRightPanel((panel) => (panel === "clearance" ? "inspector" : panel));
     setFinding(undefined);
     setSelection([]);
     setMessage("");
@@ -340,29 +344,26 @@ export function Studio({
   useEffect(() => {
     const layout = window.matchMedia(overlayPanels);
     function resize({ matches }: MediaQueryListEvent) {
-      if (matches && inspectorOpen) setLayersOpen(false);
+      if (matches && rightPanel) setLayersOpen(false);
     }
     layout.addEventListener("change", resize);
     return () => layout.removeEventListener("change", resize);
-  }, [inspectorOpen]);
+  }, [rightPanel]);
 
-  function closeInspector() {
-    setInspectorOpen(false);
-    setAuditOpen(false);
+  function closeRightPanel() {
+    setRightPanel(null);
     setFinding(undefined);
   }
 
-  function toggleInspector(showAudit: boolean) {
-    const open = !inspectorOpen || auditOpen !== showAudit;
-    if (!open) {
-      closeInspector();
+  function toggleRightPanel(panel: RightPanel) {
+    if (rightPanel === panel) {
+      closeRightPanel();
       return;
     }
     if (window.matchMedia(overlayPanels).matches) setLayersOpen(false);
     setFinding(undefined);
-    setInspectorOpen(true);
-    setAuditOpen(showAudit);
-    if (showAudit) setIso(false);
+    setRightPanel(panel);
+    if (panel === "clearance") setIso(false);
   }
 
   const status =
@@ -446,7 +447,7 @@ export function Studio({
             title="Layers"
             onClick={() => {
               if (!layersOpen && window.matchMedia(overlayPanels).matches)
-                closeInspector();
+                closeRightPanel();
               setLayersOpen(!layersOpen);
             }}
           >
@@ -584,37 +585,61 @@ export function Studio({
         >
           <button
             ref={inspectorControl}
-            aria-expanded={inspectorOpen && !auditOpen}
+            aria-expanded={rightPanel === "inspector"}
             aria-controls="studio-inspector"
             aria-label="Inspector"
             title="Inspector"
-            onClick={() => toggleInspector(false)}
+            onClick={() => toggleRightPanel("inspector")}
           >
             <PanelRight size={20} />
           </button>
           <button
             ref={auditControl}
-            aria-expanded={inspectorOpen && auditOpen}
+            aria-expanded={rightPanel === "clearance"}
             aria-controls="studio-inspector"
             aria-label="Check clearances"
             title="Check clearances"
-            onClick={() => toggleInspector(true)}
+            onClick={() => toggleRightPanel("clearance")}
           >
             <ScanLine size={20} />
+          </button>
+          <button
+            ref={exportsControl}
+            aria-expanded={rightPanel === "exports"}
+            aria-controls="studio-inspector"
+            aria-label="Exports"
+            title="Exports"
+            onClick={() => toggleRightPanel("exports")}
+          >
+            <FileDown size={20} />
           </button>
         </div>
         <StudioPanel
           side="right"
           id="studio-inspector"
-          label="Inspector"
-          title={auditOpen ? "Clearance check" : "Inspector"}
-          open={inspectorOpen}
+          label={rightPanel === "exports" ? "Exports" : "Inspector"}
+          title={rightPanel === "clearance" ? "Clearance check" : undefined}
+          open={rightPanel !== null}
           onClose={() => {
-            closeInspector();
-            (auditOpen ? auditControl : inspectorControl).current?.focus();
+            closeRightPanel();
+            const trigger =
+              rightPanel === "exports"
+                ? exportsControl
+                : rightPanel === "clearance"
+                  ? auditControl
+                  : inspectorControl;
+            trigger.current?.focus();
           }}
         >
-          {audit ? (
+          {rightPanel === "exports" ? (
+            <ExportPanel
+              key={`${initial.id}:${revision.current}`}
+              id={initial.id}
+              name={initial.name}
+              revision={revision.current}
+              dirty={dirty}
+            />
+          ) : rightPanel === "clearance" && audit ? (
             <AuditPanel
               {...audit}
               selected={finding}
@@ -623,7 +648,7 @@ export function Studio({
                 setIso(false);
                 setFinding(id);
                 if (window.matchMedia(overlayPanels).matches) {
-                  setInspectorOpen(false);
+                  setRightPanel(null);
                   auditControl.current?.focus();
                 }
               }}
