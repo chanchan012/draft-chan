@@ -8,4 +8,6 @@ The extracted palette uses paper #FAF9F6, ink #252720, terracotta #C24C29, and m
 
 The dashboard adaptation keeps the same margins, header, type families, card borders and primary controls. A grid-lined sheet shows each plan's generated geometry. The reference model is reserved for the illustrative Courtyard House sample. The library scrolls internally within a 100dvh shell and reflows to one column on phones. [Model asset](https://draft-chan.vercel.app/isometric.webp)
 
-The authentication pages pair a left-aligned Clerk form with a framed Courtyard House drawing. The card uses paper, ink, and a deeper terracotta for primary actions. Auth inputs use 16px text and 44px minimum height. The drawing drops away on narrow or short viewports, and the form area scrolls inside the viewport when a verification step needs more room. The public landing shows a static drawing. Signed-in members can switch views and zoom from the dashboard sample.
+The landing header has one account action. Signed-out visitors see Sign in and signed-in members see Workspace. The dashboard header contains the Draft brand and Clerk account control. Page layouts run without a site footer.
+
+The sign-in and sign-up forms open in a centered native dialog over the landing. The dialog uses paper, ink, and terracotta for account actions. Auth inputs use 16px text and 44px minimum height. Dialog contents scroll within 100dvh on short screens. Closing the dialog restores focus to its trigger.

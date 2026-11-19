@@ -70,6 +70,19 @@ Released 2026-11-19. Feature commit `1c2894a816630466da26298dfaeed75f27241bab` o
 
 [Application merge](https://github.com/chanchan012/draft-chan/commit/5331c5742aa01a5e424fcd96a64bae86dd69197b) · [Production](https://draft-chan.vercel.app)
 
+## Pre-M2.2 · Landing authentication dialogs
+
+Released 2026-11-19. Feature commit `cfe516f7a931636abc5310c9ccd38e36a2a89262` on `fix/landing-auth-modal` was merged as `35674820899bb533aa7513a2f6ae06827b2983a3`.
+
+| Phase | Result |
+| --- | --- |
+| Brief | Remove page footers, simplify the dashboard header, and open account forms from the landing. |
+| Build | Form & Function Studio's frontend craft guidance informed the native dialog. The landing header renders one account action based on session state, and legacy auth URLs redirect to the modal. |
+| Test | Strict TypeScript, 32 Vitest tests, and 35 Playwright checks passed locally and on production. The production run covered both live Clerk forms across five viewport sizes. |
+| Merge | The tested branch was merged into GitHub main. |
+| Deploy | The Next build passed. Preview `dpl_DzLiuV8KaYEcegYv2T7G3pMh6jyV` and Production `dpl_4Cw8if5zu3awyQabfmkvNwHN3X6g` reached READY. |
+| Document | Architecture, visual system, and resume handoff record modal URLs, private-route redirects, and coverage. |
+
 ## Next subgoal
 
 M2.2 connects the geometry engine to the protected Studio canvas with snap and ortho drawing, a responsive inspector, and an isometric preview.
