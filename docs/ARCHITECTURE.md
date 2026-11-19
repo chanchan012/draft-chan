@@ -66,10 +66,16 @@ Graph PATCH accepts optional `fixtures` and `utilities` arrays, each bounded to 
 
 ## Pre-M3.2 editing and navigation
 
-Studio uses a horizontal toolbar beneath the compact header and view controls. The inspector is docked on wide screens and opens as an overlay at widths of 900 px and below. Valid inspector values update the local drawing immediately. Numeric controls keep incomplete input while the field is active. Save sends the current snapshot through the existing revision-checked graph PATCH.
+Valid inspector values update the local drawing immediately. Numeric controls keep incomplete input while the field is active. Save sends the current snapshot through the revision-checked graph PATCH.
 
 The drawing surface uses pointer capture for drawing, moving, and marquee selection. Pinch zoom anchors the model point under the moving midpoint, which also supports two-finger panning. A pinch suppresses tool placement until both touches have lifted. Select supports a marquee dragged from empty canvas and additive toggling with Shift-click or the toolbar’s Multi-select mode. The current selection excludes hidden utility layers. Selected elements can be dragged or nudged by the grid spacing. Backspace, Delete and the toolbar’s Delete selection invoke the same group removal command. Focus inside an editable field keeps its normal text editing shortcuts.
 
 The selection logic in `lib/plans/editor-selection.ts` produces existing entity commands. The store’s `executeBatch` applies them atomically, validates final opening placement, and recomputes room topology once when walls change. A group edit occupies one undo step. Moving a host wall carries its doors. Moving a door alone projects the drag along its wall and updates its existing `offsetMm` field subject to normal validation. Drag previews show authored geometry, and committed edits recalculate derived rooms. This release uses JSON graph version 1 and Drizzle migrations through 0001.
 
 The card’s top-right ellipsis opens Rename and Delete actions. These use the existing revision-checked dashboard endpoints and dialogs. The card link and its action button are independent keyboard targets.
+
+## Floating Studio workbench
+
+The Studio header holds the floorplan name and save state, drawing history, zoom controls, and Save. The `Surface` owns the zoom and fit state and renders the controls into the header through a React portal. The 2D, Isometric, and Ortho controls float above the drawing. Drawing tools float vertically at the left of the canvas and move to a bottom row at widths of 620 px or below or heights of 490 px or below. Selection actions float separately near the bottom.
+
+The Layers rail opens the utility visibility panel. The right rail opens the Inspector or Clearance in the same panel. Both panels start collapsed. Above 1000 px, `StudioPanel` docks each panel next to the canvas and provides a pointer and keyboard separator. Widths stay local to the open Studio tab and are restored when the panel reopens. At 1000 px or below, a single panel overlays the drawing. At 620 px or below, that panel opens from the bottom and its content scrolls within the sheet. The workbench fits `100dvh` throughout. Layout preferences live in component state. The saved plan uses graph version 1 and Drizzle migrations through 0001.

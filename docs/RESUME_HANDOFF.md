@@ -120,6 +120,21 @@ npm start
 
 With the optimized server running, use `PLAYWRIGHT_BASE_URL=http://127.0.0.1:3000 npm run test:e2e`. All 48 Vitest tests and 55 Playwright checks passed. The signed-in browser flows use fixtures, while PGlite covers the server persistence path. Production verified HTTP 200 for the landing page, the Studio sign-in redirect with its destination preserved, and HTTP 401 for unsigned graph GET and PATCH.
 
+## Floating workbench release checkpoint
+
+The feature head is `8a0419d8630784dc41a9cb64e66f8c26a9a042a5` on `fix/studio-floating-workbench`. The application merge is `88d35a7f9181476d50605489d45333d358f85a8c`. Production deployment `dpl_GHH3Rc73E5qFUnHmZjZQcpfJfutx` and Preview deployment `dpl_Fyo95vsG1nvbcjbYAfaiajht65Ud` reached READY. [Dashboard](https://draft-chan.vercel.app/dashboard) · [Feature preview](https://draft-chan-cb74zzvgj-chanchans-projects-aada625f.vercel.app)
+
+Open Layers from the left rail or Inspector and Clearance from the right rail. On desktop, drag a panel’s inner boundary to resize it. With the boundary focused, use Left and Right for eight-pixel increments, Shift with an arrow for 32 pixels, or Home and End for the minimum and maximum. Double-click the divider to restore the starting width. Escape closes a focused panel and returns focus to its rail button. Phone panels open as bottom sheets. The release uses graph version 1, migrations through 0001, and the Clerk development instance.
+
+```sh
+npm run typecheck
+npm test
+npm run build
+npm start
+```
+
+With the optimized server running, use `PLAYWRIGHT_BASE_URL=http://127.0.0.1:3000 npm run test:e2e`. The release passed 48 Vitest and 60 Playwright checks. Browser fixtures cover signed-in panel and editing flows across desktop, tablet, phone, compact phone, and landscape. Production returned HTTP 200 for the landing page, preserved Studio’s sign-in destination, and rejected unsigned graph GET and PATCH with HTTP 401.
+
 ## Start M3.2
 
 ```sh

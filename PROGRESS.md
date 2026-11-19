@@ -128,6 +128,21 @@ Released 2026-11-19. Feature commit `3b8ca1dd31edfd3ca18dfd869c06d65b7734c33f` o
 
 [Dashboard](https://draft-chan.vercel.app/dashboard) · [Application merge](https://github.com/chanchan012/draft-chan/commit/4ea9bd467195837a889ad2796a511f231eefc3bc) · [Feature preview](https://draft-chan-cxt9pzhdq-chanchans-projects-aada625f.vercel.app)
 
+## Pre-M3.2 · Floating Studio workbench
+
+Released 2026-11-19. Feature commit `8a0419d8630784dc41a9cb64e66f8c26a9a042a5` on `fix/studio-floating-workbench` was merged as `88d35a7f9181476d50605489d45333d358f85a8c`.
+
+| Phase | Result |
+| --- | --- |
+| Brief | Use the reference layout for Studio while keeping Draft’s grid and editing behavior. |
+| Build | Added floating view, drawing, and selection controls. Layers and Inspector collapse into edge rails and resize on desktop. Narrow phones use bottom sheets. |
+| Test | Strict TypeScript, 48 Vitest tests, and 60 Playwright checks passed against the optimized build. Coverage includes keyboard and pointer resizing, panel collapse, overlay behavior, and the existing CAD workflows at five viewport sizes. |
+| Merge | The tested feature tree was merged and pushed to GitHub main. |
+| Deploy | Vercel Preview `dpl_Fyo95vsG1nvbcjbYAfaiajht65Ud` and Production `dpl_GHH3Rc73E5qFUnHmZjZQcpfJfutx` reached READY. The Studio sign-in return URL and unsigned graph HTTP 401 checks passed. |
+| Document | The design system, architecture, and handoff record the layout behavior, deployment, and test commands. |
+
+[Dashboard](https://draft-chan.vercel.app/dashboard) · [Application merge](https://github.com/chanchan012/draft-chan/commit/88d35a7f9181476d50605489d45333d358f85a8c) · [Feature preview](https://draft-chan-cb74zzvgj-chanchans-projects-aada625f.vercel.app)
+
 ## Next subgoal
 
 M3.2 adds the bill of materials and background blueprint exports.
