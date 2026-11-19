@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { fixtureKinds, utilityKinds } from "./catalog";
 
 export const pointSchema = z.object({
   x: z.number().finite(),
@@ -59,8 +60,47 @@ export const doorSchema = doorInput.extend({
 });
 export type Door = z.infer<typeof doorSchema>;
 
+const objectParameters = z.strictObject({ position: wallPoint });
+const fixtureParameters = objectParameters.extend({
+  template: z.enum(fixtureKinds),
+  widthMm: z.int().min(50).max(10_000),
+  depthMm: z.int().min(50).max(10_000),
+  heightMm: z.int().min(1).max(10_000),
+  rotation: z.literal([0, 90, 180, 270]),
+});
+const utilityParameters = objectParameters.extend({
+  template: z.enum(utilityKinds),
+});
+export const fixtureInput = fixtureParameters.extend({ id: identifier });
+export const utilityInput = utilityParameters.extend({ id: identifier });
+const authors = {
+  createdBy: actorSchema.optional(),
+  updatedBy: actorSchema.optional(),
+};
+export const fixtureSchema = fixtureInput.extend(authors);
+export const utilitySchema = utilityInput.extend(authors);
+export type Fixture = z.infer<typeof fixtureSchema>;
+export type Utility = z.infer<typeof utilitySchema>;
+
+const furnishingCommandSchema = z.discriminatedUnion("type", [
+  z.strictObject({ type: z.literal("fixture.add"), fixture: fixtureInput }),
+  z.strictObject({
+    type: z.literal("fixture.update"),
+    id: identifier,
+    changes: fixtureParameters.partial(),
+  }),
+  z.strictObject({ type: z.literal("fixture.remove"), id: identifier }),
+  z.strictObject({ type: z.literal("utility.add"), utility: utilityInput }),
+  z.strictObject({
+    type: z.literal("utility.update"),
+    id: identifier,
+    changes: utilityParameters.partial(),
+  }),
+  z.strictObject({ type: z.literal("utility.remove"), id: identifier }),
+]);
 export const planCommandSchema = z.union([
   wallCommandSchema,
+  furnishingCommandSchema,
   z.discriminatedUnion("type", [
     z.strictObject({ type: z.literal("door.add"), door: doorInput }),
     z.strictObject({
@@ -79,6 +119,7 @@ export const displayUnits = z.enum(["mm", "in"]);
 export type DisplayUnit = z.infer<typeof displayUnits>;
 export const wallLimit = 512;
 export const openingLimit = 1024;
+export const placementLimit = 512;
 
 export const roomSchema = z.object({
   id: z.string().min(1),
@@ -92,7 +133,8 @@ export const draftPlanSchema = z.looseObject({
   walls: z.array(wallSchema),
   rooms: z.array(roomSchema),
   openings: z.array(doorSchema),
-  fixtures: z.array(z.unknown()),
+  fixtures: z.array(fixtureSchema),
+  utilities: z.array(utilitySchema).default([]),
   dimensions: z.array(z.unknown()),
 });
 export type DraftPlanState = z.infer<typeof draftPlanSchema>;

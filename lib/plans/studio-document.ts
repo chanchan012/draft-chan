@@ -2,12 +2,17 @@ import { z } from "zod";
 import {
   displayUnits,
   doorInput,
+  fixtureInput,
+  utilityInput,
+  placementLimit,
   openingLimit,
   wallInput,
   wallLimit,
   wallSchema,
   type DisplayUnit,
   type Door,
+  type Fixture,
+  type Utility,
   type DraftActor,
   type DraftPlanState,
   type Wall,
@@ -29,6 +34,8 @@ export const saveStudioSchema = z.strictObject({
     .array(wallInput.refine((wall) => wallSchema.safeParse(wall).success))
     .max(wallLimit),
   openings: z.array(doorInput).max(openingLimit),
+  fixtures: z.array(fixtureInput).max(placementLimit).optional(),
+  utilities: z.array(utilityInput).max(placementLimit).optional(),
 });
 export type StudioSave = z.infer<typeof saveStudioSchema>;
 
@@ -37,10 +44,16 @@ export function studioSnapshot(plan: DraftPlanState, unit: DisplayUnit) {
     unit,
     walls: plan.walls.map((wall) => wallInput.strip().parse(wall)),
     openings: plan.openings.map((door) => doorInput.strip().parse(door)),
+    fixtures: plan.fixtures.map((fixture) =>
+      fixtureInput.strip().parse(fixture),
+    ),
+    utilities: plan.utilities.map((utility) =>
+      utilityInput.strip().parse(utility),
+    ),
   };
 }
 
-function attribute<T extends Wall | Door>(
+function attribute<T extends Wall | Door | Fixture | Utility>(
   input: Omit<T, "createdBy" | "updatedBy">,
   previous: T | undefined,
   actor: DraftActor,
@@ -69,5 +82,36 @@ export function applyStudioSnapshot(
   const openings = input.openings.map((door) =>
     attribute<Door>(door, doorsById.get(door.id), actor, doorInput.strip()),
   );
-  return loadDraftPlan({ ...previous, walls, openings, rooms: [] });
+  const priorFixtures = new Map(
+    previous.fixtures.map((fixture) => [fixture.id, fixture]),
+  );
+  const priorUtilities = new Map(
+    previous.utilities.map((utility) => [utility.id, utility]),
+  );
+  const fixtures =
+    input.fixtures?.map((fixture) =>
+      attribute<Fixture>(
+        fixture,
+        priorFixtures.get(fixture.id),
+        actor,
+        fixtureInput.strip(),
+      ),
+    ) ?? previous.fixtures;
+  const utilities =
+    input.utilities?.map((utility) =>
+      attribute<Utility>(
+        utility,
+        priorUtilities.get(utility.id),
+        actor,
+        utilityInput.strip(),
+      ),
+    ) ?? previous.utilities;
+  return loadDraftPlan({
+    ...previous,
+    walls,
+    openings,
+    fixtures,
+    utilities,
+    rooms: [],
+  });
 }

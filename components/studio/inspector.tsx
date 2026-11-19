@@ -1,6 +1,6 @@
 "use client";
 
-import type { FormEvent } from "react";
+import type { FormEvent, ReactNode } from "react";
 import { Trash2 } from "lucide-react";
 import { gridSteps, unitFactor } from "@/lib/plans/cad";
 import { wallLength } from "@/lib/plans/openings";
@@ -25,6 +25,9 @@ interface InspectorProps {
   door: DoorSettings;
   activeWall?: Wall;
   activeDoor?: Door;
+  placementFields?: ReactNode;
+  layers?: ReactNode;
+  placementSelected?: "fixture" | "utility";
   onUnit(unit: DisplayUnit): void;
   onGrid(index: number): void;
   onWall(value: WallSettings): void;
@@ -179,18 +182,22 @@ export function Inspector(props: InspectorProps) {
           </button>
         </form>
       ) : null}
-      {(activeWall || activeDoor) && (
+      {props.placementFields}
+      {props.layers}
+      {(activeWall || activeDoor || props.placementSelected) && (
         <button
           className="studio-remove"
           onClick={props.onRemove}
           type="button"
         >
           <Trash2 size={15} />
-          {activeDoor
-            ? "Delete door"
-            : plan.openings.some((item) => item.wallId === activeWall?.id)
-              ? "Delete wall and doors"
-              : "Delete wall"}
+          {props.placementSelected
+            ? `Delete ${props.placementSelected}`
+            : activeDoor
+              ? "Delete door"
+              : plan.openings.some((item) => item.wallId === activeWall?.id)
+                ? "Delete wall and doors"
+                : "Delete wall"}
         </button>
       )}
       <section
@@ -206,6 +213,14 @@ export function Inspector(props: InspectorProps) {
           <div>
             <dt>Doors</dt>
             <dd>{plan.openings.length}</dd>
+          </div>
+          <div>
+            <dt>Fixtures</dt>
+            <dd>{plan.fixtures.length}</dd>
+          </div>
+          <div>
+            <dt>Utilities</dt>
+            <dd>{plan.utilities.length}</dd>
           </div>
           <div>
             <dt>Rooms</dt>

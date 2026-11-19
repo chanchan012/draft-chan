@@ -51,6 +51,8 @@ describe("floorplan persistence", () => {
         thicknessMm: 120, kind: "interior",
       }],
       openings: [{ id: "door", wallId: "wall", offsetMm: 2000, widthMm: 900, hinge: "start", swing: "left" }],
+      fixtures: [{ id: "toilet", template: "toilet", widthMm: 405, depthMm: 700, heightMm: 740, rotation: 90, position: { x: 1200, y: 800 } }],
+      utilities: [{ id: "drain", template: "drain", position: { x: 1200, y: 800 } }],
     };
     expect((await b("PATCH", route, payload)).status).toBe(409);
     expect((await a("PATCH", route, { ...payload, openings: [{ ...payload.openings[0], wallId: "missing" }] })).status).toBe(400);
@@ -62,6 +64,8 @@ describe("floorplan persistence", () => {
       revision: 1, unit: "in", graph: {
         walls: [{ createdBy: { kind: "human", id: "studio-owner" } }],
         openings: [{ id: "door", widthMm: 900, updatedBy: { kind: "human", id: "studio-owner" } }],
+        fixtures: [{ id: "toilet", rotation: 90, createdBy: { kind: "human", id: "studio-owner" } }],
+        utilities: [{ id: "drain", template: "drain", updatedBy: { kind: "human", id: "studio-owner" } }],
       },
     });
     expect(await (await a("GET", id)).json()).toMatchObject({ thumbnail: null });

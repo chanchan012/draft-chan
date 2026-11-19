@@ -10,6 +10,9 @@ import {
   actorSchema,
   compareText,
   doorSchema,
+  fixtureSchema,
+  placementLimit,
+  utilitySchema,
   openingLimit,
   planCommandSchema,
   wallLimit,
@@ -51,6 +54,35 @@ function sameParameters(a: Wall, b: Wall) {
   );
 }
 
+function addPlacement<T extends { id: string }>(items: T[], item: T) {
+  if (items.length >= placementLimit)
+    throw new Error("This plan has reached the layer's placement limit.");
+  if (items.some(({ id }) => id === item.id))
+    throw new Error("This placement ID already exists.");
+  items.push(item);
+  items.sort((a, b) => compareText(a.id, b.id));
+}
+
+function editPlacement<T extends { id: string; updatedBy?: DraftActor }>(
+  items: T[],
+  id: string,
+  actor: DraftActor,
+  changes?: Partial<T>,
+  schema?: { parse(value: unknown): T },
+) {
+  const index = items.findIndex((item) => item.id === id);
+  if (index === -1) throw new Error("Placement not found.");
+  if (!changes || !schema) {
+    items.splice(index, 1);
+    return;
+  }
+  const previous = items[index];
+  const candidate = schema.parse({ ...previous, ...changes });
+  if (JSON.stringify(previous) !== JSON.stringify(candidate)) {
+    items[index] = { ...candidate, updatedBy: actor };
+  }
+}
+
 export function createDraftPlanStore(input: unknown = initialGraph()) {
   const store = createStore<DraftStore>((set, get) => ({
     plan: freeze(loadDraftPlan(input), true),
@@ -61,6 +93,46 @@ export function createDraftPlanStore(input: unknown = initialGraph()) {
       const actor = actorSchema.parse(author);
       const { plan, past } = get();
       const [next, patches, inverse] = produceWithPatches(plan, (draft) => {
+        switch (command.type) {
+          case "fixture.add":
+            return addPlacement(
+              draft.fixtures,
+              fixtureSchema.parse({
+                ...command.fixture,
+                createdBy: actor,
+                updatedBy: actor,
+              }),
+            );
+          case "utility.add":
+            return addPlacement(
+              draft.utilities,
+              utilitySchema.parse({
+                ...command.utility,
+                createdBy: actor,
+                updatedBy: actor,
+              }),
+            );
+          case "fixture.update":
+            return editPlacement(
+              draft.fixtures,
+              command.id,
+              actor,
+              command.changes,
+              fixtureSchema,
+            );
+          case "utility.update":
+            return editPlacement(
+              draft.utilities,
+              command.id,
+              actor,
+              command.changes,
+              utilitySchema,
+            );
+          case "fixture.remove":
+            return editPlacement(draft.fixtures, command.id, actor);
+          case "utility.remove":
+            return editPlacement(draft.utilities, command.id, actor);
+        }
         if (command.type === "door.add") {
           if (draft.openings.length >= openingLimit)
             throw new Error("This plan has reached the opening limit.");

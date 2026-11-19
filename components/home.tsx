@@ -44,7 +44,7 @@ const features = [
     text: "Clearances, circulation, and accessibility.",
     icon: ScanLine,
     detail:
-      "The clearance engine is planned for milestone 3. It will report door-swing conflicts and narrow pathways for design review.",
+      "Open Clearance in Studio to review obstructed door swings, narrow gaps and overlapping fixtures.",
   },
 ];
 export function Home({

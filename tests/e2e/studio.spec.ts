@@ -65,6 +65,8 @@ async function studio(page: Page, conflict = false) {
         ...document.graph,
         walls: input.walls,
         openings: input.openings,
+        fixtures: input.fixtures ?? document.graph.fixtures,
+        utilities: input.utilities ?? document.graph.utilities,
       },
     };
     return route.fulfill({ json: { revision: document.revision } });
@@ -130,6 +132,15 @@ test("draws an ortho wall and door, toggles isometric, and saves the graph", asy
   const line = wall.locator("line");
   expect(await line.getAttribute("y1")).toBe(await line.getAttribute("y2"));
   await page.getByRole("button", { name: "Door", exact: true }).click();
+  const toggle = page.getByRole("button", { name: "Inspector", exact: true });
+  const inspector = page.getByRole("complementary", { name: "Inspector" });
+  if (await toggle.isVisible()) await toggle.click();
+  await inspector.getByLabel("Width (mm)").fill("800");
+  await inspector
+    .getByRole("button", { name: "Apply settings", exact: true })
+    .click();
+  if (await toggle.isVisible())
+    await inspector.getByRole("button", { name: "Close inspector" }).click();
   await point(page, 0.5, 0.5);
   await expect(page.locator("[data-door]")).toHaveCount(1);
   await expect(wall.locator("line")).toHaveCount(2);
@@ -138,9 +149,7 @@ test("draws an ortho wall and door, toggles isometric, and saves the graph", asy
   await page.getByRole("button", { name: "Redo", exact: true }).click();
   await expect(page.locator("[data-door]")).toHaveCount(1);
 
-  const toggle = page.getByRole("button", { name: "Inspector", exact: true });
   if (await toggle.isVisible()) await toggle.click();
-  const inspector = page.getByRole("complementary", { name: "Inspector" });
   await expect(
     inspector.getByRole("heading", { name: "Plan quantities" }),
   ).toBeVisible();
@@ -163,6 +172,13 @@ test("draws an ortho wall and door, toggles isometric, and saves the graph", asy
   await page.reload();
   await expect(page.locator("[data-door]")).toHaveCount(1);
   await expect(page.getByRole("status")).toHaveText("Saved");
+  await page.getByRole("button", { name: "Check clearances" }).click();
+  const narrow = page.getByRole("button", { name: /opening is narrow/ });
+  await expect(narrow).toContainText("target 32.09 in");
+  await narrow.click();
+  await expect(
+    page.locator('[data-clearance="door-width"] .cad-audit-dimension'),
+  ).toBeVisible();
 });
 
 test("keeps unsaved drawing after a revision conflict", async ({ page }) => {
@@ -178,4 +194,91 @@ test("keeps unsaved drawing after a revision conflict", async ({ page }) => {
   await expect(
     page.getByRole("button", { name: "Save", exact: true }),
   ).toBeDisabled();
+});
+
+test("places, edits, audits and reloads catalog items and utility layers", async ({
+  page,
+}) => {
+  const edits = await studio(page);
+  const inspector = page.getByRole("complementary", { name: "Inspector" });
+  const toggle = page.getByRole("button", { name: "Inspector", exact: true });
+  async function openInspector() {
+    if (!(await inspector.isVisible())) await toggle.click();
+  }
+  async function closeInspector() {
+    const close = inspector.getByRole("button", { name: "Close inspector" });
+    if (await close.isVisible()) await close.click();
+  }
+
+  await page.getByRole("button", { name: "Fixture", exact: true }).click();
+  await openInspector();
+  await inspector.getByLabel("Fixture template").selectOption("queenBed");
+  await inspector.getByLabel("Width (mm)").fill("1600");
+  await inspector
+    .getByRole("button", { name: "Apply fixture settings" })
+    .click();
+  await point(page, 0.48, 0.52);
+  await expect(page.locator("[data-fixture]")).toHaveCount(1);
+  await openInspector();
+  await inspector.getByLabel("Rotation").selectOption("90");
+  await inspector.getByRole("button", { name: "Update fixture" }).click();
+  await expect(page.locator("[data-fixture]")).toHaveAttribute(
+    "transform",
+    /rotate\(90\)/,
+  );
+  await closeInspector();
+  await page.getByRole("button", { name: "Undo", exact: true }).click();
+  await expect(page.locator("[data-fixture]")).toHaveAttribute(
+    "transform",
+    /rotate\(0\)/,
+  );
+  await page.getByRole("button", { name: "Redo", exact: true }).click();
+
+  await page.getByRole("button", { name: "Utility", exact: true }).click();
+  await point(page, 0.25, 0.35);
+  await expect(page.locator('[data-layer="electrical"]')).toHaveCount(1);
+  await page.getByRole("button", { name: "Utility", exact: true }).click();
+  await openInspector();
+  await inspector.getByLabel("Utility symbol").selectOption("drain");
+  await inspector
+    .getByRole("button", { name: "Apply utility settings" })
+    .click();
+  await point(page, 0.75, 0.35);
+  await expect(page.locator('[data-layer="plumbing"]')).toHaveCount(1);
+  await openInspector();
+  await inspector.getByRole("checkbox", { name: "Electrical" }).uncheck();
+  await expect(page.locator('[data-layer="electrical"]')).toHaveCount(0);
+  await expect(page.locator('[data-layer="plumbing"]')).toHaveCount(1);
+  await closeInspector();
+
+  await page.getByRole("button", { name: "Fixture", exact: true }).click();
+  await point(page, 0.48, 0.52);
+  await expect(page.locator("[data-fixture]")).toHaveCount(2);
+  await page.getByRole("button", { name: "Check clearances" }).click();
+  const finding = page
+    .getByRole("button", { name: /Footprints overlap/ })
+    .first();
+  await expect(finding).toBeVisible();
+  await finding.click();
+  await expect(page.locator('[data-clearance="collision"]')).toBeVisible();
+  await frame(page);
+  await page.getByRole("button", { name: "Isometric", exact: true }).click();
+  await expect(page.locator("[data-iso-fixture]")).toHaveCount(2);
+
+  await page.getByRole("button", { name: "Save", exact: true }).click();
+  await expect(
+    page.getByRole("status").filter({ hasText: "Saved" }),
+  ).toBeVisible();
+  expect(edits[0].fixtures).toHaveLength(2);
+  expect(edits[0].utilities).toHaveLength(2);
+  expect(edits[0].fixtures).toContainEqual(
+    expect.objectContaining({
+      template: "queenBed",
+      rotation: 90,
+      widthMm: 1600,
+    }),
+  );
+  await page.reload();
+  await expect(page.locator("[data-fixture]")).toHaveCount(2);
+  await expect(page.locator("[data-utility]")).toHaveCount(2);
 });

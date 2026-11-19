@@ -46,6 +46,7 @@ export function initialGraph(
     rooms: solveWallTopology(walls).rooms,
     openings: [],
     fixtures: [],
+    utilities: [],
     dimensions: [],
   };
 }
@@ -87,6 +88,12 @@ export function loadDraftPlan(input: unknown): DraftPlanState {
   validateOpenings(state.walls, state.openings);
   state.walls.sort((a, b) => compareText(a.id, b.id));
   state.openings.sort((a, b) => compareText(a.id, b.id));
+  for (const placements of [state.fixtures, state.utilities]) {
+    if (new Set(placements.map(({ id }) => id)).size !== placements.length) {
+      throw new Error("Placement IDs must be unique on each layer.");
+    }
+    placements.sort((a, b) => compareText(a.id, b.id));
+  }
   state.rooms = solveWallTopology(state.walls).rooms;
   return state;
 }
