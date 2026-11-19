@@ -10,11 +10,14 @@ function isPrivate(request: NextRequest) {
   return /^\/(dashboard|studio)(\/|$)/.test(request.nextUrl.pathname);
 }
 
-const authenticate = clerkMiddleware(async (auth, request) => {
-  if (!isPrivate(request)) return;
-  const session = await auth();
-  if (!session.isAuthenticated) return session.redirectToSignIn();
-});
+const authenticate = clerkMiddleware(
+  async (auth, request) => {
+    if (!isPrivate(request)) return;
+    const session = await auth();
+    if (!session.isAuthenticated) return session.redirectToSignIn();
+  },
+  { signInUrl: "/sign-in", signUpUrl: "/sign-up" },
+);
 
 export default function proxy(request: NextRequest, event: NextFetchEvent) {
   if (clerkEnabled()) return authenticate(request, event);
