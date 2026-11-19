@@ -8,6 +8,7 @@ import {
   type KeyboardEvent,
   type PointerEvent,
 } from "react";
+import { createPortal } from "react-dom";
 import {
   fitCamera,
   modelPoint,
@@ -52,6 +53,7 @@ type SurfaceProps = {
   multi: boolean;
   layers: Record<UtilityLayer, boolean>;
   issue?: ClearanceIssue;
+  zoomSlot: HTMLDivElement | null;
   onSelect(value: readonly Selection[], append?: boolean): void;
   onToggle(item: Selection): void;
   onMove(items: readonly Selection[], delta: Point): void;
@@ -88,6 +90,7 @@ export function Surface({
   multi,
   layers,
   issue,
+  zoomSlot,
   onSelect,
   onToggle,
   onMove,
@@ -467,14 +470,12 @@ export function Surface({
   const scaleMm = unit === "mm" ? 1000 : 36 * unitFactor(unit);
   const scaleWidth = Math.min(scaleMm * camera.scale, 72);
   const scaleText = Math.round(scaleWidth / camera.scale / unitFactor(unit));
-  const selectedView = iso ? "Isometric" : "2D plan";
 
   return (
     <div
       className={"studio-surface" + (iso ? " studio-isometric" : "")}
       ref={surface}
     >
-      <span className="studio-view-name">{selectedView}</span>
       <svg
         ref={svg}
         viewBox={`0 0 ${size.width} ${size.height}`}
@@ -582,32 +583,45 @@ export function Surface({
         {scaleText} {unit}
         {scaleWidth >= 12 && <i style={{ width: scaleWidth }} />}
       </div>
-      <div className="studio-zoom" aria-label="Zoom controls">
-        <button aria-label="Zoom out" onClick={() => zoom(1 / 1.25)}>
-          <Minus size={16} />
-        </button>
-        <button
-          aria-label="Fit drawing"
-          onClick={() =>
-            setCamera(
-              fitCamera(
-                plan.walls,
-                size,
-                iso,
-                plan.fixtures,
-                plan.utilities.filter(
-                  (item) => layers[utilityCatalog[item.template].layer],
-                ),
-              ),
-            )
-          }
-        >
-          <Focus size={16} />
-        </button>
-        <button aria-label="Zoom in" onClick={() => zoom(1.25)}>
-          <Plus size={16} />
-        </button>
-      </div>
+      {zoomSlot &&
+        createPortal(
+          <div className="studio-zoom" role="group" aria-label="Zoom controls">
+            <button
+              aria-label="Zoom out"
+              title="Zoom out"
+              onClick={() => zoom(1 / 1.25)}
+            >
+              <Minus size={16} />
+            </button>
+            <button
+              aria-label="Fit drawing"
+              title="Fit drawing"
+              onClick={() =>
+                setCamera(
+                  fitCamera(
+                    plan.walls,
+                    size,
+                    iso,
+                    plan.fixtures,
+                    plan.utilities.filter(
+                      (item) => layers[utilityCatalog[item.template].layer],
+                    ),
+                  ),
+                )
+              }
+            >
+              <Focus size={16} />
+            </button>
+            <button
+              aria-label="Zoom in"
+              title="Zoom in"
+              onClick={() => zoom(1.25)}
+            >
+              <Plus size={16} />
+            </button>
+          </div>,
+          zoomSlot,
+        )}
     </div>
   );
 }

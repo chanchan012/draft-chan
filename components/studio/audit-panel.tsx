@@ -24,7 +24,6 @@ export function AuditPanel({
     format.format(mm / unitFactor(unit)) + " " + unit;
   return (
     <div className="studio-inspector-content studio-audit">
-      <h2>Clearance check</h2>
       <p
         className="studio-audit-summary"
         role="status"
