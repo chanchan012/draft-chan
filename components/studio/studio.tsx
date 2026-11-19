@@ -32,10 +32,7 @@ import { checkClearances } from "@/lib/plans/clearance";
 import { createDraftPlanStore } from "@/lib/plans/command-store";
 import { authModalHref } from "@/lib/auth-navigation";
 import type { DraftActor, PlanCommand, Point } from "@/lib/plans/model";
-import {
-  studioSnapshot,
-  type StudioDocument,
-} from "@/lib/plans/studio-document";
+import type { StudioDocument } from "@/lib/plans/studio-document";
 import {
   isSelected,
   moveSelection,
@@ -48,6 +45,8 @@ import { Surface, type Tool } from "./surface";
 import { AuditPanel } from "./audit-panel";
 import { StudioPanel } from "./studio-panel";
 import { ExportPanel } from "./export-panel";
+import { usePlanLive } from "./use-plan-live";
+import { useStudioSync } from "./use-studio-sync";
 import {
   FixtureFields,
   UtilityFields,
@@ -75,7 +74,26 @@ export function Studio({
 }) {
   const [store] = useState(() => createDraftPlanStore(initial.graph));
   const { plan, past, future, undo, redo, executeBatch } = useStore(store);
-  const [unit, setUnit] = useState(initial.unit);
+  const {
+    unit,
+    setUnit,
+    dirty,
+    checkpoint,
+    activity,
+    block,
+    failure,
+    save,
+    halt,
+    observeRevision,
+    dismissFailure,
+    retryAuth,
+  } = useStudioSync(initial, store, actor);
+  const live = usePlanLive(
+    initial.id,
+    block === "auth" || block === "deleted",
+    observeRevision,
+    halt,
+  );
   const [gridIndex, setGridIndex] = useState(1);
   const [tool, setTool] = useState<Tool>("select");
   const [ortho, setOrtho] = useState(true);
@@ -117,19 +135,10 @@ export function Studio({
   }, [picked, plan, layers]);
   const active = selection.length === 1 ? selection[0] : undefined;
   const [message, setMessage] = useState("");
-  const [saveState, setSaveState] = useState<
-    "idle" | "saving" | "error" | "conflict" | "auth"
-  >("idle");
   const auditControl = useRef<HTMLButtonElement>(null);
   const inspectorControl = useRef<HTMLButtonElement>(null);
   const exportsControl = useRef<HTMLButtonElement>(null);
   const layerControl = useRef<HTMLButtonElement>(null);
-  const saving = useRef(false);
-  const revision = useRef(initial.revision);
-  const snapshot = useMemo(() => studioSnapshot(plan, unit), [plan, unit]);
-  const encoded = useMemo(() => JSON.stringify(snapshot), [snapshot]);
-  const [saved, setSaved] = useState(encoded);
-  const dirty = saved !== encoded;
 
   const activeWall =
     active?.kind === "wall"
@@ -148,61 +157,6 @@ export function Studio({
     active?.kind === "utility"
       ? plan.utilities.find(({ id }) => id === active.id)
       : undefined;
-  const save = useCallback(async () => {
-    if (!dirty || saving.current || saveState === "conflict") return;
-    saving.current = true;
-    setSaveState("saving");
-    setMessage("");
-    try {
-      const response = await fetch(`/api/floorplans/${initial.id}/graph`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ revision: revision.current, ...snapshot }),
-      });
-      if (response.status === 409) {
-        // A retry after a dropped response can arrive after the write committed.
-        const latest = await fetch(`/api/floorplans/${initial.id}/graph`, {
-          cache: "no-store",
-        });
-        if (latest.ok) {
-          const newer: StudioDocument = await latest.json();
-          if (
-            JSON.stringify(studioSnapshot(newer.graph, newer.unit)) === encoded
-          ) {
-            revision.current = newer.revision;
-            setSaved(encoded);
-            setSaveState("idle");
-            return;
-          }
-        }
-        setSaveState("conflict");
-        return;
-      }
-      if (response.status === 401) {
-        setSaveState("auth");
-        return;
-      }
-      if (!response.ok) {
-        setSaveState("error");
-        const payload = await response.json().catch(() => null);
-        setMessage(
-          payload?.error ?? "The drawing could not be saved. Try again.",
-        );
-        return;
-      }
-      const updated: { revision: number } = await response.json();
-      revision.current = updated.revision;
-      setSaved(encoded);
-      setSaveState("idle");
-      setMessage("");
-    } catch {
-      setSaveState("error");
-      setMessage("Connection interrupted. Try saving again.");
-    } finally {
-      saving.current = false;
-    }
-  }, [dirty, encoded, initial.id, saveState, snapshot]);
-
   useEffect(() => {
     if (!dirty) return;
     function beforeUnload(event: BeforeUnloadEvent) {
@@ -367,17 +321,27 @@ export function Studio({
   }
 
   const status =
-    saveState === "saving"
-      ? "Saving…"
-      : saveState === "error"
-        ? "Save failed"
-        : saveState === "conflict"
-          ? "Revision conflict"
-          : saveState === "auth"
-            ? "Sign-in required"
-            : dirty
-              ? "Unsaved changes"
-              : "Saved";
+    block === "conflict"
+      ? "Revision conflict"
+      : block === "auth"
+        ? "Sign-in required"
+        : block === "deleted"
+          ? "Plan unavailable"
+          : activity === "save"
+            ? "Saving…"
+            : activity === "pull"
+              ? "Updating…"
+              : failure
+                ? "Sync interrupted"
+                : dirty
+                  ? "Unsaved changes"
+                  : "Saved";
+  const connectionLabel =
+    live.connection === "live"
+      ? `Live · ${live.peers.length} other ${live.peers.length === 1 ? "editor" : "editors"}`
+      : live.connection === "offline"
+        ? "Live sync offline"
+        : "Connecting to live sync";
 
   return (
     <div className="studio-page">
@@ -390,7 +354,7 @@ export function Studio({
         >
           <ChevronLeft size={21} />
         </a>
-        <h1 title={initial.name}>{initial.name}</h1>
+        <h1 title={checkpoint.name}>{checkpoint.name}</h1>
         <span role="status" className="studio-save-status" data-dirty={dirty}>
           <i aria-hidden="true" />
           <span>{status}</span>
@@ -424,9 +388,7 @@ export function Studio({
             title="Save"
             aria-label="Save"
             onClick={() => void save()}
-            disabled={
-              !dirty || saveState === "saving" || saveState === "conflict"
-            }
+            disabled={!dirty || activity !== null || block !== null}
           >
             <Save size={16} /> <span>Save</span>
           </button>
@@ -556,6 +518,8 @@ export function Studio({
             layers={layers}
             issue={issue}
             zoomSlot={zoomSlot}
+            peers={live.peers}
+            onPresence={live.moveCursor}
             onPlace={place}
             onSelect={choose}
             onToggle={(item) =>
@@ -613,6 +577,18 @@ export function Studio({
           >
             <FileDown size={20} />
           </button>
+          <span
+            className="studio-live-status"
+            data-connection={live.connection}
+            role="img"
+            aria-label={connectionLabel}
+            title={connectionLabel}
+          >
+            <i aria-hidden="true" />
+            <span aria-hidden="true">
+              {live.connection === "live" ? live.peers.length : "…"}
+            </span>
+          </span>
         </div>
         <StudioPanel
           side="right"
@@ -633,10 +609,10 @@ export function Studio({
         >
           {rightPanel === "exports" ? (
             <ExportPanel
-              key={`${initial.id}:${revision.current}`}
+              key={`${initial.id}:${checkpoint.revision}`}
               id={initial.id}
-              name={initial.name}
-              revision={revision.current}
+              name={checkpoint.name}
+              revision={checkpoint.revision}
               dirty={dirty}
             />
           ) : rightPanel === "clearance" && audit ? (
@@ -723,9 +699,9 @@ export function Studio({
             />
           )}
         </StudioPanel>
-        {(message || saveState === "conflict" || saveState === "auth") && (
+        {(message || failure || block) && (
           <div role="alert" className="studio-message">
-            {saveState === "conflict" ? (
+            {block === "conflict" ? (
               <>
                 A newer revision is saved. Keep this tab open to retain your
                 edits.{" "}
@@ -737,7 +713,7 @@ export function Studio({
                   Open saved version
                 </a>
               </>
-            ) : saveState === "auth" ? (
+            ) : block === "auth" ? (
               <>
                 Your session expired.{" "}
                 <a
@@ -747,14 +723,23 @@ export function Studio({
                 >
                   Sign in again
                 </a>{" "}
-                and retry saving.
+                and{" "}
+                <button type="button" onClick={retryAuth}>
+                  Reconnect
+                </button>
+                .
               </>
+            ) : block === "deleted" ? (
+              "This floorplan is no longer available. Keep this tab open to retain your edits."
             ) : (
-              message
+              message || failure
             )}
-            {message && saveState !== "conflict" && saveState !== "auth" && (
+            {(message || failure) && !block && (
               <button
-                onClick={() => setMessage("")}
+                onClick={() => {
+                  setMessage("");
+                  dismissFailure();
+                }}
                 aria-label="Dismiss message"
               >
                 <X size={15} />

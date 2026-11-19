@@ -6,6 +6,7 @@ import type {
   StudioDocument,
   StudioSave,
 } from "../../lib/plans/studio-document";
+import type { LivePeer, PresenceInput } from "../../lib/plans/live";
 import type { Blueprint, BlueprintRequest } from "../../lib/plans/exports";
 
 test.use({ hasTouch: true });
@@ -21,15 +22,27 @@ const script = buildSync({
 }).outputFiles[0].text;
 const css = readFileSync("app/studio/[id]/studio.css", "utf8");
 
-async function studio(page: Page, conflict = false) {
-  let document: StudioDocument = {
-    id,
-    name: "Corner study",
-    graph: initialGraph(),
-    revision: 0,
-    unit: "mm",
+function studioWorkspace() {
+  return {
+    document: {
+      id,
+      name: "Corner study",
+      graph: initialGraph(),
+      revision: 0,
+      unit: "mm",
+    } as StudioDocument,
+    edits: [] as StudioSave[],
+    peers: new Map<string, LivePeer>(),
+    gate: undefined as Promise<void> | undefined,
+    signedIn: true,
   };
-  const edits: StudioSave[] = [];
+}
+
+async function studio(
+  page: Page,
+  conflict = false,
+  workspace = studioWorkspace(),
+) {
   await page.goto("/");
   const styles = await page
     .locator('link[rel="stylesheet"]')
@@ -40,7 +53,7 @@ async function studio(page: Page, conflict = false) {
     route.fulfill({ contentType: "application/javascript", body: script }),
   );
   await page.route("**" + path, (route) => {
-    const fixture = JSON.stringify(document)
+    const fixture = JSON.stringify(workspace.document)
       .replaceAll("&", "&amp;")
       .replaceAll("'", "&#39;")
       .replaceAll("<", "&lt;");
@@ -51,32 +64,63 @@ async function studio(page: Page, conflict = false) {
         <style>${css}</style><div id="root" data-document='${fixture}'></div><script defer src="/tests/studio.js"></script>`,
     });
   });
-  await page.route("**/api/floorplans/" + id + "/graph", (route) => {
+  const graphEndpoint = "**/api/floorplans/" + id;
+  await page.route(graphEndpoint + "/live", (route) => {
+    if (!workspace.signedIn) return route.fulfill({ status: 401 });
+    return route.fulfill({
+      contentType: "text/event-stream",
+      body:
+        "data: " +
+        JSON.stringify({
+          type: "snapshot",
+          revision: workspace.document.revision,
+          peers: [...workspace.peers.values()],
+        }) +
+        "\n\n",
+    });
+  });
+  await page.route(graphEndpoint + "/presence", (route) => {
+    if (!workspace.signedIn) return route.fulfill({ status: 401 });
+    const { clientId, cursor } = route
+      .request()
+      .postDataJSON() as PresenceInput;
+    workspace.peers.set(clientId, {
+      id: clientId,
+      cursor,
+      kind: "human",
+      expiresAt: Date.now() + 25_000,
+    });
+    return route.fulfill({ status: 204 });
+  });
+  await page.route(graphEndpoint + "/graph", async (route) => {
+    if (!workspace.signedIn) return route.fulfill({ status: 401 });
     if (route.request().method() === "GET")
-      return route.fulfill({ json: document });
+      return route.fulfill({ json: workspace.document });
     const input = route.request().postDataJSON() as StudioSave;
-    edits.push(input);
-    if (conflict || input.revision !== document.revision)
+    workspace.edits.push(input);
+    await workspace.gate;
+    const current = workspace.document;
+    if (conflict || input.revision !== current.revision)
       return route.fulfill({ status: 409, json: { error: "Plan changed" } });
-    document = {
-      ...document,
+    workspace.document = {
+      ...current,
       revision: input.revision + 1,
       unit: input.unit,
       graph: {
-        ...document.graph,
+        ...current.graph,
         walls: input.walls,
         openings: input.openings,
-        fixtures: input.fixtures ?? document.graph.fixtures,
-        utilities: input.utilities ?? document.graph.utilities,
+        fixtures: input.fixtures ?? current.graph.fixtures,
+        utilities: input.utilities ?? current.graph.utilities,
       },
     };
-    return route.fulfill({ json: { revision: document.revision } });
+    return route.fulfill({ json: { revision: workspace.document.revision } });
   });
   await page.goto(path);
   await expect(
     page.getByRole("heading", { name: "Corner study" }),
   ).toBeVisible();
-  return edits;
+  return workspace.edits;
 }
 
 async function point(page: Page, x: number, y: number) {
@@ -87,6 +131,20 @@ async function point(page: Page, x: number, y: number) {
   if (page.viewportSize()!.width < 600)
     await page.touchscreen.tap(coords.x, coords.y);
   else await page.mouse.click(coords.x, coords.y);
+}
+
+async function saveIfNeeded(page: Page) {
+  const save = page.getByRole("button", { name: "Save", exact: true });
+  if (await save.isEnabled())
+    await save.click({ timeout: 1_000 }).catch(async (error) => {
+      if (await save.isEnabled()) throw error;
+    });
+  await expect(page.getByRole("banner").getByRole("status")).toHaveText(
+    "Saved",
+    {
+      timeout: 10_000,
+    },
+  );
 }
 
 async function frame(page: Page) {
@@ -241,11 +299,10 @@ test("draws an ortho wall and door, toggles isometric, and saves the graph", asy
   await page.getByRole("button", { name: "2D plan", exact: true }).click();
   await expect(page.locator("[data-door]")).toHaveCount(1);
 
-  await page.getByRole("button", { name: "Save", exact: true }).click();
-  await expect(page.getByRole("status")).toHaveText("Saved");
-  expect(edits).toHaveLength(1);
-  expect(edits[0]).toMatchObject({ unit: "in", revision: 0 });
-  expect(edits[0].openings[0].wallId).toBe(edits[0].walls[0].id);
+  await saveIfNeeded(page);
+  const last = edits.at(-1)!;
+  expect(last.unit).toBe("in");
+  expect(last.openings[0].wallId).toBe(last.walls[0].id);
   await page.reload();
   await expect(page.locator("[data-door]")).toHaveCount(1);
   await expect(page.getByRole("status")).toHaveText("Saved");
@@ -346,15 +403,7 @@ test("exports a saved revision and tracks blueprint retries and downloads", asyn
   await point(page, 0.8, 0.47);
   await page.getByRole("button", { name: "Exports", exact: true }).click();
   const exports = page.getByRole("complementary", { name: "Exports" });
-  await expect(exports.getByText("Saved revision 0")).toBeVisible();
-  await expect(
-    exports.getByText("Save your changes to export the latest drawing."),
-  ).toBeVisible();
-  await expect(exports.getByRole("button", { name: "CSV" })).toBeDisabled();
-  await expect(
-    exports.getByRole("button", { name: "Generate DXF" }),
-  ).toBeDisabled();
-  await page.getByRole("button", { name: "Save", exact: true }).click();
+  await saveIfNeeded(page);
   await expect(exports.getByText("Saved revision 1")).toBeVisible();
   expect(edits).toHaveLength(1);
   const [csv] = await Promise.all([
@@ -466,13 +515,11 @@ test("places, edits, audits and reloads catalog items and utility layers", async
   await page.getByRole("button", { name: "Isometric", exact: true }).click();
   await expect(page.locator("[data-iso-fixture]")).toHaveCount(2);
 
-  await page.getByRole("button", { name: "Save", exact: true }).click();
-  await expect(
-    page.getByRole("status").filter({ hasText: "Saved" }),
-  ).toBeVisible();
-  expect(edits[0].fixtures).toHaveLength(2);
-  expect(edits[0].utilities).toHaveLength(2);
-  expect(edits[0].fixtures).toContainEqual(
+  await saveIfNeeded(page);
+  const last = edits.at(-1)!;
+  expect(last.fixtures).toHaveLength(2);
+  expect(last.utilities).toHaveLength(2);
+  expect(last.fixtures).toContainEqual(
     expect.objectContaining({
       template: "queenBed",
       rotation: 90,
@@ -571,4 +618,72 @@ test("pinches both ways, multi-selects, moves and deletes a group in one undo st
   await page.getByRole("button", { name: "Delete selection" }).click();
   await expect(markers).toHaveCount(0);
   await frame(page);
+});
+
+test("two tabs show cursors and autosave concurrent independent edits", async ({
+  page,
+  context,
+}) => {
+  const workspace = studioWorkspace();
+  const other = await context.newPage();
+  let release = () => {};
+  try {
+    await studio(page, false, workspace);
+    await studio(other, false, workspace);
+    await page.bringToFront();
+    const canvas = (await page
+      .getByRole("region", { name: "Drawing surface" })
+      .boundingBox())!;
+    await page.mouse.move(
+      canvas.x + canvas.width / 2,
+      canvas.y + canvas.height / 2,
+    );
+    await expect
+      .poll(() =>
+        [...workspace.peers.values()].some(({ cursor }) => cursor !== null),
+      )
+      .toBe(true);
+    await expect(other.locator('[data-peer-kind="human"]')).toBeVisible({
+      timeout: 10_000,
+    });
+    workspace.peers.set("ai-release-check", {
+      id: "ai-release-check",
+      kind: "ai",
+      cursor: { x: 0, y: 0 },
+      expiresAt: Date.now() + 25_000,
+    });
+    await expect(other.locator('[data-peer-kind="ai"]')).toBeVisible({
+      timeout: 10_000,
+    });
+
+    workspace.gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    await Promise.all(
+      [page, other].map(async (tab, index) => {
+        await tab.getByRole("button", { name: "Wall", exact: true }).click();
+        await point(tab, 0.24, 0.4 + index * 0.14);
+        await point(tab, 0.76, 0.4 + index * 0.14);
+      }),
+    );
+    await expect
+      .poll(() => workspace.edits.length, { timeout: 10_000 })
+      .toBe(2);
+    expect(workspace.edits.map(({ revision }) => revision)).toEqual([0, 0]);
+    release();
+    await expect
+      .poll(() => workspace.document.revision, { timeout: 10_000 })
+      .toBe(2);
+    await expect(page.locator("[data-wall]")).toHaveCount(2);
+    await expect(other.locator("[data-wall]")).toHaveCount(2);
+    await expect(other.getByRole("status")).toHaveText("Saved");
+    await frame(other);
+
+    workspace.signedIn = false;
+    await expect(other.getByRole("status")).toHaveText("Sign-in required");
+    await expect(other.locator("[data-wall]")).toHaveCount(2);
+  } finally {
+    release();
+    await other.close();
+  }
 });

@@ -28,18 +28,18 @@ export function localWindow(
     return { success, reset: active[0] + span };
   };
 }
-export function configuredLimiter(): Limit {
+export function configuredLimiter(bucket = "rpc", capacity = 60): Limit {
   const url = process.env.UPSTASH_REDIS_REST_URL;
   const token = process.env.UPSTASH_REDIS_REST_TOKEN;
-  if (!url && !token) return localWindow();
+  if (!url && !token) return localWindow(capacity);
   if (!url || !token)
     return async () => {
       throw new Error("Incomplete Redis configuration");
     };
   const limiter = new Ratelimit({
     redis: new Redis({ url, token }),
-    prefix: "draft:rpc",
-    limiter: Ratelimit.slidingWindow(60, "60 s"),
+    prefix: "draft:" + bucket,
+    limiter: Ratelimit.slidingWindow(capacity, "60 s"),
     timeout: 0,
   });
   return (key) => limiter.limit(key);

@@ -30,6 +30,13 @@ function owned(owner: string, id: string) {
   return and(eq(floorplans.ownerId, owner), eq(floorplans.id, id));
 }
 export const plans = {
+  async revision(owner: string, id: string) {
+    const [row] = await openDatabase()
+      .select({ revision: floorplans.revision })
+      .from(floorplans)
+      .where(owned(owner, id));
+    return row?.revision ?? null;
+  },
   async list(owner: string) {
     const rows = await openDatabase()
       .select()
