@@ -229,3 +229,18 @@
     font-size: 12px;
   }
 }
+
+.dash-heading {
+  flex-wrap: wrap;
+}
+.dash-card-body {
+  grid-template-columns: minmax(0, 1fr) auto;
+}
+.dash-modal .primary,
+.dash-modal .text-action {
+  min-height: 44px;
+  white-space: normal;
+}
+.dash-form-actions {
+  flex-wrap: wrap;
+}

@@ -1,0 +1,130 @@
+.auth-page .back {
+  min-height: 44px;
+}
+.auth-scroll {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  overscroll-behavior: contain;
+  display: flex;
+  padding: clamp(16px, 4vw, 48px) 0;
+}
+.auth-layout {
+  width: min(92%, 1180px);
+  margin: auto;
+  display: grid;
+  grid-template-columns: minmax(0, 0.86fr) minmax(0, 1.14fr);
+  align-items: center;
+  gap: clamp(24px, 5vw, 84px);
+}
+.auth-panel {
+  width: min(100%, 410px);
+  min-width: 0;
+  justify-self: center;
+}
+.auth-panel h1 {
+  margin-bottom: 22px;
+  color: var(--ink);
+  font-size: clamp(32px, 4.1vw, 60px);
+  font-weight: 520;
+  line-height: 1.06;
+  letter-spacing: -0.065em;
+  text-wrap: balance;
+}
+.auth-unavailable {
+  background: #fffefa;
+  padding: 18px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  color: var(--muted);
+  line-height: 1.55;
+}
+.auth-study {
+  display: grid;
+  grid-template-rows: minmax(0, 1fr) auto;
+  height: clamp(310px, 65dvh, 680px);
+  overflow: hidden;
+  background: #f3f5ec;
+  border: 1px solid #c9cbc0;
+  border-radius: 7px;
+}
+.auth-study-art {
+  display: grid;
+  place-items: center;
+  min-height: 0;
+}
+.auth-study img {
+  width: 94%;
+  height: 100%;
+  object-fit: contain;
+  mix-blend-mode: multiply;
+}
+.auth-study figcaption {
+  display: flex;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 8px;
+  background: #fcfcf9;
+  border-top: 1px solid var(--line);
+  padding: 14px 16px;
+  align-items: baseline;
+}
+.auth-study figcaption strong {
+  font-size: 14px;
+  font-weight: 570;
+}
+.auth-study figcaption span {
+  color: var(--muted);
+  font: 10px var(--mono);
+  letter-spacing: 0.08em;
+}
+.draft-clerk-root,
+.draft-clerk-card-box {
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+}
+.draft-clerk-card-box {
+  border: 1px solid var(--line);
+  box-shadow: 0 2px 5px #20211808;
+}
+.draft-clerk-card,
+.draft-clerk-footer {
+  width: 100%;
+  min-width: 0;
+}
+.draft-clerk-card {
+  padding-inline: clamp(14px, 4vw, 28px);
+}
+.draft-clerk-header {
+  text-align: start;
+  align-items: flex-start;
+}
+.draft-clerk-input {
+  min-height: 44px;
+  font-size: 16px;
+}
+.draft-clerk-action {
+  min-height: 44px;
+}
+.draft-clerk-link {
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+@media (max-width: 760px), (max-height: 550px) {
+  .auth-layout {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .auth-study {
+    display: none;
+  }
+  .auth-panel h1 {
+    font-size: clamp(31px, 7vw, 43px);
+    margin-bottom: 16px;
+  }
+}
+@media (max-height: 440px) {
+  .auth-scroll {
+    padding-block: 12px;
+  }
+}

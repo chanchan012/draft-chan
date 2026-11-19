@@ -18,10 +18,7 @@ beforeAll(() => migrate(db, { migrationsFolder: "./db/migrations" }), 30000);
 afterAll(() => pg.close());
 function client(owner?: string) {
   const app = createApi(async (c, next) => {
-    c.set(
-      "identity",
-      owner ? { mode: "member", userId: owner } : { mode: "guest" },
-    );
+    if (owner) c.set("identity", { mode: "member", userId: owner });
     await next();
   }, localWindow());
   return (method: string, id = "", body?: unknown) =>
@@ -63,12 +60,12 @@ describe("floorplan persistence", () => {
     expect((await a("GET", id)).status).toBe(404);
   });
   it("validates inputs and requires authentication for every operation", async () => {
-    const guest = client(),
+    const unsigned = client(),
       member = client("member"),
       id = crypto.randomUUID();
     for (const method of ["GET", "POST", "PATCH", "DELETE"])
       expect(
-        (await guest(method, ["PATCH", "DELETE"].includes(method) ? id : ""))
+        (await unsigned(method, ["PATCH", "DELETE"].includes(method) ? id : ""))
           .status,
       ).toBe(401);
     expect((await member("POST", "", { id, name: " " })).status).toBe(400);

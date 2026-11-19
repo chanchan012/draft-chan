@@ -1,22 +1,18 @@
 import { test, expect } from "@playwright/test";
 import type { PlanCard } from "../../lib/plans/geometry";
-test("guest library opens a sample and stays within the viewport", async ({
-  page,
-}) => {
-  await page.goto("/dashboard");
-  await expect(
-    page.getByRole("link", { name: "Sign in to create" }),
-  ).toBeVisible();
-  expect(
-    await page.evaluate(
-      () =>
-        document.documentElement.scrollHeight === innerHeight &&
-        document.documentElement.scrollWidth === innerWidth,
-    ),
-  ).toBe(true);
-  await page.getByRole("link", { name: "Open sample" }).click();
-  await expect(page.getByRole("dialog")).toBeVisible();
-});
+import { readFileSync } from "node:fs";
+import { buildSync } from "esbuild";
+
+const script = buildSync({
+  entryPoints: ["tests/e2e/dashboard.fixture.tsx"],
+  jsx: "automatic",
+  bundle: true,
+  define: { "process.env": '{"NODE_ENV":"production"}' },
+  write: false,
+}).outputFiles[0].text;
+
+const styles = readFileSync("app/dashboard/dashboard.css", "utf8");
+
 test("member grid, CRUD dialogs and area units", async ({ page }) => {
   const records: PlanCard[] = Array.from({ length: 16 }, (_, i) => ({
     id: crypto.randomUUID(),
@@ -54,6 +50,23 @@ test("member grid, CRUD dialogs and area units", async ({ page }) => {
         return route.fulfill({ json: records });
     }
   });
+  // The private route is tested separately. Mount its real client component
+  // with a fixture account and mocked RPC to exercise the responsive UI.
+  await page.goto("/");
+  const globalStyles = await page.locator('link[rel="stylesheet"]').evaluateAll(
+    (links) => links.map((link) => (link as HTMLLinkElement).href),
+  );
+  await page.route("**/tests/dashboard.js", (route) =>
+    route.fulfill({ contentType: "application/javascript", body: script }),
+  );
+  await page.route("**/dashboard", (route) =>
+    route.fulfill({
+      contentType: "text/html",
+      body: `<!doctype html><meta name="viewport" content="width=device-width, initial-scale=1">
+        ${globalStyles.map((href) => `<link rel="stylesheet" href="${href}">`).join("")}
+        <style>${styles}</style><div id="root"></div><script defer src="/tests/dashboard.js"></script>`,
+    }),
+  );
   await page.goto("/dashboard");
   await expect(page.locator(".dash-card")).toHaveCount(16);
   expect(
@@ -85,4 +98,13 @@ test("member grid, CRUD dialogs and area units", async ({ page }) => {
     .getByRole("button", { name: "Delete floorplan", exact: true })
     .click();
   await expect(page.getByText("No matching floorplans")).toBeVisible();
+
+  await page.getByRole("button", { name: "Open sample" }).click();
+  const sample = page.getByRole("dialog", { name: "Sample plan" });
+  await sample.getByRole("button", { name: "2D Plan" }).click();
+  await expect(sample.getByRole("img", { name: /floor plan/ })).toBeVisible();
+  await sample.getByRole("button", { name: "Zoom in" }).click();
+  await expect(sample.getByText("125%")).toBeVisible();
+  await page.keyboard.press("Escape");
+  await expect(sample).toBeHidden();
 });

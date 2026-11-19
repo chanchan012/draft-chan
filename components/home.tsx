@@ -8,12 +8,12 @@ import {
   Box,
   ChevronRight,
   DraftingCompass,
+  Scan,
   ScanLine,
   UsersRound,
   X,
 } from "lucide-react";
 import { Brand } from "./brand";
-import { Sheet } from "./sheet";
 
 const features = [
   {
@@ -45,22 +45,17 @@ const features = [
       "The clearance engine is planned for milestone 3. It will report door-swing conflicts and narrow pathways for design review.",
   },
 ];
-type Overlay = "sample" | "guide" | null;
 export function Home() {
-  const [overlay, setOverlay] = useState<Overlay>(null);
+  const [guideOpen, setGuideOpen] = useState(false);
   const [topic, setTopic] = useState(0);
   const dialog = useRef<HTMLDialogElement>(null);
   useEffect(() => {
-    if (new URLSearchParams(location.search).get("view") === "sample")
-      setOverlay("sample");
-  }, []);
-  useEffect(() => {
-    if (overlay && !dialog.current?.open) dialog.current?.showModal();
-    if (!overlay && dialog.current?.open) dialog.current?.close();
-  }, [overlay]);
+    if (guideOpen && !dialog.current?.open) dialog.current?.showModal();
+    if (!guideOpen && dialog.current?.open) dialog.current.close();
+  }, [guideOpen]);
   const guide = (index = 0) => {
     setTopic(index);
-    setOverlay("guide");
+    setGuideOpen(true);
   };
   return (
     <div className="page">
@@ -68,10 +63,9 @@ export function Home() {
         <div className="header-inner">
           <Brand />
           <nav aria-label="Main">
-            <button className="nav-active" onClick={() => setOverlay(null)}>
+            <button className="nav-active" onClick={() => setGuideOpen(false)}>
               Overview
             </button>
-            <button onClick={() => setOverlay("sample")}>Sample plan</button>
             <button onClick={() => guide()}>Field guide</button>
           </nav>
           <div className="header-actions">
@@ -100,19 +94,38 @@ export function Home() {
               and explore architectural spaces in one shared workspace.
             </p>
             <div className="hero-actions">
-              <button className="primary" onClick={() => setOverlay("sample")}>
-                Explore demo <ArrowRight size={17} />
-              </button>
+              <Link className="primary" href="/sign-up">
+                Create account <ArrowRight size={17} />
+              </Link>
               <button className="guide-link" onClick={() => guide()}>
                 <BookOpen size={16} /> Field guide
               </button>
             </div>
-            <div className="hero-note mono">
-              <span className="signal" /> GUEST ACCESS <b>·</b> NO SIGN-UP
-              REQUIRED
-            </div>
           </div>
-          <Sheet onExpand={() => setOverlay("sample")} />
+          <figure className="sheet home-study">
+            <div className="sheet-bar">
+              <span className="sheet-label">Axonometric drawing</span>
+            </div>
+            <div className="sheet-field grid-on">
+              <div className="art-wrap">
+                <img
+                  className="model"
+                  src="/isometric.webp"
+                  width="1448"
+                  height="1086"
+                  alt="Cutaway of a furnished two-bedroom home around a planted courtyard"
+                  fetchPriority="high"
+                />
+              </div>
+            </div>
+            <figcaption className="sheet-foot">
+              <div>
+                <Scan size={16} />
+                <strong>Courtyard House</strong>
+              </div>
+              <span className="mono">RESIDENTIAL STUDY</span>
+            </figcaption>
+          </figure>
         </section>
         <section className="capabilities">
           <div className="section-heading">
@@ -142,69 +155,52 @@ export function Home() {
           <span className="footer-mark">⌖</span> DRAFT SYSTEMS{" "}
           <span className="foot-divider">/</span> <span>V0.1</span>
         </div>
-        <span className="foot-status">
-          <span className="signal" /> GUEST DEMO ONLINE
-        </span>
       </footer>
       <dialog
         ref={dialog}
-        onClose={() => setOverlay(null)}
+        onClose={() => setGuideOpen(false)}
         onClick={(e) => {
-          if (e.target === e.currentTarget) setOverlay(null);
+          if (e.target === e.currentTarget) setGuideOpen(false);
         }}
-        className={"modal " + (overlay === "sample" ? "sample-modal" : "")}
+        className="modal"
+        aria-labelledby="field-guide-title"
       >
         <div className="modal-inner">
           <div className="modal-title">
             <span className="eyebrow">
               <span className="orange-rule" />
-              {overlay === "sample" ? "GUEST DEMO" : "STUDIO FIELD GUIDE"}
+              STUDIO FIELD GUIDE
             </span>
             <button
               className="icon-btn"
               aria-label="Close dialog"
-              onClick={() => setOverlay(null)}
+              onClick={() => setGuideOpen(false)}
             >
               <X size={19} />
             </button>
           </div>
-          {overlay === "sample" ? (
-            <>
-              <h2>Sample plan</h2>
-              <Sheet expanded />
-            </>
-          ) : (
-            <>
-              <h2>Field guide</h2>
-              <div className="guide-body">
-                <div className="guide-topics">
-                  {features.map((f, i) => (
-                    <button
-                      key={f.title}
-                      aria-pressed={topic === i}
-                      onClick={() => setTopic(i)}
-                    >
-                      {f.title}
-                      <ChevronRight size={15} />
-                    </button>
-                  ))}
-                </div>
-                <article>
-                  <span className="eyebrow">
-                    {topic === 1 ? "SAMPLE WORKSPACE" : "STUDIO ROADMAP"}
-                  </span>
-                  <h3>{features[topic].title}</h3>
-                  <p>{features[topic].detail}</p>
-                  <button
-                    className="text-action"
-                    onClick={() => setOverlay("sample")}
-                  >
-                    Open sample plan <ArrowRight size={15} />
-                  </button>
-                </article>
-              </div>
-            </>
-          )}
+          <h2 id="field-guide-title">Field guide</h2>
+          <div className="guide-body">
+            <div className="guide-topics">
+              {features.map((f, i) => (
+                <button
+                  key={f.title}
+                  aria-pressed={topic === i}
+                  onClick={() => setTopic(i)}
+                >
+                  {f.title}
+                  <ChevronRight size={15} />
+                </button>
+              ))}
+            </div>
+            <article>
+              <span className="eyebrow">
+                {topic === 1 ? "SAMPLE WORKSPACE" : "STUDIO ROADMAP"}
+              </span>
+              <h3>{features[topic].title}</h3>
+              <p>{features[topic].detail}</p>
+            </article>
+          </div>
         </div>
       </dialog>
     </div>

@@ -177,7 +177,6 @@ a {
 }
 .eyebrow,
 .mono,
-.hero-note,
 .footer,
 .sheet-label {
   font-family: var(--mono);
@@ -243,18 +242,6 @@ a {
 .login:hover,
 .text-action:hover {
   color: var(--accent);
-}
-.hero-note {
-  display: flex;
-  gap: 8px;
-  align-items: center;
-  color: #7c7f74;
-  font-size: 9px;
-  letter-spacing: 0.7px;
-  margin-top: 18px;
-}
-.hero-note b {
-  font-weight: 400;
 }
 .signal {
   background: #748866;
@@ -507,8 +494,7 @@ a {
   letter-spacing: 0.85px;
   flex: none;
 }
-.footer > div,
-.foot-status {
+.footer > div {
   display: flex;
   align-items: center;
   gap: 9px;
@@ -555,8 +541,7 @@ a {
 .zoom button:hover {
   background: #e5e8dc;
 }
-.modal h2,
-.auth-panel h1 {
+.modal h2 {
   font-size: 35px;
   line-height: 1.1;
   font-weight: 530;
@@ -612,8 +597,7 @@ a {
   font-weight: 550;
   margin: 10px 0;
 }
-.guide-body p,
-.auth-panel p {
+.guide-body p {
   font-size: 14px;
   line-height: 1.65;
   color: var(--muted);
@@ -625,39 +609,6 @@ a {
 }
 .back {
   margin-left: auto;
-}
-.auth-main {
-  flex: 1;
-  min-height: 0;
-  overflow: auto;
-  display: flex;
-  padding: 24px;
-  align-items: safe center;
-  justify-content: center;
-  background:
-    linear-gradient(#d3d7cb47 1px, transparent 1px),
-    linear-gradient(90deg, #d3d7cb47 1px, transparent 1px);
-  background-size: 28px 28px;
-}
-.auth-panel {
-  max-width: 430px;
-  width: 100%;
-  background: var(--paper);
-  border: 1px solid var(--line);
-  border-radius: 7px;
-  padding: 32px;
-}
-.auth-panel .eyebrow {
-  margin-bottom: 25px;
-}
-.auth-key {
-  color: var(--accent);
-}
-.auth-panel .primary {
-  margin-top: 23px;
-}
-.auth-panel h1 {
-  margin: 13px 0;
 }
 @media (min-width: 801px) and (min-height: 980px) {
   .home-main {
@@ -687,9 +638,6 @@ a {
   .feature {
     padding: 11px 14px;
     gap: 7px;
-  }
-  .hero-note {
-    margin-top: 10px;
   }
   .section-heading {
     margin-bottom: 9px;
@@ -767,9 +715,6 @@ a {
     font-size: 14px;
     line-height: 1.45;
     margin: 10px 0 13px;
-  }
-  .hero-note {
-    display: none;
   }
   .primary {
     padding: 10px 15px;
@@ -947,9 +892,6 @@ a {
   .guide-topics button {
     font-size: 12px;
   }
-  .auth-panel {
-    padding: 24px;
-  }
 }
 @media (max-height: 530px) {
   .header {
@@ -968,8 +910,7 @@ a {
     line-height: 1.35;
     margin: 7px 0;
   }
-  .hero-note,
-  .feature p,
+    .feature p,
   .section-heading,
   .footer {
     display: none;
@@ -1073,5 +1014,43 @@ a {
 @media (min-width: 801px) and (max-height: 530px) {
   .hero h1 {
     font-size: 38px;
+  }
+}
+
+/* Keep the drawing and actions reachable on short or zoomed viewports. */
+.home-main {
+  overflow: auto;
+  overscroll-behavior: contain;
+}
+.hero {
+  flex: 1 0 auto;
+  min-height: 250px;
+}
+.hero-actions {
+  flex-wrap: wrap;
+  row-gap: 8px;
+}
+.home-study .sheet-field {
+  min-height: 95px;
+}
+@media (max-width: 800px) and (min-height: 531px) {
+  .hero > .sheet {
+    flex: 1 0 auto;
+    min-height: 175px;
+  }
+}
+@media (max-height: 530px) and (min-width: 601px) {
+  .hero {
+    min-height: 215px;
+  }
+}
+@media (max-width: 600px) and (max-height: 530px) {
+  .hero {
+    display: flex;
+    min-height: auto;
+  }
+  .hero > .sheet {
+    flex: none;
+    height: 178px;
   }
 }
