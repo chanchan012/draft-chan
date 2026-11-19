@@ -113,6 +113,21 @@ Released 2026-11-19. Feature commit `6e2b4fa5974dd3b102f01bef353201cbb1561d25` o
 
 [Dashboard](https://draft-chan.vercel.app/dashboard) · [Application merge](https://github.com/chanchan012/draft-chan/commit/fa9444f7c5ffac8487b2e60aa537e9f0997858d5)
 
+## Pre-M3.2 · Studio editing and dashboard navigation
+
+Released 2026-11-19. Feature commit `3b8ca1dd31edfd3ca18dfd869c06d65b7734c33f` on `fix/studio-editing-workflow` was merged as `4ea9bd467195837a889ad2796a511f231eefc3bc`.
+
+| Phase | Result |
+| --- | --- |
+| Brief | Improve touch and desktop editing, recover canvas space, apply inspector changes immediately, and simplify saved-plan navigation. |
+| Build | Added pinch zoom and two-finger pan, marquee and additive selection, group dragging and nudging, and keyboard and toolbar deletion. Used Form & Function Studio guidance for the compact controls and horizontal toolbar. Dashboard cards open Studio directly with Rename and Delete in the card menu. |
+| Test | Strict TypeScript, 48 Vitest tests, and 55 Playwright checks passed against the optimized local build. The Chromium matrix covered five viewports, including compact phones and landscape. Signed-in interactions used browser fixtures. The unit suite exercised the database path with PGlite. |
+| Merge | The tested feature tree was merged and pushed to GitHub main. |
+| Deploy | The Next build passed. Preview `dpl_8jjZ8P95G8Saxv69RiNeg7T3jcaE` and Production `dpl_5GjET2D5Phq6wpYdNnGTcK1DooZB` reached READY. Public Studio retained its sign-in return URL. Unsigned graph GET and PATCH returned 401. |
+| Document | Architecture and handoff record the gestures, atomic history, live inspector edits, version 1 graph and next subgoal. |
+
+[Dashboard](https://draft-chan.vercel.app/dashboard) · [Application merge](https://github.com/chanchan012/draft-chan/commit/4ea9bd467195837a889ad2796a511f231eefc3bc) · [Feature preview](https://draft-chan-cxt9pzhdq-chanchans-projects-aada625f.vercel.app)
+
 ## Next subgoal
 
 M3.2 adds the bill of materials and background blueprint exports.
