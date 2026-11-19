@@ -15,6 +15,7 @@ import {
   Search,
   X,
 } from "lucide-react";
+import Link from "next/link";
 import { authModalHref } from "@/lib/auth-navigation";
 import { Brand } from "./brand";
 import { Sheet } from "./sheet";
@@ -434,7 +435,10 @@ export function Dashboard({ account }: { account: ReactNode }) {
                     >
                       Rename
                     </button>
-                  </>
+                      <Link className="primary" href={`/studio/${active.id}`}>
+                      Open Studio <ArrowUpRight size={15} />
+                    </Link>
+                </>
                 ) : (
                   <>
                     <button

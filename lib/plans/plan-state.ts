@@ -7,6 +7,7 @@ import {
   type Point,
   type Wall,
 } from "./model";
+import { validateOpenings } from "./openings";
 import { polygonAreaMm2 } from "./polygon";
 import { solveWallTopology } from "./wall-topology";
 
@@ -83,7 +84,9 @@ export function loadDraftPlan(input: unknown): DraftPlanState {
   if (new Set(state.walls.map((wall) => wall.id)).size !== state.walls.length) {
     throw new Error("A plan must have unique wall IDs.");
   }
+  validateOpenings(state.walls, state.openings);
   state.walls.sort((a, b) => compareText(a.id, b.id));
+  state.openings.sort((a, b) => compareText(a.id, b.id));
   state.rooms = solveWallTopology(state.walls).rooms;
   return state;
 }

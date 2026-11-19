@@ -32,6 +32,43 @@ function client(owner?: string) {
     });
 }
 describe("floorplan persistence", () => {
+  it("loads and saves studio geometry under the owner and current revision", async () => {
+    const a = client("studio-owner");
+    const b = client("other-user");
+    const id = crypto.randomUUID();
+    const route = id + "/graph";
+    await a("POST", "", { id, name: "Studio" });
+    expect((await b("GET", route)).status).toBe(404);
+    expect((await client()("GET", route)).status).toBe(401);
+    expect((await a("GET", "bad/graph")).status).toBe(400);
+    expect(await (await a("GET", route)).json()).toMatchObject({ revision: 0, unit: "mm", name: "Studio" });
+    await renderThumbnail(id);
+    const payload = {
+      revision: 0,
+      unit: "in",
+      walls: [{
+        id: "wall", start: { x: 0, y: 0 }, end: { x: 4000, y: 0 },
+        thicknessMm: 120, kind: "interior",
+      }],
+      openings: [{ id: "door", wallId: "wall", offsetMm: 2000, widthMm: 900, hinge: "start", swing: "left" }],
+    };
+    expect((await b("PATCH", route, payload)).status).toBe(409);
+    expect((await a("PATCH", route, { ...payload, openings: [{ ...payload.openings[0], wallId: "missing" }] })).status).toBe(400);
+    expect((await a("PATCH", route, { ...payload, walls: [{ ...payload.walls[0], createdBy: { kind: "ai", id: "forged" } }] })).status).toBe(400);
+    const results = await Promise.all([a("PATCH", route, payload), a("PATCH", route, payload)]);
+    expect(results.map((response) => response.status).sort()).toEqual([200, 409]);
+    const saved = await (await a("GET", route)).json();
+    expect(saved).toMatchObject({
+      revision: 1, unit: "in", graph: {
+        walls: [{ createdBy: { kind: "human", id: "studio-owner" } }],
+        openings: [{ id: "door", widthMm: 900, updatedBy: { kind: "human", id: "studio-owner" } }],
+      },
+    });
+    expect(await (await a("GET", id)).json()).toMatchObject({ thumbnail: null });
+    await renderThumbnail(id);
+    expect((await (await a("GET", id)).json()).thumbnail).toContain('stroke="#4b5145"');
+  });
+
   it("scopes CRUD and rejects stale updates and deletes", async () => {
     const a = client("member-a"),
       b = client("member-b"),

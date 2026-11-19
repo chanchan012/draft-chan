@@ -93,6 +93,7 @@ test("member grid, CRUD dialogs and area units", async ({ page }) => {
   await page.getByLabel("Starting layout").selectOption("room");
   await page.getByRole("button", { name: "Create floorplan" }).click();
   await page.getByRole("button", { name: /Office.*24 m².*258.33 ft²/ }).click();
+  await expect(page.getByRole("link", { name: "Open Studio" })).toHaveAttribute("href", /^\/studio\//);
   await page.getByRole("button", { name: "Rename", exact: true }).click();
   await page.getByLabel("Plan name").fill("Office B");
   await page.getByRole("button", { name: "Save name" }).click();

@@ -1,0 +1,537 @@
+.studio-page {
+  --studio-paper: #f7f7ef;
+  --studio-rule: #d6d9cc;
+  --studio-dark: #30372d;
+  height: 100dvh;
+  display: grid;
+  grid-template-rows: auto auto minmax(0, 1fr);
+  overflow: hidden;
+  background: var(--paper);
+}
+.studio-header,
+.studio-controls {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  padding-inline: clamp(10px, 2vw, 24px);
+  gap: 12px;
+  border-bottom: 1px solid var(--studio-rule);
+}
+.studio-header {
+  min-height: 64px;
+  padding-block: 9px;
+}
+.studio-library {
+  display: inline-flex;
+  flex: none;
+  gap: 8px;
+  align-items: center;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--muted);
+}
+.studio-library:hover {
+  color: var(--accent);
+}
+.studio-header h1 {
+  min-width: 0;
+  margin: 0 auto 0 2px;
+  border-left: 1px solid var(--studio-rule);
+  padding-left: 14px;
+  font-size: clamp(15px, 2.2vw, 24px);
+  font-weight: 620;
+  letter-spacing: -0.045em;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.studio-save-status {
+  flex: none;
+  display: inline-flex;
+  gap: 7px;
+  align-items: center;
+  color: #535c4c;
+  font: 11px var(--mono);
+}
+.studio-save-status i {
+  background: #6e815f;
+  border-radius: 50%;
+  width: 6px;
+  height: 6px;
+}
+.studio-save-status[data-dirty="true"] i {
+  background: var(--accent);
+}
+.studio-save {
+  min-height: 36px;
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 13px;
+  border-radius: 5px;
+  background: #a84023;
+  color: white;
+  font-size: 13px;
+  font-weight: 650;
+}
+.studio-controls {
+  min-height: 52px;
+  background: #f1f2e9;
+}
+.studio-segment,
+.studio-history,
+.studio-zoom {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+.studio-segment {
+  border: 1px solid #cbd1c3;
+  border-radius: 6px;
+  padding: 2px;
+  background: var(--paper);
+}
+.studio-controls button {
+  min-height: 34px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding-inline: 10px;
+  border-radius: 4px;
+  font-size: 12px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+.studio-controls button:hover,
+.studio-tools button:hover,
+.studio-zoom button:hover {
+  background: #e1e5d8;
+}
+.studio-segment button[aria-pressed="true"],
+.studio-controls .studio-ortho[aria-pressed="true"] {
+  background: var(--studio-dark);
+  color: #fff;
+}
+.studio-history {
+  margin-left: auto;
+}
+.studio-controls .studio-inspector-toggle,
+.studio-inspector-close {
+  display: none;
+}
+.studio-workbench {
+  min-height: 0;
+  min-width: 0;
+  display: grid;
+  grid-template-columns: 76px minmax(0, 1fr) 268px;
+  position: relative;
+}
+.studio-tools {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 13px 8px;
+  overflow: auto;
+  border-right: 1px solid var(--studio-rule);
+}
+.studio-tools button {
+  min-height: 52px;
+  flex: none;
+  display: grid;
+  place-content: center;
+  justify-items: center;
+  gap: 4px;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  font-size: 11px;
+}
+.studio-tools button[aria-pressed="true"] {
+  color: #84351e;
+  border-color: #d8b8a8;
+  background: #f4e5dc;
+  font-weight: 650;
+}
+.studio-surface {
+  min-height: 0;
+  min-width: 0;
+  position: relative;
+  isolation: isolate;
+  overflow: hidden;
+  background: var(--studio-paper);
+}
+.studio-isometric {
+  background: radial-gradient(ellipse at 50% 55%, #fcfbf4 10%, #e9ecdf 85%);
+}
+.studio-canvas {
+  display: block;
+  width: 100%;
+  height: 100%;
+  touch-action: none;
+  cursor: default;
+}
+.studio-canvas:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}
+.studio-canvas.tool-wall,
+.studio-canvas.tool-door {
+  cursor: crosshair;
+}
+.studio-canvas.tool-pan {
+  cursor: grab;
+}
+.studio-canvas.tool-pan:active {
+  cursor: grabbing;
+}
+.cad-grid-line {
+  fill: none;
+  stroke: #e3e7d8;
+  stroke-width: 1;
+}
+.cad-grid-major {
+  fill: none;
+  stroke: #d3dacb;
+  stroke-width: 1;
+}
+.cad-axis {
+  stroke: #bac3b2;
+  stroke-width: 1;
+  stroke-dasharray: 4 5;
+}
+.cad-room {
+  fill: #dae2c9;
+  fill-opacity: 0.56;
+}
+.cad-wall {
+  stroke: #56634f;
+}
+.cad-wall.is-exterior {
+  stroke: #27382d;
+}
+.cad-wall.is-selected {
+  stroke: #ad492b;
+}
+.cad-door {
+  stroke: #704a38;
+  stroke-width: 1.4;
+  fill: none;
+}
+.cad-door.is-selected {
+  stroke: #ad492b;
+  stroke-width: 2.4;
+}
+.cad-preview {
+  stroke: #ad492b;
+  opacity: 0.75;
+}
+.cad-measure {
+  fill: #84351e;
+  stroke: var(--studio-paper);
+  stroke-width: 4px;
+  paint-order: stroke;
+  text-anchor: middle;
+  font: 12px var(--mono);
+  pointer-events: none;
+}
+.cad-cursor {
+  fill: #f7f7ef;
+  stroke: #a84023;
+  stroke-width: 1.7;
+}
+.cad-iso-floor {
+  fill: #d1d9c6;
+  stroke: #8f9e85;
+  stroke-width: 1;
+}
+.cad-prism {
+  stroke: #56634f;
+  stroke-width: 1;
+}
+.cad-face {
+  fill: #b5c0a9;
+}
+.cad-cap {
+  fill: #929f84;
+}
+.cad-top {
+  fill: #f1f0e3;
+}
+.studio-view-name,
+.studio-scale {
+  position: absolute;
+  font: 11px var(--mono);
+  color: #505b4d;
+  pointer-events: none;
+}
+.studio-view-name {
+  top: 13px;
+  left: 13px;
+  background: var(--paper);
+  border: 1px solid var(--studio-rule);
+  padding: 5px 8px;
+  border-radius: 4px;
+}
+.studio-scale {
+  bottom: 14px;
+  left: 14px;
+}
+.studio-scale i {
+  display: block;
+  margin-top: 3px;
+  height: 5px;
+  border: 1px solid #697764;
+  border-top: 0;
+}
+.studio-zoom {
+  position: absolute;
+  right: 12px;
+  bottom: 12px;
+  background: var(--paper);
+  border: 1px solid #cbd1c3;
+  border-radius: 5px;
+  padding: 2px;
+}
+.studio-zoom button,
+.studio-inspector-close {
+  width: 36px;
+  height: 36px;
+  place-items: center;
+  border-radius: 4px;
+}
+.studio-zoom button {
+  display: grid;
+}
+.studio-empty {
+  pointer-events: none;
+  position: absolute;
+  inset: 50% auto auto 50%;
+  transform: translate(-50%, -50%);
+  display: grid;
+  gap: 6px;
+  color: #58644f;
+  text-align: center;
+  font-size: 13px;
+  width: min(260px, 70%);
+  background: var(--studio-paper);
+  padding: 10px;
+  border-radius: 6px;
+}
+.studio-empty strong {
+  color: #384635;
+  font-size: clamp(17px, 3vw, 23px);
+  font-weight: 580;
+  letter-spacing: -0.04em;
+}
+.studio-inspector {
+  border-left: 1px solid var(--studio-rule);
+  overflow: auto;
+  overscroll-behavior: contain;
+  min-height: 0;
+}
+.studio-inspector-content {
+  padding: 17px;
+}
+.studio-inspector-content h2 {
+  font-size: 20px;
+  font-weight: 640;
+  letter-spacing: -0.04em;
+  margin-bottom: 13px;
+}
+.studio-fields {
+  display: grid;
+  gap: 10px;
+  border-top: 1px solid var(--studio-rule);
+  padding: 12px 0;
+}
+.studio-fields h3 {
+  font-size: 13px;
+  font-weight: 660;
+}
+.studio-fields p {
+  font-size: 12px;
+  color: var(--muted);
+}
+.studio-fields label {
+  display: grid;
+  gap: 4px;
+  font-size: 12px;
+  color: #41483d;
+}
+.studio-fields input,
+.studio-fields select {
+  min-height: 35px;
+  width: 100%;
+  padding: 5px 8px;
+  border: 1px solid #cbd1c3;
+  border-radius: 4px;
+  background: #fffef9;
+  font-size: 14px;
+}
+.studio-apply,
+.studio-remove {
+  width: 100%;
+  border-radius: 4px;
+  padding: 7px 8px;
+  font-size: 12px;
+  font-weight: 650;
+}
+.studio-apply {
+  background: #e6e9df;
+}
+.studio-remove {
+  display: inline-flex;
+  justify-content: center;
+  gap: 6px;
+  color: #943b23;
+  border: 1px solid #e5c6ba;
+  margin-bottom: 12px;
+}
+.studio-quantities dl {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  font-size: 11px;
+}
+.studio-quantities dl div {
+  border: 1px solid var(--studio-rule);
+  border-radius: 4px;
+  padding: 6px;
+}
+.studio-quantities dd {
+  font: 13px var(--mono);
+  margin-top: 3px;
+}
+.studio-message {
+  position: absolute;
+  z-index: 2;
+  left: 88px;
+  top: 44px;
+  max-width: min(440px, calc(100% - 106px));
+  display: flex;
+  align-items: flex-start;
+  flex-wrap: wrap;
+  gap: 5px;
+  padding: 8px 11px;
+  border: 1px solid #d5af9e;
+  border-radius: 5px;
+  box-shadow: 0 4px 10px #20211817;
+  background: #fff3e9;
+  color: #8e3820;
+  font-size: 13px;
+}
+.studio-message a {
+  text-decoration: underline;
+}
+.studio-message button {
+  margin-left: auto;
+}
+
+@media (max-width: 900px) {
+  .studio-workbench {
+    grid-template-columns: 68px minmax(0, 1fr);
+  }
+  .studio-controls .studio-inspector-toggle,
+  .studio-inspector-close {
+    display: grid;
+  }
+  .studio-inspector-close {
+    position: absolute;
+    right: 8px;
+    top: 6px;
+  }
+  .studio-inspector {
+    position: absolute;
+    z-index: 3;
+    inset: 0 0 0 auto;
+    width: min(285px, calc(100% - 70px));
+    background: var(--paper);
+    box-shadow: -8px 0 28px #20211816;
+    display: none;
+  }
+  .studio-inspector[data-open="true"] {
+    display: block;
+  }
+}
+@media (max-width: 540px) {
+  .studio-header {
+    min-height: 52px;
+    gap: 8px;
+  }
+  .studio-library span {
+    display: none;
+  }
+  .studio-header h1 {
+    padding-left: 8px;
+  }
+  .studio-save {
+    min-height: 32px;
+    padding-inline: 9px;
+    gap: 5px;
+  }
+  .studio-save-status {
+    font-size: 9px;
+    gap: 4px;
+  }
+  .studio-controls {
+    min-height: 46px;
+    padding-inline: 6px;
+    gap: 4px;
+  }
+  .studio-controls button {
+    min-height: 32px;
+    padding-inline: 7px;
+    font-size: 11px;
+  }
+  .studio-workbench {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-rows: 46px minmax(0, 1fr);
+  }
+  .studio-tools {
+    flex-direction: row;
+    padding: 3px 8px;
+    border: 0;
+    border-bottom: 1px solid var(--studio-rule);
+  }
+  .studio-tools button {
+    flex: 1;
+    min-height: 36px;
+    grid-auto-flow: column;
+    place-items: center;
+    gap: 6px;
+  }
+  .studio-tools button svg {
+    width: 15px;
+    height: 15px;
+  }
+  .studio-inspector {
+    top: 46px;
+    width: min(260px, 100%);
+  }
+  .studio-fields input,
+  .studio-fields select {
+    font-size: 16px;
+  }
+  .studio-message {
+    left: 10px;
+    top: 88px;
+    max-width: calc(100% - 20px);
+  }
+}
+@media (max-height: 455px) {
+  .studio-header {
+    min-height: 44px;
+    padding-block: 4px;
+  }
+  .studio-controls {
+    min-height: 40px;
+  }
+  .studio-tools {
+    padding-block: 4px;
+    gap: 2px;
+  }
+  .studio-tools button {
+    min-height: 36px;
+  }
+}

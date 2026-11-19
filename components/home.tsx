@@ -23,14 +23,14 @@ const features = [
     text: "Precise walls, openings, and dimensions.",
     icon: DraftingCompass,
     detail:
-      "The planned wall tool uses millimeter coordinates, thickness parameters, and angle snapping. Display units can switch between millimeters and inches.",
+      "Draw walls with adjustable thickness in Studio. Use the snap grid and Ortho to align the drawing in millimeters or inches.",
   },
   {
     title: "Isometric views",
     text: "A new perspective on the same space.",
     icon: Box,
     detail:
-      "Use the view switch in the sample workspace to compare an illustrative floor plan with a furnished architectural cutaway.",
+      "Switch between the 2D plan and isometric preview in Studio. The dashboard also includes the furnished Courtyard House sample.",
   },
   {
     title: "Human + AI",
