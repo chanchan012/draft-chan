@@ -10,6 +10,9 @@ import {
 import {
   ArrowUpRight,
   FolderOpen,
+  Ellipsis,
+  Pencil,
+  Trash2,
   Plus,
   Ruler,
   Search,
@@ -29,7 +32,86 @@ function area(value: number) {
 }
 type Editor =
   | { mode: "create"; id: string }
-  | { mode: "view" | "rename" | "delete"; plan: PlanCard };
+  | { mode: "rename" | "delete"; plan: PlanCard };
+function PlanActions({
+  plan,
+  onEdit,
+}: {
+  plan: PlanCard;
+  onEdit(mode: "rename" | "delete"): void;
+}) {
+  const [expanded, setExpanded] = useState(false);
+  const region = useRef<HTMLDivElement>(null);
+  const trigger = useRef<HTMLButtonElement>(null);
+  useEffect(() => {
+    if (!expanded) return;
+    function outside(event: PointerEvent | FocusEvent) {
+      if (
+        event.target instanceof Node &&
+        !region.current?.contains(event.target)
+      )
+        setExpanded(false);
+    }
+    document.addEventListener("pointerdown", outside);
+    document.addEventListener("focusin", outside);
+    return () => {
+      document.removeEventListener("pointerdown", outside);
+      document.removeEventListener("focusin", outside);
+    };
+  }, [expanded]);
+
+  return (
+    <div
+      className="dash-card-actions"
+      ref={region}
+      onKeyDown={(event) => {
+        if (event.key === "Escape" && expanded) {
+          event.stopPropagation();
+          setExpanded(false);
+          trigger.current?.focus();
+        }
+      }}
+    >
+      <button
+        type="button"
+        className="dash-more"
+        ref={trigger}
+        aria-expanded={expanded}
+        aria-controls={"actions-" + plan.id}
+        aria-label={"Actions for " + plan.name}
+        onClick={() => setExpanded(!expanded)}
+      >
+        <Ellipsis size={19} />
+      </button>
+      <div
+        id={"actions-" + plan.id}
+        className="dash-card-menu"
+        hidden={!expanded}
+      >
+        <button
+          type="button"
+          onClick={() => {
+            trigger.current?.focus();
+            setExpanded(false);
+            onEdit("rename");
+          }}
+        >
+          <Pencil size={15} /> Rename
+        </button>
+        <button
+          type="button"
+          onClick={() => {
+            trigger.current?.focus();
+            setExpanded(false);
+            onEdit("delete");
+          }}
+        >
+          <Trash2 size={15} /> Delete
+        </button>
+      </div>
+    </div>
+  );
+}
 export function Dashboard({ account }: { account: ReactNode }) {
   const [plans, setPlans] = useState<PlanCard[]>([]);
   const [loaded, setLoaded] = useState(false);
@@ -97,7 +179,7 @@ export function Dashboard({ account }: { account: ReactNode }) {
   }
   async function submit(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
-    if (!editor || editor.mode === "view" || lock.current) return;
+    if (!editor || lock.current) return;
     const fields = new FormData(e.currentTarget);
     const creation = editor.mode === "create";
     const url = creation
@@ -160,11 +242,6 @@ export function Dashboard({ account }: { account: ReactNode }) {
   const results = plans.filter((p) =>
     p.name.toLowerCase().includes(search.trim().toLowerCase()),
   );
-  const selected = editor && editor.mode !== "create" ? editor.plan : null;
-  const active =
-    editor?.mode === "view"
-      ? (plans.find((plan) => plan.id === editor.plan.id) ?? selected)
-      : selected;
   return (
     <div className="dash-page">
       <header className="header">
@@ -176,12 +253,7 @@ export function Dashboard({ account }: { account: ReactNode }) {
       <main className="dash-scroll">
         <div className="dash-content">
           <div className="dash-heading">
-            <div>
-              <span className="eyebrow">
-                <i className="orange-rule" /> DESIGN WORKSPACE
-              </span>
-              <h1>Floorplans</h1>
-            </div>
+            <h1>Floorplans</h1>
             {loaded && (
               <button
                 className="primary"
@@ -199,9 +271,7 @@ export function Dashboard({ account }: { account: ReactNode }) {
               {error} <button onClick={() => void load()}>Refresh</button>
             </p>
           )}
-          {!loaded && !error && (
-            <p role="status">Loading your workspace…</p>
-          )}
+          {!loaded && !error && <p role="status">Loading your workspace…</p>}
           {loaded && (
             <section aria-label="Saved floorplans">
               <div className="dash-controls">
@@ -221,30 +291,36 @@ export function Dashboard({ account }: { account: ReactNode }) {
               {results.length ? (
                 <div className="dash-grid">
                   {results.map((plan) => (
-                    <button
-                      key={plan.id}
-                      className="dash-card"
-                      onClick={() => open({ mode: "view", plan })}
-                    >
-                      <div className="dash-preview grid-on">
-                        {plan.thumbnail ? (
-                          <img
-                            src={
-                              "data:image/svg+xml;charset=utf-8," +
-                              encodeURIComponent(plan.thumbnail)
-                            }
-                            alt=""
-                          />
-                        ) : (
-                          <span className="mono">Preparing preview…</span>
-                        )}
-                      </div>
-                      <div className="dash-card-body">
-                        <strong>{plan.name}</strong>
-                        <ArrowUpRight size={16} />
-                        <span>{area(plan.areaM2)}</span>
-                      </div>
-                    </button>
+                    <article key={plan.id} className="dash-card">
+                      <Link
+                        className="dash-card-link"
+                        href={`/studio/${plan.id}`}
+                        prefetch={false}
+                      >
+                        <div className="dash-preview grid-on">
+                          {plan.thumbnail ? (
+                            <img
+                              src={
+                                "data:image/svg+xml;charset=utf-8," +
+                                encodeURIComponent(plan.thumbnail)
+                              }
+                              alt=""
+                            />
+                          ) : (
+                            <span className="mono">Preparing preview…</span>
+                          )}
+                        </div>
+                        <div className="dash-card-body">
+                          <strong>{plan.name}</strong>
+                          <ArrowUpRight size={16} />
+                          <span>{area(plan.areaM2)}</span>
+                        </div>
+                      </Link>
+                      <PlanActions
+                        plan={plan}
+                        onEdit={(mode) => open({ mode, plan })}
+                      />
+                    </article>
                   ))}
                 </div>
               ) : (
@@ -341,9 +417,7 @@ export function Dashboard({ account }: { account: ReactNode }) {
                   ? "New floorplan"
                   : editor.mode === "rename"
                     ? "Rename floorplan"
-                    : editor.mode === "delete"
-                      ? "Delete floorplan?"
-                      : active?.name}
+                    : "Delete floorplan?"}
               </h2>
               {(editor.mode === "create" || editor.mode === "rename") && (
                 <label>
@@ -392,81 +466,35 @@ export function Dashboard({ account }: { account: ReactNode }) {
               )}
               {editor.mode === "delete" && (
                 <p>
-                  Delete “{active?.name}” from your workspace? This removes its
-                  drawing and thumbnail.
+                  Delete “{editor.plan.name}” from your workspace? This removes
+                  its drawing and thumbnail.
                 </p>
-              )}
-              {editor.mode === "view" && active && (
-                <>
-                  <div className="dash-preview grid-on">
-                    {active.thumbnail ? (
-                      <img
-                        alt="Plan drawing"
-                        src={
-                          "data:image/svg+xml;charset=utf-8," +
-                          encodeURIComponent(active.thumbnail)
-                        }
-                      />
-                    ) : (
-                      <span>Preparing preview…</span>
-                    )}
-                  </div>
-                  <p>{area(active.areaM2)}</p>
-                  <p>
-                    Updated {new Date(active.updatedAt).toLocaleDateString()}
-                  </p>
-                </>
               )}
               {formError && <p role="alert">{formError}</p>}
               <div className="dash-form-actions">
-                {editor.mode === "view" && active ? (
-                  <>
-                    <button
-                      type="button"
-                      className="back"
-                      onClick={() => open({ mode: "delete", plan: active })}
-                    >
-                      Delete
-                    </button>
-                    <button
-                      type="button"
-                      className="dark-btn"
-                      onClick={() => open({ mode: "rename", plan: active })}
-                    >
-                      Rename
-                    </button>
-                      <Link className="primary" href={`/studio/${active.id}`}>
-                      Open Studio <ArrowUpRight size={15} />
-                    </Link>
-                </>
-                ) : (
-                  <>
-                    <button
-                      type="button"
-                      disabled={busy}
-                      onClick={() => setEditor(null)}
-                    >
-                      Cancel
-                    </button>
-                    <button
-                      className="primary"
-                      disabled={
-                        busy ||
-                        ((editor.mode === "create" ||
-                          editor.mode === "rename") &&
-                          !name.trim())
-                      }
-                    >
-                      {busy
-                        ? "Saving…"
-                        : editor.mode === "create"
-                          ? "Create floorplan"
-                          : editor.mode === "delete"
-                            ? "Delete floorplan"
-                            : "Save name"}
-                    </button>
-                  </>
-                )}
+                <button
+                  type="button"
+                  disabled={busy}
+                  onClick={() => setEditor(null)}
+                >
+                  Cancel
+                </button>
+                <button
+                  className="primary"
+                  disabled={
+                    busy ||
+                    ((editor.mode === "create" || editor.mode === "rename") &&
+                      !name.trim())
+                  }
+                >
+                  {busy
+                    ? "Saving…"
+                    : editor.mode === "create"
+                      ? "Create floorplan"
+                      : editor.mode === "delete"
+                        ? "Delete floorplan"
+                        : "Save name"}
+                </button>
               </div>
             </form>
           )}

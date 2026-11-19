@@ -1,6 +1,6 @@
 "use client";
 
-import type { FormEvent, ReactNode } from "react";
+import type { ReactNode } from "react";
 import { Trash2 } from "lucide-react";
 import { gridSteps, unitFactor } from "@/lib/plans/cad";
 import { wallLength } from "@/lib/plans/openings";
@@ -11,6 +11,7 @@ import type {
   Wall,
 } from "@/lib/plans/model";
 import { polygonAreaMm2 } from "@/lib/plans/polygon";
+import { LiveDistance } from "./live-number";
 import type { Tool } from "./surface";
 
 export type WallSettings = Pick<Wall, "thicknessMm" | "kind">;
@@ -27,6 +28,7 @@ interface InspectorProps {
   activeDoor?: Door;
   placementFields?: ReactNode;
   layers?: ReactNode;
+  selectedCount: number;
   placementSelected?: "fixture" | "utility";
   onUnit(unit: DisplayUnit): void;
   onGrid(index: number): void;
@@ -45,28 +47,6 @@ export function Inspector(props: InspectorProps) {
     0,
   );
   const factor = unitFactor(unit);
-  const display = (mm: number) => Number((mm / factor).toFixed(2));
-  const mm = (value: FormDataEntryValue | null) =>
-    Math.round(Number(value) * factor);
-
-  function saveWall(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    const data = new FormData(event.currentTarget);
-    props.onWall({
-      thicknessMm: mm(data.get("thickness")),
-      kind: data.get("kind") === "exterior" ? "exterior" : "interior",
-    });
-  }
-  function saveDoor(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    const data = new FormData(event.currentTarget);
-    props.onDoor({
-      widthMm: mm(data.get("width")),
-      hinge: data.get("hinge") === "end" ? "end" : "start",
-      swing: data.get("swing") === "right" ? "right" : "left",
-    });
-  }
-
   return (
     <div className="studio-inspector-content">
       <h2>Inspector</h2>
@@ -97,16 +77,18 @@ export function Inspector(props: InspectorProps) {
           </select>
         </label>
       </section>
-      {activeWall || (!activeDoor && tool === "wall") ? (
-        <form
+      {props.selectedCount > 1 ? (
+        <section className="studio-fields">
+          <h3>{props.selectedCount} selected</h3>
+          <p>
+            Drag an item in the selection or use the arrow keys to move the
+            group.
+          </p>
+        </section>
+      ) : activeWall || (!activeDoor && tool === "wall") ? (
+        <section
           className="studio-fields"
-          onSubmit={saveWall}
-          key={JSON.stringify([
-            activeWall?.id,
-            wall.kind,
-            wall.thicknessMm,
-            unit,
-          ])}
+          key={JSON.stringify([activeWall?.id, unit])}
         >
           <h3>{activeWall ? "Selected wall" : "Wall tool"}</h3>
           <p>
@@ -114,90 +96,105 @@ export function Inspector(props: InspectorProps) {
               ? `Length ${number.format(wallLength(activeWall) / factor)} ${unit}`
               : "Place two points or drag to draw a wall."}
           </p>
-          <label>
-            Thickness ({unit})
-            <input
-              name="thickness"
-              type="number"
-              min={unit === "mm" ? 1 : 0.04}
-              max={display(10000)}
-              step={unit === "mm" ? 1 : 0.01}
-              required
-              defaultValue={display(wall.thicknessMm)}
-            />
-          </label>
+          <LiveDistance
+            label="Thickness"
+            unit={unit}
+            value={wall.thicknessMm}
+            min={1}
+            max={10000}
+            onValue={(thicknessMm) =>
+              props.onWall({ thicknessMm, kind: wall.kind })
+            }
+          />
           <label>
             Wall type
-            <select name="kind" defaultValue={wall.kind}>
+            <select
+              value={wall.kind}
+              onChange={(event) =>
+                props.onWall({
+                  kind:
+                    event.target.value === "exterior" ? "exterior" : "interior",
+                  thicknessMm: wall.thicknessMm,
+                })
+              }
+            >
               <option value="interior">Interior</option>
               <option value="exterior">Exterior</option>
             </select>
           </label>
-          <button type="submit" className="studio-apply">
-            {activeWall ? "Update wall" : "Apply settings"}
-          </button>
-        </form>
+        </section>
       ) : activeDoor || tool === "door" ? (
-        <form
+        <section
           className="studio-fields"
-          onSubmit={saveDoor}
-          key={JSON.stringify([
-            activeDoor?.id,
-            door.widthMm,
-            door.hinge,
-            door.swing,
-            unit,
-          ])}
+          key={JSON.stringify([activeDoor?.id, unit])}
         >
           <h3>{activeDoor ? "Selected door" : "Door tool"}</h3>
           {!activeDoor && <p>Choose a point on a wall to place a door.</p>}
-          <label>
-            Width ({unit})
-            <input
-              name="width"
-              type="number"
-              min={display(100)}
-              max={display(10000)}
-              step={unit === "mm" ? 1 : 0.01}
-              required
-              defaultValue={display(door.widthMm)}
-            />
-          </label>
+          <LiveDistance
+            label="Width"
+            unit={unit}
+            value={door.widthMm}
+            min={100}
+            max={10000}
+            onValue={(widthMm) =>
+              props.onDoor({ widthMm, hinge: door.hinge, swing: door.swing })
+            }
+          />
           <label>
             Hinge
-            <select name="hinge" defaultValue={door.hinge}>
+            <select
+              value={door.hinge}
+              onChange={(event) =>
+                props.onDoor({
+                  hinge: event.target.value === "end" ? "end" : "start",
+                  widthMm: door.widthMm,
+                  swing: door.swing,
+                })
+              }
+            >
               <option value="start">Start of opening</option>
               <option value="end">End of opening</option>
             </select>
           </label>
           <label>
             Swing
-            <select name="swing" defaultValue={door.swing}>
+            <select
+              value={door.swing}
+              onChange={(event) =>
+                props.onDoor({
+                  swing: event.target.value === "right" ? "right" : "left",
+                  widthMm: door.widthMm,
+                  hinge: door.hinge,
+                })
+              }
+            >
               <option value="left">Left</option>
               <option value="right">Right</option>
             </select>
           </label>
-          <button type="submit" className="studio-apply">
-            {activeDoor ? "Update door" : "Apply settings"}
-          </button>
-        </form>
+        </section>
       ) : null}
       {props.placementFields}
       {props.layers}
-      {(activeWall || activeDoor || props.placementSelected) && (
+      {(activeWall ||
+        activeDoor ||
+        props.placementSelected ||
+        props.selectedCount > 1) && (
         <button
           className="studio-remove"
           onClick={props.onRemove}
           type="button"
         >
           <Trash2 size={15} />
-          {props.placementSelected
-            ? `Delete ${props.placementSelected}`
-            : activeDoor
-              ? "Delete door"
-              : plan.openings.some((item) => item.wallId === activeWall?.id)
-                ? "Delete wall and doors"
-                : "Delete wall"}
+          {props.selectedCount > 1
+            ? "Delete selected items"
+            : props.placementSelected
+              ? `Delete ${props.placementSelected}`
+              : activeDoor
+                ? "Delete door"
+                : plan.openings.some((item) => item.wallId === activeWall?.id)
+                  ? "Delete wall and doors"
+                  : "Delete wall"}
         </button>
       )}
       <section

@@ -180,3 +180,25 @@ export function zoomCamera(
     scale,
   };
 }
+
+// Keep the original model point below the moving midpoint of a two-finger gesture.
+export function pinchCamera(
+  baseline: Camera,
+  viewport: Viewport,
+  from: Point,
+  to: Point,
+  initialDistance: number,
+  distance: number,
+): Camera {
+  const zoomed = zoomCamera(
+    baseline,
+    viewport,
+    from,
+    distance / Math.max(1, initialDistance),
+  );
+  return {
+    x: zoomed.x + (from.x - to.x) / zoomed.scale,
+    y: zoomed.y + (from.y - to.y) / zoomed.scale,
+    scale: zoomed.scale,
+  };
+}

@@ -169,6 +169,8 @@
   width: 100%;
   height: 100%;
   touch-action: none;
+  -webkit-user-select: none;
+  user-select: none;
   cursor: default;
 }
 .studio-canvas:focus-visible {
@@ -708,5 +710,112 @@
   }
   .studio-inspector {
     top: 49px;
+  }
+}
+
+/* A shallow horizontal tool row keeps the full drawing width. */
+.studio-header {
+  min-height: 44px;
+  padding-block: 4px;
+}
+.studio-header h1 {
+  font-size: clamp(15px, 2vw, 22px);
+}
+.studio-save {
+  min-height: 32px;
+}
+.studio-controls {
+  min-height: 34px;
+}
+.studio-controls button {
+  min-height: 28px;
+}
+.studio-workbench {
+  grid-template: 38px minmax(0, 1fr) / minmax(0, 1fr) 268px;
+}
+.studio-tools {
+  grid-column: 1 / -1;
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 3px;
+  padding: 2px clamp(5px, 1.4vw, 18px);
+  border: 0;
+  border-bottom: 1px solid var(--studio-rule);
+  overflow-x: auto;
+  scrollbar-width: thin;
+}
+.studio-tools button {
+  min-height: 32px;
+  min-width: 32px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+  padding: 0 7px;
+  gap: 5px;
+  white-space: nowrap;
+}
+.studio-tools button svg {
+  width: 17px;
+  height: 17px;
+}
+.studio-tools .studio-selection-actions {
+  display: flex;
+  align-items: center;
+  gap: 3px;
+  border-left: 1px solid var(--studio-rule);
+  padding-left: 4px;
+  margin-left: 2px;
+}
+.studio-selection-count {
+  flex: none;
+  margin-left: auto;
+  color: var(--muted);
+  font: 11px var(--mono);
+  white-space: nowrap;
+}
+.studio-inspector {
+  grid-column: 2;
+}
+.studio-message {
+  left: 12px;
+  top: 54px;
+}
+.cad-marquee {
+  fill: #c24c2926;
+  stroke: #9e401f;
+  stroke-width: 1;
+  stroke-dasharray: 5 3;
+  pointer-events: none;
+}
+@media (max-width: 900px) {
+  .studio-workbench {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .studio-inspector {
+    grid-column: auto;
+    top: 38px;
+  }
+}
+@media (max-width: 540px) {
+  .studio-tools button {
+    padding-inline: 5px;
+  }
+  .studio-tools button span {
+    clip-path: inset(50%);
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+  }
+  .studio-selection-count {
+    font-size: 9px;
+  }
+}
+
+@media (max-width: 380px) {
+  .studio-selection-count {
+    display: none;
   }
 }

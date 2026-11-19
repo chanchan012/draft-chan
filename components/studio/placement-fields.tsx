@@ -1,6 +1,5 @@
 "use client";
 
-import { useState, type FormEvent } from "react";
 import {
   fixtureCatalog,
   fixtureKinds,
@@ -10,7 +9,7 @@ import {
   type UtilityKind,
   type UtilityLayer,
 } from "@/lib/plans/catalog";
-import { unitFactor } from "@/lib/plans/cad";
+import { LiveDistance } from "./live-number";
 import type { DisplayUnit, Fixture, Point, Utility } from "@/lib/plans/model";
 
 export type FixtureSettings = Pick<
@@ -53,37 +52,27 @@ export function Layers({
   );
 }
 
-function readDistance(data: FormData, name: string, unit: DisplayUnit) {
-  return Math.round(Number(data.get(name)) * unitFactor(unit));
-}
-
-function distance(mm: number, unit: DisplayUnit) {
-  return Number((mm / unitFactor(unit)).toFixed(2));
-}
-
 function PositionFields({
   position,
   unit,
+  onPosition,
 }: {
   position: Point;
   unit: DisplayUnit;
+  onPosition(position: Point): void;
 }) {
-  const limit = distance(1_000_000, unit);
   return (
     <div className="studio-field-pair">
       {(["x", "y"] as const).map((axis) => (
-        <label key={axis}>
-          {axis.toUpperCase()} ({unit})
-          <input
-            name={axis}
-            type="number"
-            min={-limit}
-            max={limit}
-            step="any"
-            defaultValue={distance(position[axis], unit)}
-            required
-          />
-        </label>
+        <LiveDistance
+          key={axis}
+          label={axis.toUpperCase()}
+          unit={unit}
+          value={position[axis]}
+          min={-1_000_000}
+          max={1_000_000}
+          onValue={(value) => onPosition({ ...position, [axis]: value })}
+        />
       ))}
     </div>
   );
@@ -98,43 +87,21 @@ export function FixtureFields({
   unit: DisplayUnit;
   value: FixtureSettings;
   active?: Fixture;
-  onSet(value: FixtureSettings, position?: Point): void;
+  onSet(changes: Partial<FixtureSettings> & { position?: Point }): void;
 }) {
-  const [settings, setSettings] = useState<FixtureSettings>(value);
-  function save(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    const data = new FormData(event.currentTarget);
-    const angle = Number(data.get("rotation"));
-    onSet(
-      {
-        template: settings.template,
-        widthMm: readDistance(data, "widthMm", unit),
-        depthMm: readDistance(data, "depthMm", unit),
-        heightMm: readDistance(data, "heightMm", unit),
-        rotation: angle === 90 || angle === 180 || angle === 270 ? angle : 0,
-      },
-      active
-        ? { x: readDistance(data, "x", unit), y: readDistance(data, "y", unit) }
-        : undefined,
-    );
-  }
   return (
-    <form className="studio-fields" onSubmit={save}>
+    <section className="studio-fields" key={unit}>
       <h3>{active ? "Selected fixture" : "Fixture catalog"}</h3>
       {!active && (
-        <p>
-          Choose a template and apply its dimensions, then click the plan to
-          place it.
-        </p>
+        <p>Choose a template, then click or tap the plan to place it.</p>
       )}
       <label>
         Fixture template
         <select
-          value={settings.template}
-          onChange={(event) => {
-            const template = event.currentTarget.value as FixtureKind;
-            setSettings(fixtureDefaults(template));
-          }}
+          value={value.template}
+          onChange={(event) =>
+            onSet(fixtureDefaults(event.target.value as FixtureKind))
+          }
         >
           {groups.map((group) => (
             <optgroup key={group} label={group}>
@@ -149,7 +116,7 @@ export function FixtureFields({
           ))}
         </select>
       </label>
-      <div className="studio-fields-compact" key={settings.template}>
+      <div className="studio-fields-compact" key={value.template}>
         {(
           [
             ["widthMm", "Width", 50],
@@ -157,23 +124,29 @@ export function FixtureFields({
             ["heightMm", "Height", 1],
           ] as const
         ).map(([id, label, min]) => (
-          <label key={id}>
-            {label} ({unit})
-            <input
-              type="number"
-              name={id}
-              min={distance(min, unit)}
-              max={distance(10_000, unit)}
-              step="any"
-              defaultValue={distance(settings[id], unit)}
-              required
-            />
-          </label>
+          <LiveDistance
+            key={id}
+            label={label}
+            unit={unit}
+            value={value[id]}
+            min={min}
+            max={10_000}
+            onValue={(mm) => onSet({ [id]: mm })}
+          />
         ))}
       </div>
       <label>
         Rotation
-        <select name="rotation" defaultValue={value.rotation}>
+        <select
+          value={value.rotation}
+          onChange={(event) => {
+            const angle = Number(event.target.value);
+            onSet({
+              rotation:
+                angle === 90 || angle === 180 || angle === 270 ? angle : 0,
+            });
+          }}
+        >
           {[0, 90, 180, 270].map((angle) => (
             <option key={angle} value={angle}>
               {angle}°
@@ -181,11 +154,14 @@ export function FixtureFields({
           ))}
         </select>
       </label>
-      {active && <PositionFields position={active.position} unit={unit} />}
-      <button className="studio-apply" type="submit">
-        {active ? "Update fixture" : "Apply fixture settings"}
-      </button>
-    </form>
+      {active && (
+        <PositionFields
+          position={active.position}
+          unit={unit}
+          onPosition={(position) => onSet({ position })}
+        />
+      )}
+    </section>
   );
 }
 
@@ -198,26 +174,22 @@ export function UtilityFields({
   unit: DisplayUnit;
   value: UtilityKind;
   active?: Utility;
-  onSet(template: UtilityKind, position?: Point): void;
+  onSet(changes: { template?: UtilityKind; position?: Point }): void;
 }) {
-  function save(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    const data = new FormData(event.currentTarget);
-    const template = data.get("template") as UtilityKind;
-    onSet(
-      template,
-      active
-        ? { x: readDistance(data, "x", unit), y: readDistance(data, "y", unit) }
-        : undefined,
-    );
-  }
   return (
-    <form className="studio-fields" onSubmit={save}>
+    <section className="studio-fields" key={unit}>
       <h3>{active ? "Selected utility" : "Utility symbols"}</h3>
-      {!active && <p>Choose a symbol, apply it, then click the plan.</p>}
+      {!active && (
+        <p>Choose a symbol, then click or tap the plan to place it.</p>
+      )}
       <label>
         Utility symbol
-        <select name="template" defaultValue={value}>
+        <select
+          value={value}
+          onChange={(event) =>
+            onSet({ template: event.target.value as UtilityKind })
+          }
+        >
           {(["electrical", "plumbing"] as const).map((layer) => (
             <optgroup
               key={layer}
@@ -234,10 +206,13 @@ export function UtilityFields({
           ))}
         </select>
       </label>
-      {active && <PositionFields position={active.position} unit={unit} />}
-      <button className="studio-apply" type="submit">
-        {active ? "Update utility" : "Apply utility settings"}
-      </button>
-    </form>
+      {active && (
+        <PositionFields
+          position={active.position}
+          unit={unit}
+          onPosition={(position) => onSet({ position })}
+        />
+      )}
+    </section>
   );
 }
