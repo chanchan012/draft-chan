@@ -83,6 +83,21 @@ Released 2026-11-19. Feature commit `cfe516f7a931636abc5310c9ccd38e36a2a89262` o
 | Deploy | The Next build passed. Preview `dpl_DzLiuV8KaYEcegYv2T7G3pMh6jyV` and Production `dpl_4Cw8if5zu3awyQabfmkvNwHN3X6g` reached READY. |
 | Document | Architecture, visual system, and resume handoff record modal URLs, private-route redirects, and coverage. |
 
+## M2.2 · Responsive CAD Studio
+
+Released 2026-11-19. Feature commit `74eb6e6525256dafc77b9f9c3be488431ca1e5f8` on `feature/2.2-studio` was merged as `5b277b4f8049fd29f2924267478b6e14d9f7bc04`.
+
+| Phase | Result |
+| --- | --- |
+| Brief | Connect plan editing to the protected Studio route with a responsive workbench, wall and door drawing, and isometric preview. |
+| Build | Form & Function Studio’s frontend craft guidance informed the grid, framing controls and inspector. Added point snapping, Ortho, live length, room quantities, door swings, undo and redo, and revision-checked saves. |
+| Test | Strict TypeScript, 38 Vitest tests, and 45 Playwright checks passed. Chromium covered five viewport sizes, touch drawing at phone widths, and no page scroll. PGlite verified owner isolation, graph persistence, thumbnail refresh, and overlapping revision writes. |
+| Merge | The tested feature tree was merged and pushed to GitHub main. |
+| Deploy | The Next build passed. Preview `dpl_BSrMz4snLj74c64wgmSvANYHHAvf` and Production `dpl_bsPQrJpqpG4o5tcC41NGmJqzZS6j` reached READY. Studio preserved its private destination through sign-in and unsigned graph requests returned 401. |
+| Document | Architecture and resume handoff record the door schema, Studio endpoints, controls, and verification boundaries. |
+
+[Dashboard](https://draft-chan.vercel.app/dashboard) · [Application merge](https://github.com/chanchan012/draft-chan/commit/5b277b4f8049fd29f2924267478b6e14d9f7bc04)
+
 ## Next subgoal
 
-M2.2 connects the geometry engine to the protected Studio canvas with snap and ortho drawing, a responsive inspector, and an isometric preview.
+M3.1 adds parametric fixtures, electrical and plumbing overlays, and walkway and door-clearance checks to Studio.

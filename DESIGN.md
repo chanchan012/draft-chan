@@ -11,3 +11,5 @@ The dashboard adaptation keeps the same margins, header, type families, card bor
 The landing header has one account action. Signed-out visitors see Sign in and signed-in members see Workspace. The dashboard header contains the Draft brand and Clerk account control. Page layouts run without a site footer.
 
 The sign-in and sign-up forms open in a centered native dialog over the landing. The dialog uses paper, ink, and terracotta for account actions. Auth inputs use 16px text and 44px minimum height. Dialog contents scroll within 100dvh on short screens. Closing the dialog restores focus to its trigger.
+
+Studio uses a full-height architectural drawing surface with a fine olive grid, solid wall strokes, and terracotta active-tool and selection accents. The header identifies the floorplan and save state. View and history controls sit above the canvas. On wide screens, the tool rail and inspector flank the drawing. On phones, tools run horizontally and the inspector opens as an overlay. Canvas pan, zoom, and fit stay within the drawing pane.

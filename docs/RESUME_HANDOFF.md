@@ -80,15 +80,32 @@ PLAYWRIGHT_CHECK_CLERK=1 PLAYWRIGHT_BASE_URL=https://draft-chan.vercel.app npm r
 
 Expect the dashboard to redirect to /?auth=sign-in with its URL-encoded local return path. The old sign-in URL redirects to the same modal without a target. All 35 Chromium checks passed against the optimized local server and public production. Production coverage includes live Clerk form rendering, switching modes, and closing with Escape at five viewport sizes. The signed-in header is covered by a session-state fixture. Completing authentication with a live account remains outside the automated check.
 
-## Start M2.2
+## M2.2 release checkpoint
+
+The feature head is `74eb6e6525256dafc77b9f9c3be488431ca1e5f8` on `feature/2.2-studio`. The application merge is `5b277b4f8049fd29f2924267478b6e14d9f7bc04`. Production deployment `dpl_bsPQrJpqpG4o5tcC41NGmJqzZS6j` and Preview deployment `dpl_BSrMz4snLj74c64wgmSvANYHHAvf` reached READY. [Dashboard](https://draft-chan.vercel.app/dashboard) · [Feature preview](https://draft-chan-ducg3n2zc-chanchans-projects-aada625f.vercel.app)
+
+Select a floorplan in the dashboard and choose Open Studio. Use Wall for two points or a drag, Door for a point on an existing wall, and the Inspector to change units, snap spacing, wall thickness or door parameters. Keyboard controls include V, W, D and H for tools, arrows and Enter on the drawing surface, Escape to cancel, Ctrl or Cmd+Z to undo, and Ctrl or Cmd+S to save.
+
+Studio saves manually through the owner-scoped graph route and optimistic revision check. The existing database schema through migration 0001 stores the new door records in the version 1 graph. Browser coverage mounts the Studio with a signed-in fixture and intercepts graph RPC. PGlite runs the real server persistence path. The public deployment verified the signed-out redirect and HTTP 401 for graph reads and writes. A full signed-in production editing session remains outside the automated run.
+
+```sh
+npm run typecheck
+npm test
+npm run build
+npm start
+```
+
+With the optimized server running, use `PLAYWRIGHT_BASE_URL=http://127.0.0.1:3000 npm run test:e2e`. The release passed 38 Vitest checks and 45 Playwright checks across 1440×900, 768×1024, 390×844, 320×568, and 844×390.
+
+## Start M3.1
 
 ```sh
 git switch main
 git pull --ff-only
-git switch -c feature/2.2-studio
+git switch -c feature/3.1-fixtures-clearance
 npm ci
 npm run typecheck
 npm test
 ```
 
-Start with an owner-scoped graph read for the protected `/studio/[id]` route. Hydrate `createDraftPlanStore(graph)` and call `getState().execute(command, actor)` for wall edits. Use `solveWallTopology(plan.walls).spans` for joined centerlines and `polygonAreaMm2(room.polygon, room.holes)` for per-room area. Keep pointer previews separate from committed history. Add viewport, wall and door drawing, and isometric toggle coverage in Playwright. The Studio must fit within 100dvh.
+Brief the fixture and overlay record shapes before building. Extend the command store and Studio snapshot validator with the new editable fields, preserving existing doors and graph metadata. Use the existing wall centerlines, thickness, door swing geometry, and rooms as inputs to the clearance checks. Run collision and accessibility cases in Vitest and the full Studio browser matrix.
