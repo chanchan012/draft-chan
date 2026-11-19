@@ -135,15 +135,33 @@ npm start
 
 With the optimized server running, use `PLAYWRIGHT_BASE_URL=http://127.0.0.1:3000 npm run test:e2e`. The release passed 48 Vitest and 60 Playwright checks. Browser fixtures cover signed-in panel and editing flows across desktop, tablet, phone, compact phone, and landscape. Production returned HTTP 200 for the landing page, preserved Studio’s sign-in destination, and rejected unsigned graph GET and PATCH with HTTP 401.
 
-## Start M3.2
+## M3.2 release checkpoint
+
+The feature head is `72b1874fb8d6a1ded83fa2fd3518de5fe06c53bd` on `feature/3.2-exports`. The application merge is `8cf2fe53a56563eba2c6c921e0293c0abde14b47`. Vercel Production `dpl_3NPv84Huc94F6SnvE3gy2AGU8snk` and Preview `dpl_4i3Xf9CcgR163psBkS7JBb5f6JFd` reached READY. [Dashboard](https://draft-chan.vercel.app/dashboard) · [Feature preview](https://draft-chan-cqpg6ee5f-chanchans-projects-aada625f.vercel.app)
+
+The shared Neon database `draft` has migration `0002_green_firebird.sql` recorded with timestamp `1795107777417` and hash `f3c22a9b3b7aa876e03aea60bc3f852ea092079982a4b531d8670c254c29b4fe`. For a fresh deployment, apply the migrations as the schema owner, then grant the runtime role SELECT, INSERT and UPDATE on `public.floorplan_exports`. Inngest production sync `4f33a035-0423-468e-ac1e-869ce15625cb` registered `render-floorplan-blueprint`, its failure handler, and `recover-pending-blueprints` at `https://draft-chan.vercel.app/api/inngest`. The Inngest event and signing keys are scoped to Production. Scheduled recovery operates on the shared database.
+
+In Studio, save the plan and open Exports on the right rail. The panel downloads a BOM CSV immediately and shows Generate, Retry, or Download for DXF and SVG at the saved revision. The user-facing download stays in Studio and reports errors in the panel.
+
+```sh
+npm run typecheck
+npm test -- tests/exports.unit.test.ts tests/export-rpc.unit.test.ts
+npm test
+npm run build
+npm start
+```
+
+With the optimized server running, use `PLAYWRIGHT_BASE_URL=http://127.0.0.1:3000 npm run test:e2e`. The release passed 53 Vitest tests and 65 Playwright checks. Signed-in browser flows use fixtures. An Inngest test-engine run exercised the renderer against isolated PGlite for both formats and checked duplicate execution. Production verified registered functions and HTTP 401 on unsigned BOM, status, queue, and download requests. The connector blocked creation of a disposable production test record, so render execution was verified in the isolated test database.
+
+## Start M4.1
 
 ```sh
 git switch main
 git pull --ff-only
-git switch -c feature/3.2-exports
+git switch -c feature/4.1-live-sync
 npm ci
 npm run typecheck
 npm test
 ```
 
-Brief the export request and storage model before building the BOM, DXF and SVG pipeline. Read the owner-scoped graph at its saved revision. Reuse the authored wall runs, door gaps, fixture catalog and utility layers for output geometry and quantities. Use the existing Inngest handler and test revision handling, job retries, format syntax and Studio status flows.
+Brief the owner-scoped SSE stream, Redis presence and change distribution, and Neon autosave contract. Preserve revision checking and keep export jobs tied to their saved snapshots. Verify concurrent saves, multi-client updates, and rate-limit behavior before deployment.

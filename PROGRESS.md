@@ -143,6 +143,21 @@ Released 2026-11-19. Feature commit `8a0419d8630784dc41a9cb64e66f8c26a9a042a5` o
 
 [Dashboard](https://draft-chan.vercel.app/dashboard) · [Application merge](https://github.com/chanchan012/draft-chan/commit/88d35a7f9181476d50605489d45333d358f85a8c) · [Feature preview](https://draft-chan-cb74zzvgj-chanchans-projects-aada625f.vercel.app)
 
+## M3.2 · Bill of materials and blueprint exports
+
+Released 2026-11-19. Feature commit `72b1874fb8d6a1ded83fa2fd3518de5fe06c53bd` on `feature/3.2-exports` was merged as `8cf2fe53a56563eba2c6c921e0293c0abde14b47`.
+
+| Phase | Result |
+| --- | --- |
+| Brief | Generate materials quantities and downloadable DXF and SVG files from a saved floorplan revision. |
+| Build | Added owner-scoped CSV and blueprint downloads, a Neon snapshot and artifact table, Inngest rendering and recovery, and the Studio Exports panel. |
+| Test | Strict TypeScript, 53 Vitest tests, and 65 Playwright checks passed across five viewports. An isolated Inngest execution stored both formats and verified duplicate-run safety. An independent DXF audit reported zero errors and repairs. |
+| Merge | The tested feature tree was merged and pushed to GitHub main. |
+| Deploy | Neon migration 0002 was applied to `draft`. Vercel Preview `dpl_4i3Xf9CcgR163psBkS7JBb5f6JFd` and Production `dpl_3NPv84Huc94F6SnvE3gy2AGU8snk` reached READY. Inngest production sync `4f33a035-0423-468e-ac1e-869ce15625cb` registered the renderer and recovery schedule. All four unsigned export requests returned HTTP 401. |
+| Document | Architecture and handoff record the storage and retry semantics, deployment verification, and M4.1 starting point. |
+
+[Dashboard](https://draft-chan.vercel.app/dashboard) · [Application merge](https://github.com/chanchan012/draft-chan/commit/8cf2fe53a56563eba2c6c921e0293c0abde14b47) · [Feature preview](https://draft-chan-cqpg6ee5f-chanchans-projects-aada625f.vercel.app)
+
 ## Next subgoal
 
-M3.2 adds the bill of materials and background blueprint exports.
+M4.1 adds Human and AI presence, real-time sync over SSE and Upstash Redis, and revision-checked Neon autosave.
