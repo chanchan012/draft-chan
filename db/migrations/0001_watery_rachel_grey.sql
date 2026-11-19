@@ -1,0 +1,1 @@
+ALTER TABLE "floorplans" ADD COLUMN "thumbnail" text;

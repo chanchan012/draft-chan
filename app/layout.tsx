@@ -16,8 +16,8 @@ export default function Layout({
           <ClerkProvider
             signInUrl="/sign-in"
             signUpUrl="/sign-up"
-            signInFallbackRedirectUrl="/?view=sample"
-            signUpFallbackRedirectUrl="/?view=sample"
+            signInFallbackRedirectUrl="/dashboard"
+            signUpFallbackRedirectUrl="/dashboard"
           >
             {children}
           </ClerkProvider>

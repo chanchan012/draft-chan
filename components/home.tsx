@@ -78,8 +78,8 @@ export function Home() {
             <Link className="login" href="/sign-in">
               Sign in
             </Link>
-            <Link className="dark-btn" href="/sign-up">
-              Open studio <ArrowUpRight size={15} />
+            <Link className="dark-btn" href="/dashboard">
+              Workspace <ArrowUpRight size={15} />
             </Link>
           </div>
         </div>
