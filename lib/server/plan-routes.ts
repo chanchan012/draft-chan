@@ -16,6 +16,14 @@ import {
   requestBlueprint,
 } from "./blueprint-store";
 import { queueBlueprint } from "./blueprint-jobs";
+import { presenceInput, type LiveChange } from "../plans/live";
+import {
+  liveBus,
+  publishPlanPresence,
+  planChannel,
+  type LiveBus,
+} from "./live-bus";
+import { liveStream } from "./live-stream";
 import type { Environment } from "./api";
 
 type PlanEnvironment = Environment & { Variables: { owner: string } };
@@ -40,8 +48,14 @@ function attachment(body: string, type: string, filename: string) {
 export function planRoutes(
   repo: typeof plans = plans,
   enqueue: (id: string) => Promise<unknown> = queueThumbnail,
+  bus: LiveBus = liveBus,
 ) {
   const app = new Hono<PlanEnvironment>();
+  async function notify(owner: string, id: string, change: LiveChange) {
+    await bus
+      .publish(planChannel(owner, id), change)
+      .catch(() => console.warn("Live update deferred to revision refresh"));
+  }
   app.use("*", async (c, next) => {
     const identity = c.get("identity");
     if (!identity) return c.json({ error: "Sign in required" }, 401);
@@ -60,6 +74,8 @@ export function planRoutes(
   };
   app.use("/:id", validateId);
   app.use("/:id/graph", validateId);
+  app.use("/:id/live", validateId);
+  app.use("/:id/presence", validateId);
   app.use("/:id/bom", validateId);
   app.use("/:id/exports", validateId);
   app.use("/:id/exports/:exportId/download", validateId);
@@ -74,6 +90,46 @@ export function planRoutes(
       return document
         ? c.json(document)
         : c.json({ error: "Plan unavailable" }, 404);
+    })
+    .get("/:id/live", async (c) => {
+      const owner = c.get("owner");
+      const id = c.req.param("id");
+      const revision = await repo.revision(owner, id);
+      if (revision === null) return c.json({ error: "Plan unavailable" }, 404);
+      return liveStream({
+        bus,
+        key: planChannel(owner, id),
+        revision,
+        currentRevision: () => repo.revision(owner, id),
+        expiresAt: c.get("identityExpiresAt"),
+        signal: c.req.raw.signal,
+      });
+    })
+    .post("/:id/presence", async (c) => {
+      const parsed = presenceInput.safeParse(
+        await c.req.json().catch(() => null),
+      );
+      if (!parsed.success)
+        return c.json({ error: "Invalid cursor or device ID" }, 400);
+      const owner = c.get("owner");
+      const id = c.req.param("id");
+      if ((await repo.revision(owner, id)) === null)
+        return c.json({ error: "Plan unavailable" }, 404);
+      try {
+        await publishPlanPresence(
+          owner,
+          id,
+          { kind: "human", id: owner },
+          parsed.data,
+          bus,
+        );
+      } catch {
+        return c.json(
+          { error: "Live presence is temporarily unavailable" },
+          503,
+        );
+      }
+      return c.body(null, 204);
     })
     .get("/:id/bom", async (c) => {
       const revision = revisionQuery.safeParse(c.req.query("revision"));
@@ -165,9 +221,15 @@ export function planRoutes(
         return c.json({ error: result.error }, 400);
       if (result.status === "conflict")
         return c.json({ error: "Plan changed or is unavailable." }, 409);
-      await enqueue(id).catch(() =>
-        console.warn("Thumbnail queued for scheduled recovery"),
-      );
+      await Promise.all([
+        notify(c.get("owner"), id, {
+          type: "revision",
+          revision: result.revision,
+        }),
+        enqueue(id).catch(() =>
+          console.warn("Thumbnail queued for scheduled recovery"),
+        ),
+      ]);
       return c.json({ revision: result.revision });
     })
     .post("/", async (c) => {
@@ -195,6 +257,11 @@ export function planRoutes(
         parsed.data.revision,
         parsed.data.name,
       );
+      if (p)
+        await notify(c.get("owner"), p.id, {
+          type: "revision",
+          revision: p.revision,
+        });
       return p
         ? c.json(p)
         : c.json(
@@ -213,6 +280,8 @@ export function planRoutes(
         c.req.param("id"),
         parsed.data.revision,
       );
+      if (ok)
+        await notify(c.get("owner"), c.req.param("id"), { type: "deleted" });
       return ok
         ? c.body(null, 204)
         : c.json(

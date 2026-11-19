@@ -32,6 +32,7 @@ import {
   previewSelection,
 } from "@/lib/plans/editor-selection";
 import type { DisplayUnit, DraftPlanState, Point } from "@/lib/plans/model";
+import type { LivePeer } from "@/lib/plans/live";
 import {
   DrawingGrid,
   ClearanceDrawing,
@@ -54,6 +55,8 @@ type SurfaceProps = {
   layers: Record<UtilityLayer, boolean>;
   issue?: ClearanceIssue;
   zoomSlot: HTMLDivElement | null;
+  peers: readonly LivePeer[];
+  onPresence(point: Point | null): void;
   onSelect(value: readonly Selection[], append?: boolean): void;
   onToggle(item: Selection): void;
   onMove(items: readonly Selection[], delta: Point): void;
@@ -77,6 +80,7 @@ const midpoint = (a: Point, b: Point) => ({
 const separation = (a: Point, b: Point) => Math.hypot(a.x - b.x, a.y - b.y);
 
 const same = (a: Point, b: Point) => a.x === b.x && a.y === b.y;
+const humanColors = ["#2d655d", "#395888", "#86465f", "#68509b"];
 
 export function Surface({
   plan,
@@ -91,6 +95,8 @@ export function Surface({
   layers,
   issue,
   zoomSlot,
+  peers,
+  onPresence,
   onSelect,
   onToggle,
   onMove,
@@ -265,6 +271,7 @@ export function Surface({
     )
       return;
     const point = screen(event);
+    if (!iso && event.isPrimary) onPresence(modelPoint(point, size, camera));
     event.currentTarget.setPointerCapture(event.pointerId);
     if (touch && touchDown(event, point)) return;
     event.currentTarget.focus({ preventScroll: true });
@@ -291,6 +298,8 @@ export function Surface({
 
   function pointerMove(event: PointerEvent<SVGSVGElement>) {
     const point = screen(event);
+    if (!iso && event.isPrimary && !suppressTouchTap.current)
+      onPresence(modelPoint(point, size, camera));
     if (event.pointerType === "touch" && touches.current.has(event.pointerId)) {
       touches.current.set(event.pointerId, point);
       if (suppressTouchTap.current) {
@@ -351,12 +360,14 @@ export function Surface({
 
   function pointerCancel(event: PointerEvent<SVGSVGElement>) {
     releaseTouch(event);
+    onPresence(null);
     gesture.current = null;
     setCursor(null);
     setDrag(null);
   }
 
   function pointerUp(event: PointerEvent<SVGSVGElement>) {
+    if (event.pointerType === "touch") onPresence(null);
     if (releaseTouch(event) || !event.isPrimary) return;
     const current = gesture.current;
     gesture.current = null;
@@ -471,6 +482,10 @@ export function Surface({
   const scaleWidth = Math.min(scaleMm * camera.scale, 72);
   const scaleText = Math.round(scaleWidth / camera.scale / unitFactor(unit));
 
+  useEffect(() => {
+    if (iso) onPresence(null);
+  }, [iso, onPresence]);
+
   return (
     <div
       className={"studio-surface" + (iso ? " studio-isometric" : "")}
@@ -493,6 +508,7 @@ export function Surface({
             pointerCancel(event);
         }}
         onPointerLeave={() => {
+          onPresence(null);
           if (!gesture.current) setCursor(null);
         }}
         onKeyDown={keyboard}
@@ -533,6 +549,43 @@ export function Surface({
               vectorEffect="non-scaling-stroke"
             />
           )}
+        </g>
+        <g aria-hidden="true">
+          {!iso &&
+            peers.map(({ id, kind, cursor }) => {
+              if (!cursor) return null;
+              const x = origin.x + cursor.x * camera.scale;
+              const y = origin.y + cursor.y * camera.scale;
+              if (x < 0 || x > size.width || y < 0 || y > size.height)
+                return null;
+              const ai = kind === "ai";
+              const color = ai
+                ? "#873e23"
+                : humanColors[
+                    id.charCodeAt(id.length - 1) % humanColors.length
+                  ];
+              const label = ai ? "AI" : "Human";
+              const width = ai ? 20 : 42;
+              return (
+                <g
+                  key={id}
+                  className="cad-peer"
+                  data-peer-kind={kind}
+                  fill={color}
+                  transform={`translate(${x} ${y})`}
+                >
+                  <path
+                    d="M 0 0 L 3 13 L 6 8 L 12 7 Z"
+                    stroke="white"
+                    strokeWidth="1"
+                  />
+                  <rect x="9" y="11" width={width} height="17" rx="4" />
+                  <text x={9 + width / 2} y="22.5" textAnchor="middle">
+                    {label}
+                  </text>
+                </g>
+              );
+            })}
         </g>
         {marquee && (
           <rect

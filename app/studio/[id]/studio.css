@@ -817,3 +817,24 @@
 .studio-export-row button:hover:not(:disabled) {
   background: #e9ebdf;
 }
+
+.studio-live-status {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  justify-content: center;
+  margin-top: auto;
+  padding: 5px;
+  color: var(--muted);
+  font: 11px var(--mono);
+}
+.studio-live-status i {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: #a46a37;
+}
+.studio-live-status[data-connection="live"] i { background: #3b7951; }
+.studio-live-status[data-connection="offline"] i { background: #687067; }
+.cad-peer { pointer-events: none; }
+.cad-peer text { fill: white; font: 650 10px Inter, sans-serif; }

@@ -40,6 +40,11 @@ type DraftStore = {
   readonly future: readonly CommandEntry[];
   execute(command: PlanCommand, actor: DraftActor): boolean;
   executeBatch(commands: readonly PlanCommand[], actor: DraftActor): boolean;
+  adoptRemote(
+    saved: DraftPlanState,
+    actor: DraftActor,
+    draft?: DraftPlanState,
+  ): void;
   undo(): boolean;
   redo(): boolean;
 };
@@ -207,6 +212,17 @@ export function createDraftPlanStore(input: unknown = initialGraph()) {
     future: [],
     execute(input, author) {
       return get().executeBatch([input], author);
+    },
+    adoptRemote(saved, actor, draft) {
+      const [plan, patches, inverse] = produceWithPatches(
+        saved,
+        () => draft ?? saved,
+      );
+      // Rebased local geometry is one undo step on the new baseline.
+      const past = patches.length
+        ? [freeze({ actor, commands: [], patches, inverse }, true)]
+        : [];
+      set({ plan: freeze(plan, true), past, future: [] });
     },
     executeBatch(inputs, author) {
       const commands = inputs.map((input) => planCommandSchema.parse(input));
