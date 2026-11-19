@@ -108,6 +108,87 @@ async function frame(page: Page) {
   expect(box.height).toBeGreaterThan(180);
 }
 
+test("floats controls and collapses and resizes the side panels", async ({
+  page,
+}) => {
+  await studio(page);
+  const canvas = page.getByRole("region", { name: "Drawing surface" });
+  const layerButton = page.getByRole("button", { name: "Layers", exact: true });
+  const inspectorButton = page.getByRole("button", {
+    name: "Inspector",
+    exact: true,
+  });
+  const layers = page.getByRole("complementary", { name: "Layers" });
+  const inspector = page.getByRole("complementary", { name: "Inspector" });
+  const width = async () => (await canvas.boundingBox())!.width;
+  const initialWidth = await width();
+  await expect(layers).toBeHidden();
+  await expect(inspector).toBeHidden();
+  const drawingTools = page.getByRole("group", { name: "Drawing tools" });
+  const toolbar = (await drawingTools.boundingBox())!;
+  const surface = (await canvas.boundingBox())!;
+  expect(toolbar.x).toBeGreaterThan(surface.x);
+  expect(toolbar.y).toBeGreaterThan(surface.y);
+  expect(toolbar.y + toolbar.height).toBeLessThan(surface.y + surface.height);
+  expect(toolbar.x + toolbar.width).toBeLessThan(surface.x + surface.width);
+  await expect(
+    page.getByRole("banner").getByRole("group", { name: "Zoom controls" }),
+  ).toBeVisible();
+
+  await layerButton.click();
+  await expect(layerButton).toHaveAttribute("aria-expanded", "true");
+  await expect(layers).toBeVisible();
+  await inspectorButton.click();
+  await expect(inspector).toBeVisible();
+  await expect(inspectorButton).toHaveAttribute("aria-expanded", "true");
+  if (page.viewportSize()!.width > 1000) {
+    await expect(layers).toBeVisible();
+    await expect.poll(width).toBeLessThan(initialWidth);
+    const handle = page.getByRole("separator", { name: "Resize inspector" });
+    const bounds = (await handle.boundingBox())!;
+    const x = bounds.x + bounds.width / 2;
+    const y = bounds.y + bounds.height / 2;
+    const before = Number(await handle.getAttribute("aria-valuenow"));
+    const beforeDrag = await width();
+    await page.mouse.move(x, y);
+    await page.mouse.down();
+    await page.mouse.move(x - 48, y, { steps: 5 });
+    await page.mouse.up();
+    await expect(handle).toHaveAttribute("aria-valuenow", String(before + 48));
+    await expect.poll(width).toBeLessThan(beforeDrag);
+    await handle.press("ArrowRight");
+    await expect(handle).toHaveAttribute("aria-valuenow", String(before + 40));
+    const leftHandle = page.getByRole("separator", { name: "Resize layers" });
+    const leftWidth = Number(await leftHandle.getAttribute("aria-valuenow"));
+    await leftHandle.press("ArrowRight");
+    await expect(leftHandle).toHaveAttribute(
+      "aria-valuenow",
+      String(leftWidth + 8),
+    );
+    await handle.press("Escape");
+    await expect(inspectorButton).toBeFocused();
+    await inspectorButton.click();
+    await expect(handle).toHaveAttribute("aria-valuenow", String(before + 40));
+    await layers.getByRole("button", { name: "Close layers" }).click();
+  } else {
+    await expect(layers).toBeHidden();
+    await expect(
+      page.getByRole("separator", { name: "Resize inspector" }),
+    ).toBeHidden();
+    expect(await width()).toBe(initialWidth);
+    if (page.viewportSize()!.width <= 620) {
+      const sheet = (await inspector.boundingBox())!;
+      expect(sheet.y).toBeGreaterThan(surface.y + surface.height * 0.5);
+      expect(sheet.y + sheet.height).toBe(surface.y + surface.height);
+    }
+  }
+  await inspector.getByRole("button", { name: "Close inspector" }).click();
+  await expect(inspectorButton).toBeFocused();
+  await expect(inspector).toBeHidden();
+  await expect.poll(width).toBe(initialWidth);
+  await frame(page);
+});
+
 test("draws an ortho wall and door, toggles isometric, and saves the graph", async ({
   page,
 }) => {
@@ -134,10 +215,9 @@ test("draws an ortho wall and door, toggles isometric, and saves the graph", asy
   await page.getByRole("button", { name: "Door", exact: true }).click();
   const toggle = page.getByRole("button", { name: "Inspector", exact: true });
   const inspector = page.getByRole("complementary", { name: "Inspector" });
-  if (await toggle.isVisible()) await toggle.click();
+  await toggle.click();
   await inspector.getByLabel("Width (mm)").fill("800");
-  if (await toggle.isVisible())
-    await inspector.getByRole("button", { name: "Close inspector" }).click();
+  await inspector.getByRole("button", { name: "Close inspector" }).click();
   await point(page, 0.5, 0.5);
   await expect(page.locator("[data-door]")).toHaveCount(1);
   await expect(wall.locator("line")).toHaveCount(2);
@@ -146,14 +226,13 @@ test("draws an ortho wall and door, toggles isometric, and saves the graph", asy
   await page.getByRole("button", { name: "Redo", exact: true }).click();
   await expect(page.locator("[data-door]")).toHaveCount(1);
 
-  if (await toggle.isVisible()) await toggle.click();
+  await toggle.click();
   await expect(
     inspector.getByRole("heading", { name: "Plan quantities" }),
   ).toBeVisible();
   await inspector.getByLabel("Units").selectOption("in");
   await expect(inspector.getByLabel("Snap spacing")).toContainText("6 in");
-  if (await toggle.isVisible())
-    await inspector.getByRole("button", { name: "Close inspector" }).click();
+  await inspector.getByRole("button", { name: "Close inspector" }).click();
 
   await page.getByRole("button", { name: "Isometric", exact: true }).click();
   await expect(page.locator("[data-view=isometric] .cad-top")).toHaveCount(2);
@@ -246,11 +325,12 @@ test("places, edits, audits and reloads catalog items and utility layers", async
   await closeInspector();
   await point(page, 0.75, 0.35);
   await expect(page.locator('[data-layer="plumbing"]')).toHaveCount(1);
-  await openInspector();
-  await inspector.getByRole("checkbox", { name: "Electrical" }).uncheck();
+  await page.getByRole("button", { name: "Layers", exact: true }).click();
+  const layers = page.getByRole("complementary", { name: "Layers" });
+  await layers.getByRole("checkbox", { name: "Electrical" }).uncheck();
   await expect(page.locator('[data-layer="electrical"]')).toHaveCount(0);
   await expect(page.locator('[data-layer="plumbing"]')).toHaveCount(1);
-  await closeInspector();
+  await layers.getByRole("button", { name: "Close layers" }).click();
 
   await page.getByRole("button", { name: "Fixture", exact: true }).click();
   await point(page, 0.48, 0.52);

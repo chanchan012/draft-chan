@@ -27,7 +27,6 @@ interface InspectorProps {
   activeWall?: Wall;
   activeDoor?: Door;
   placementFields?: ReactNode;
-  layers?: ReactNode;
   selectedCount: number;
   placementSelected?: "fixture" | "utility";
   onUnit(unit: DisplayUnit): void;
@@ -49,7 +48,6 @@ export function Inspector(props: InspectorProps) {
   const factor = unitFactor(unit);
   return (
     <div className="studio-inspector-content">
-      <h2>Inspector</h2>
       <section className="studio-fields" aria-label="Drawing settings">
         <label>
           Units
@@ -175,7 +173,6 @@ export function Inspector(props: InspectorProps) {
         </section>
       ) : null}
       {props.placementFields}
-      {props.layers}
       {(activeWall ||
         activeDoor ||
         props.placementSelected ||

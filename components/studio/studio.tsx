@@ -4,11 +4,12 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Box,
   Armchair,
+  ChevronLeft,
+  Layers3,
   Zap,
   ScanLine,
   DoorOpen,
   Hand,
-  LayoutGrid,
   MousePointer2,
   ListChecks,
   Trash2,
@@ -44,6 +45,7 @@ import {
 import { Inspector, type DoorSettings, type WallSettings } from "./inspector";
 import { Surface, type Tool } from "./surface";
 import { AuditPanel } from "./audit-panel";
+import { StudioPanel } from "./studio-panel";
 import {
   FixtureFields,
   UtilityFields,
@@ -59,6 +61,7 @@ const tools = [
   { id: "utility", label: "Utility", icon: Zap, shortcut: "U" },
   { id: "pan", label: "Pan", icon: Hand, shortcut: "H" },
 ] as const;
+const overlayPanels = "(max-width: 1000px)";
 
 export function Studio({
   initial,
@@ -75,6 +78,8 @@ export function Studio({
   const [ortho, setOrtho] = useState(true);
   const [iso, setIso] = useState(false);
   const [inspectorOpen, setInspectorOpen] = useState(false);
+  const [layersOpen, setLayersOpen] = useState(false);
+  const [zoomSlot, setZoomSlot] = useState<HTMLDivElement | null>(null);
   const [wall, setWall] = useState<WallSettings>({
     thicknessMm: 120,
     kind: "interior",
@@ -113,6 +118,8 @@ export function Studio({
     "idle" | "saving" | "error" | "conflict" | "auth"
   >("idle");
   const auditControl = useRef<HTMLButtonElement>(null);
+  const inspectorControl = useRef<HTMLButtonElement>(null);
+  const layerControl = useRef<HTMLButtonElement>(null);
   const saving = useRef(false);
   const revision = useRef(initial.revision);
   const snapshot = useMemo(() => studioSnapshot(plan, unit), [plan, unit]);
@@ -330,6 +337,34 @@ export function Studio({
     }
   }
 
+  useEffect(() => {
+    const layout = window.matchMedia(overlayPanels);
+    function resize({ matches }: MediaQueryListEvent) {
+      if (matches && inspectorOpen) setLayersOpen(false);
+    }
+    layout.addEventListener("change", resize);
+    return () => layout.removeEventListener("change", resize);
+  }, [inspectorOpen]);
+
+  function closeInspector() {
+    setInspectorOpen(false);
+    setAuditOpen(false);
+    setFinding(undefined);
+  }
+
+  function toggleInspector(showAudit: boolean) {
+    const open = !inspectorOpen || auditOpen !== showAudit;
+    if (!open) {
+      closeInspector();
+      return;
+    }
+    if (window.matchMedia(overlayPanels).matches) setLayersOpen(false);
+    setFinding(undefined);
+    setInspectorOpen(true);
+    setAuditOpen(showAudit);
+    if (showAudit) setIso(false);
+  }
+
   const status =
     saveState === "saving"
       ? "Saving…"
@@ -349,120 +384,140 @@ export function Studio({
         <a
           className="studio-library"
           href="/dashboard"
+          title="Back to floorplans"
           aria-label="Back to floorplans"
         >
-          <LayoutGrid size={18} />
-          <span>Floorplans</span>
+          <ChevronLeft size={21} />
         </a>
         <h1 title={initial.name}>{initial.name}</h1>
         <span role="status" className="studio-save-status" data-dirty={dirty}>
-          <i />
-          {status}
+          <i aria-hidden="true" />
+          <span>{status}</span>
         </span>
-        <button
-          className="studio-save"
-          onClick={() => void save()}
-          disabled={
-            !dirty || saveState === "saving" || saveState === "conflict"
-          }
-        >
-          <Save size={16} /> Save
-        </button>
+        <div className="studio-header-actions">
+          <div
+            className="studio-history"
+            role="group"
+            aria-label="Drawing history"
+          >
+            <button
+              title="Undo"
+              aria-label="Undo"
+              onClick={() => undo()}
+              disabled={!past.length}
+            >
+              <Undo2 size={18} />
+            </button>
+            <button
+              title="Redo"
+              aria-label="Redo"
+              onClick={() => redo()}
+              disabled={!future.length}
+            >
+              <Redo2 size={18} />
+            </button>
+          </div>
+          <div className="studio-zoom-slot" ref={setZoomSlot} />
+          <button
+            className="studio-save"
+            title="Save"
+            aria-label="Save"
+            onClick={() => void save()}
+            disabled={
+              !dirty || saveState === "saving" || saveState === "conflict"
+            }
+          >
+            <Save size={16} /> <span>Save</span>
+          </button>
+        </div>
       </header>
 
-      <div className="studio-controls">
-        <div className="studio-segment" role="group" aria-label="View">
-          <button aria-pressed={!iso} onClick={() => setIso(false)}>
-            2D plan
-          </button>
+      <main className="studio-workbench">
+        <div
+          className="studio-rail studio-rail-left"
+          role="group"
+          aria-label="Left sidebar"
+        >
           <button
-            aria-pressed={iso}
+            ref={layerControl}
+            aria-controls="studio-layers"
+            aria-expanded={layersOpen}
+            aria-label="Layers"
+            title="Layers"
             onClick={() => {
-              setIso(true);
-              setSelection([]);
+              if (!layersOpen && window.matchMedia(overlayPanels).matches)
+                closeInspector();
+              setLayersOpen(!layersOpen);
             }}
           >
-            <Box size={15} /> Isometric
+            <Layers3 size={20} />
           </button>
         </div>
-        <button
-          className="studio-ortho"
-          aria-pressed={ortho}
-          onClick={() => setOrtho(!ortho)}
-          disabled={iso}
-        >
-          Ortho
-        </button>
-        <div
-          className="studio-history"
-          role="group"
-          aria-label="Drawing history"
-        >
-          <button
-            title="Undo"
-            aria-label="Undo"
-            onClick={() => undo()}
-            disabled={!past.length}
-          >
-            <Undo2 size={18} />
-          </button>
-          <button
-            title="Redo"
-            aria-label="Redo"
-            onClick={() => redo()}
-            disabled={!future.length}
-          >
-            <Redo2 size={18} />
-          </button>
-        </div>
-        <button
-          className="studio-audit-toggle"
-          ref={auditControl}
-          aria-label="Check clearances"
-          title="Check clearances"
-          aria-pressed={auditOpen}
-          onClick={() => {
-            const open = !auditOpen || !inspectorOpen;
-            setAuditOpen(open);
-            setInspectorOpen(open);
-            setFinding(undefined);
-            if (open) setIso(false);
+        <StudioPanel
+          side="left"
+          id="studio-layers"
+          label="Layers"
+          open={layersOpen}
+          onClose={() => {
+            setLayersOpen(false);
+            layerControl.current?.focus();
           }}
         >
-          <ScanLine size={17} />
-          <span>Clearance</span>
-        </button>
-        <button
-          className="studio-inspector-toggle"
-          aria-pressed={inspectorOpen}
-          aria-controls="studio-inspector"
-          aria-label="Inspector"
-          title="Inspector"
-          onClick={() => {
-            setInspectorOpen(!inspectorOpen || auditOpen);
-            setAuditOpen(false);
-            setFinding(undefined);
-          }}
-        >
-          <PanelRight size={19} />
-        </button>
-      </div>
+          <Layers layers={layers} onToggle={toggleLayer} />
+        </StudioPanel>
 
-      <main className="studio-workbench">
-        <div className="studio-tools" role="group" aria-label="Drawing tools">
-          {tools.map(({ id, label, icon: Icon, shortcut }) => (
-            <button
-              key={id}
-              aria-pressed={tool === id && (!iso || id === "pan")}
-              onClick={() => switchTool(id)}
-              aria-keyshortcuts={shortcut}
-              title={`${label} (${shortcut})`}
-            >
-              <Icon size={19} />
-              <span>{label}</span>
+        <div className="studio-stage">
+          <div
+            className="studio-floating studio-views"
+            role="group"
+            aria-label="View"
+          >
+            <button aria-pressed={!iso} onClick={() => setIso(false)}>
+              2D plan
             </button>
-          ))}
-          <div className="studio-selection-actions">
+            <button
+              aria-pressed={iso}
+              onClick={() => {
+                setIso(true);
+                setSelection([]);
+              }}
+            >
+              <Box size={15} /> Isometric
+            </button>
+            <button
+              className="studio-ortho"
+              aria-pressed={ortho}
+              onClick={() => setOrtho(!ortho)}
+              disabled={iso}
+            >
+              Ortho
+            </button>
+          </div>
+
+          <div
+            className="studio-floating studio-tools"
+            role="group"
+            aria-label="Drawing tools"
+          >
+            {tools.map(({ id, label, icon: Icon, shortcut }) => (
+              <button
+                key={id}
+                aria-label={label}
+                aria-pressed={tool === id && (!iso || id === "pan")}
+                onClick={() => switchTool(id)}
+                aria-keyshortcuts={shortcut}
+                title={`${label} (${shortcut})`}
+              >
+                <Icon size={19} />
+              </button>
+            ))}
+          </div>
+
+          <div
+            className="studio-floating studio-selection-actions"
+            role="group"
+            aria-label="Selection tools"
+          >
             <button
               aria-label="Multi-select"
               title="Multi-select (or Shift-click)"
@@ -472,8 +527,7 @@ export function Studio({
                 setMulti(tool !== "select" || iso || !multi);
               }}
             >
-              <ListChecks size={17} />
-              <span>Multi-select</span>
+              <ListChecks size={18} />
             </button>
             <button
               aria-label="Delete selection"
@@ -481,65 +535,85 @@ export function Studio({
               disabled={!selection.length || iso}
               onClick={remove}
             >
-              <Trash2 size={16} />
-              <span>Delete</span>
+              <Trash2 size={17} />
             </button>
+            <span className="studio-selection-count" aria-live="polite">
+              {selection.length ? selection.length + " selected" : ""}
+            </span>
           </div>
-          <span className="studio-selection-count" aria-live="polite">
-            {selection.length ? selection.length + " selected" : ""}
-          </span>
+
+          <Surface
+            plan={plan}
+            tool={tool}
+            iso={iso}
+            ortho={ortho}
+            grid={gridSteps[unit][gridIndex] * unitFactor(unit)}
+            unit={unit}
+            thicknessMm={wall.thicknessMm}
+            selection={selection}
+            multi={multi}
+            layers={layers}
+            issue={issue}
+            zoomSlot={zoomSlot}
+            onPlace={place}
+            onSelect={choose}
+            onToggle={(item) =>
+              setSelection(
+                isSelected(selection, item)
+                  ? selection.filter(
+                      (entry) => selectionKey(entry) !== selectionKey(item),
+                    )
+                  : [...selection, item],
+              )
+            }
+            onMove={(items, delta) => edit(moveSelection(plan, items, delta))}
+            onWall={drawWall}
+            onDoor={(wallId, offsetMm) =>
+              command({
+                type: "door.add",
+                door: { id: crypto.randomUUID(), wallId, offsetMm, ...door },
+              })
+            }
+          />
         </div>
 
-        <Surface
-          plan={plan}
-          tool={tool}
-          iso={iso}
-          ortho={ortho}
-          grid={gridSteps[unit][gridIndex] * unitFactor(unit)}
-          unit={unit}
-          thicknessMm={wall.thicknessMm}
-          selection={selection}
-          multi={multi}
-          layers={layers}
-          issue={issue}
-          onPlace={place}
-          onSelect={choose}
-          onToggle={(item) =>
-            setSelection(
-              isSelected(selection, item)
-                ? selection.filter(
-                    (entry) => selectionKey(entry) !== selectionKey(item),
-                  )
-                : [...selection, item],
-            )
-          }
-          onMove={(items, delta) => edit(moveSelection(plan, items, delta))}
-          onWall={drawWall}
-          onDoor={(wallId, offsetMm) =>
-            command({
-              type: "door.add",
-              door: { id: crypto.randomUUID(), wallId, offsetMm, ...door },
-            })
-          }
-        />
-
-        <aside
-          id="studio-inspector"
-          className="studio-inspector"
-          data-open={inspectorOpen}
-          aria-label="Inspector"
+        <div
+          className="studio-rail studio-rail-right"
+          role="group"
+          aria-label="Right sidebar"
         >
           <button
-            className="studio-inspector-close"
-            aria-label="Close inspector"
-            onClick={() => {
-              setInspectorOpen(false);
-              setAuditOpen(false);
-              setFinding(undefined);
-            }}
+            ref={inspectorControl}
+            aria-expanded={inspectorOpen && !auditOpen}
+            aria-controls="studio-inspector"
+            aria-label="Inspector"
+            title="Inspector"
+            onClick={() => toggleInspector(false)}
           >
-            <X size={18} />
+            <PanelRight size={20} />
           </button>
+          <button
+            ref={auditControl}
+            aria-expanded={inspectorOpen && auditOpen}
+            aria-controls="studio-inspector"
+            aria-label="Check clearances"
+            title="Check clearances"
+            onClick={() => toggleInspector(true)}
+          >
+            <ScanLine size={20} />
+          </button>
+        </div>
+        <StudioPanel
+          side="right"
+          id="studio-inspector"
+          label="Inspector"
+          title={auditOpen ? "Clearance check" : "Inspector"}
+          open={inspectorOpen}
+          onClose={() => {
+            closeInspector();
+            (auditOpen ? auditControl : inspectorControl).current?.focus();
+          }}
+        >
           {audit ? (
             <AuditPanel
               {...audit}
@@ -548,7 +622,7 @@ export function Studio({
               onIssue={(id) => {
                 setIso(false);
                 setFinding(id);
-                if (window.matchMedia("(max-width: 900px)").matches) {
+                if (window.matchMedia(overlayPanels).matches) {
                   setInspectorOpen(false);
                   auditControl.current?.focus();
                 }
@@ -577,7 +651,6 @@ export function Studio({
                   ? command({ type: "door.update", id: activeDoor.id, changes })
                   : setDoor(changes)
               }
-              layers={<Layers layers={layers} onToggle={toggleLayer} />}
               placementSelected={
                 activeFixture
                   ? "fixture"
@@ -624,7 +697,7 @@ export function Studio({
               onRemove={remove}
             />
           )}
-        </aside>
+        </StudioPanel>
         {(message || saveState === "conflict" || saveState === "auth") && (
           <div role="alert" className="studio-message">
             {saveState === "conflict" ? (
