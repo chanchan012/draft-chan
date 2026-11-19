@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import { ClerkProvider } from "@clerk/nextjs";
+import { authModalHref } from "@/lib/auth-navigation";
 import { clerkEnabled } from "@/lib/server/auth";
 import "./globals.css";
 export const metadata: Metadata = {
@@ -14,8 +15,8 @@ export default function Layout({
       <body>
         {clerkEnabled() ? (
           <ClerkProvider
-            signInUrl="/sign-in"
-            signUpUrl="/sign-up"
+            signInUrl={authModalHref("sign-in")}
+            signUpUrl={authModalHref("sign-up")}
             signInFallbackRedirectUrl="/dashboard"
             signUpFallbackRedirectUrl="/dashboard"
           >
