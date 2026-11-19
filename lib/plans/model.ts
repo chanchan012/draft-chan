@@ -107,7 +107,7 @@ export const planCommandSchema = z.union([
       type: z.literal("door.update"),
       id: identifier,
       changes: doorInput
-        .pick({ widthMm: true, hinge: true, swing: true })
+        .pick({ widthMm: true, hinge: true, swing: true, offsetMm: true })
         .partial(),
     }),
     z.strictObject({ type: z.literal("door.remove"), id: identifier }),

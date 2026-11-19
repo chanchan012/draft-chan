@@ -11,6 +11,7 @@ import {
 import {
   fitCamera,
   modelPoint,
+  pinchCamera,
   snapWallPoint,
   snapPoint,
   unitFactor,
@@ -20,9 +21,15 @@ import {
   type Viewport,
 } from "@/lib/plans/cad";
 import { utilityCatalog, type UtilityLayer } from "@/lib/plans/catalog";
-import { bounds, fixtureFootprint } from "@/lib/plans/footprints";
+import { bounds } from "@/lib/plans/footprints";
 import type { ClearanceIssue } from "@/lib/plans/clearance";
-import { doorBounds } from "@/lib/plans/openings";
+import { validateOpenings, wallLength } from "@/lib/plans/openings";
+import {
+  isSelected,
+  selectAt,
+  selectInBox,
+  previewSelection,
+} from "@/lib/plans/editor-selection";
 import type { DisplayUnit, DraftPlanState, Point } from "@/lib/plans/model";
 import {
   DrawingGrid,
@@ -41,15 +48,31 @@ type SurfaceProps = {
   grid: number;
   unit: DisplayUnit;
   thicknessMm: number;
-  selection: Selection | null;
+  selection: readonly Selection[];
+  multi: boolean;
   layers: Record<UtilityLayer, boolean>;
   issue?: ClearanceIssue;
-  onSelect(value: Selection | null): void;
+  onSelect(value: readonly Selection[], append?: boolean): void;
+  onToggle(item: Selection): void;
+  onMove(items: readonly Selection[], delta: Point): void;
   onPlace(tool: "fixture" | "utility", point: Point): void;
   onWall(start: Point, end: Point): boolean;
   onDoor(wallId: string, offsetMm: number): void;
 };
-type Gesture = { start: Point; camera: Camera; pan: boolean };
+type Gesture = {
+  start: Point;
+  camera: Camera;
+  pan: boolean;
+  additive: boolean;
+  target: Selection | null;
+  moving: readonly Selection[];
+};
+type Pinch = { origin: Point; distance: number; camera: Camera };
+const midpoint = (a: Point, b: Point) => ({
+  x: (a.x + b.x) / 2,
+  y: (a.y + b.y) / 2,
+});
+const separation = (a: Point, b: Point) => Math.hypot(a.x - b.x, a.y - b.y);
 
 const same = (a: Point, b: Point) => a.x === b.x && a.y === b.y;
 
@@ -62,9 +85,12 @@ export function Surface({
   unit,
   thicknessMm,
   selection,
+  multi,
   layers,
   issue,
   onSelect,
+  onToggle,
+  onMove,
   onPlace,
   onWall,
   onDoor,
@@ -72,6 +98,10 @@ export function Surface({
   const surface = useRef<HTMLDivElement>(null);
   const svg = useRef<SVGSVGElement>(null);
   const gesture = useRef<Gesture | null>(null);
+  const touches = useRef(new Map<number, Point>());
+  const pinch = useRef<Pinch | null>(null);
+  const suppressTouchTap = useRef(false);
+  const [drag, setDrag] = useState<{ start: Point; end: Point } | null>(null);
   const initial = useRef(plan);
   const [size, setSize] = useState<Viewport>({ width: 640, height: 480 });
   const [planCamera, setPlanCamera] = useState<Camera | null>(null);
@@ -111,6 +141,8 @@ export function Surface({
   useEffect(() => {
     setAnchor(null);
     setCursor(null);
+    setDrag(null);
+    gesture.current = null;
   }, [tool, iso]);
   useEffect(() => {
     setIsoCamera(null);
@@ -172,7 +204,7 @@ export function Surface({
     );
   }
 
-  function activate(point: Point) {
+  function activate(point: Point, additive = multi) {
     if (iso || tool === "pan") return;
     if (tool === "wall") {
       const end = snap(point);
@@ -185,70 +217,99 @@ export function Surface({
       onPlace(tool, snapPoint(point, grid));
       return;
     }
-    if (tool === "select") {
-      const marker = plan.utilities.find(
-        (item) =>
-          layers[utilityCatalog[item.template].layer] &&
-          Math.hypot(point.x - item.position.x, point.y - item.position.y) <=
-            10 / camera.scale,
-      );
-      if (marker) {
-        onSelect({ kind: "utility", id: marker.id });
-        return;
-      }
-      const fixture = plan.fixtures.findLast((item) => {
-        const edge = bounds(fixtureFootprint(item));
-        return (
-          point.x >= edge.left &&
-          point.x <= edge.right &&
-          point.y >= edge.top &&
-          point.y <= edge.bottom
-        );
-      });
-      if (fixture) {
-        onSelect({ kind: "fixture", id: fixture.id });
-        return;
-      }
-    }
-    const hit = wallHit(point, plan.walls, 11 / camera.scale);
     if (tool === "door") {
+      const hit = wallHit(point, plan.walls, 11 / camera.scale);
       if (hit) onDoor(hit.wall.id, Math.round(hit.offset));
       return;
     }
-    const door =
-      hit &&
-      plan.openings.find((item) => {
-        const [start, end] = doorBounds(item);
-        return (
-          item.wallId === hit.wall.id &&
-          hit.offset >= start &&
-          hit.offset <= end
-        );
-      });
-    onSelect(
-      door
-        ? { kind: "door", id: door.id }
-        : hit
-          ? { kind: "wall", id: hit.wall.id }
-          : null,
+    const target = selectAt(plan, point, camera.scale, layers);
+    if (additive) {
+      if (target) onToggle(target);
+    } else onSelect(target ? [target] : []);
+  }
+
+  function deltaFor(from: Point, to: Point, scale: number) {
+    return snapPoint(
+      { x: (to.x - from.x) / scale, y: (to.y - from.y) / scale },
+      grid,
     );
   }
 
+  function touchDown(event: PointerEvent<SVGSVGElement>, point: Point) {
+    touches.current.set(event.pointerId, point);
+    const [a, b] = touches.current.values();
+    if (a && b) {
+      if (!pinch.current)
+        pinch.current = {
+          origin: midpoint(a, b),
+          distance: separation(a, b),
+          camera,
+        };
+      suppressTouchTap.current = true;
+      gesture.current = null;
+      setAnchor(null);
+      setCursor(null);
+      setDrag(null);
+    }
+    return suppressTouchTap.current;
+  }
+
   function pointerDown(event: PointerEvent<SVGSVGElement>) {
-    if (!event.isPrimary || (event.button !== 0 && event.button !== 1)) return;
-    event.currentTarget.focus({ preventScroll: true });
+    const touch = event.pointerType === "touch";
+    if (
+      !touch &&
+      (!event.isPrimary || (event.button !== 0 && event.button !== 1))
+    )
+      return;
+    const point = screen(event);
     event.currentTarget.setPointerCapture(event.pointerId);
+    if (touch && touchDown(event, point)) return;
+    event.currentTarget.focus({ preventScroll: true });
+    const target =
+      !iso && tool === "select"
+        ? selectAt(plan, modelPoint(point, size, camera), camera.scale, layers)
+        : null;
+    const additive = multi || event.shiftKey;
+    const selected = target ? isSelected(selection, target) : false;
     gesture.current = {
-      start: screen(event),
+      start: point,
       camera,
       pan: iso || tool === "pan" || event.button === 1,
+      additive,
+      target,
+      moving:
+        target && (!additive || selected)
+          ? selected
+            ? selection
+            : [target]
+          : [],
     };
   }
 
   function pointerMove(event: PointerEvent<SVGSVGElement>) {
+    const point = screen(event);
+    if (event.pointerType === "touch" && touches.current.has(event.pointerId)) {
+      touches.current.set(event.pointerId, point);
+      if (suppressTouchTap.current) {
+        const [a, b] = touches.current.values();
+        const base = pinch.current;
+        if (a && b && base) {
+          setCamera(
+            pinchCamera(
+              base.camera,
+              size,
+              base.origin,
+              midpoint(a, b),
+              base.distance,
+              separation(a, b),
+            ),
+          );
+        }
+        return;
+      }
+    }
     if (!event.isPrimary) return;
     const current = gesture.current;
-    const point = screen(event);
     if (current?.pan) {
       setCamera({
         x:
@@ -257,6 +318,12 @@ export function Surface({
           current.camera.y - (point.y - current.start.y) / current.camera.scale,
         scale: current.camera.scale,
       });
+      return;
+    }
+    if (current && tool === "select") {
+      if (separation(current.start, point) > 5)
+        setDrag({ start: current.start, end: point });
+      else setDrag(null);
       return;
     }
     if (!iso && tool === "wall") {
@@ -270,13 +337,43 @@ export function Surface({
     }
   }
 
-  function pointerUp(event: PointerEvent<SVGSVGElement>) {
-    const current = gesture.current;
-    if (!event.isPrimary || !current) return;
+  function releaseTouch(event: PointerEvent<SVGSVGElement>) {
+    if (event.pointerType !== "touch") return false;
+    const suppressed = suppressTouchTap.current;
+    touches.current.delete(event.pointerId);
+    if (touches.current.size < 2) pinch.current = null;
+    if (touches.current.size === 0) suppressTouchTap.current = false;
+    return suppressed;
+  }
+
+  function pointerCancel(event: PointerEvent<SVGSVGElement>) {
+    releaseTouch(event);
     gesture.current = null;
-    if (current.pan) return;
+    setCursor(null);
+    setDrag(null);
+  }
+
+  function pointerUp(event: PointerEvent<SVGSVGElement>) {
+    if (releaseTouch(event) || !event.isPrimary) return;
+    const current = gesture.current;
+    gesture.current = null;
+    setDrag(null);
+    if (!current || current.pan) return;
     const screenPoint = screen(event);
     const point = modelPoint(screenPoint, size, current.camera);
+    if (tool === "select" && separation(current.start, screenPoint) > 5) {
+      if (current.moving.length) {
+        onSelect(current.moving);
+        onMove(
+          current.moving,
+          deltaFor(current.start, screenPoint, current.camera.scale),
+        );
+      } else {
+        const from = modelPoint(current.start, size, current.camera);
+        onSelect(selectInBox(plan, from, point, layers), current.additive);
+      }
+      return;
+    }
     if (
       tool === "wall" &&
       !anchor &&
@@ -290,17 +387,35 @@ export function Surface({
       if (!same(start, end)) onWall(start, end);
       return;
     }
-    activate(point);
+    activate(point, current.additive);
   }
 
   function keyboard(event: KeyboardEvent<SVGSVGElement>) {
     if (event.key === "Escape") {
+      gesture.current = null;
+      setDrag(null);
       setAnchor(null);
       setCursor(null);
-      onSelect(null);
+      onSelect([]);
       return;
     }
     if (iso || tool === "pan") return;
+    if (
+      tool === "select" &&
+      (event.metaKey || event.ctrlKey) &&
+      event.key.toLowerCase() === "a"
+    ) {
+      event.preventDefault();
+      onSelect(
+        selectInBox(
+          plan,
+          { x: -Infinity, y: -Infinity },
+          { x: Infinity, y: Infinity },
+          layers,
+        ),
+      );
+      return;
+    }
     const point = cursor ?? snap({ x: camera.x, y: camera.y });
     if (event.key === "Enter") {
       event.preventDefault();
@@ -316,10 +431,30 @@ export function Surface({
     const delta = movement[event.key];
     if (!delta) return;
     event.preventDefault();
-    setCursor(snap({ x: point.x + delta.x, y: point.y + delta.y }));
+    if (tool === "select" && selection.length) {
+      onMove(selection, { x: Math.round(delta.x), y: Math.round(delta.y) });
+    } else setCursor(snap({ x: point.x + delta.x, y: point.y + delta.y }));
   }
 
   const current = gesture.current;
+  let rendered = plan;
+  if (drag && current?.moving.length) {
+    const candidate = previewSelection(
+      plan,
+      current.moving,
+      deltaFor(drag.start, drag.end, current.camera.scale),
+    );
+    const validWalls = candidate.walls.every((wall) => wallLength(wall) > 0);
+    if (validWalls) {
+      try {
+        validateOpenings(candidate.walls, candidate.openings);
+        rendered = candidate;
+      } catch {
+        // The committed command surfaces the placement error.
+      }
+    }
+  }
+  const marquee = drag && !current?.moving.length;
   const dragStart =
     !anchor && tool === "wall" && current && !current.pan
       ? snap(modelPoint(current.start, size, current.camera), null)
@@ -350,9 +485,11 @@ export function Surface({
         onPointerDown={pointerDown}
         onPointerMove={pointerMove}
         onPointerUp={pointerUp}
-        onPointerCancel={() => {
-          gesture.current = null;
-          setCursor(null);
+        onPointerCancel={pointerCancel}
+        onDragStart={(event) => event.preventDefault()}
+        onLostPointerCapture={(event) => {
+          if (touches.current.has(event.pointerId) || gesture.current)
+            pointerCancel(event);
         }}
         onPointerLeave={() => {
           if (!gesture.current) setCursor(null);
@@ -367,8 +504,10 @@ export function Surface({
             <IsometricDrawing plan={plan} />
           ) : (
             <PlanDrawing
-              plan={plan}
-              selection={selection}
+              plan={rendered}
+              selection={
+                drag && current?.moving.length ? current.moving : selection
+              }
               layers={layers}
               scale={camera.scale}
             />
@@ -394,6 +533,15 @@ export function Surface({
             />
           )}
         </g>
+        {marquee && (
+          <rect
+            className="cad-marquee"
+            x={Math.min(drag.start.x, drag.end.x)}
+            y={Math.min(drag.start.y, drag.end.y)}
+            width={Math.abs(drag.start.x - drag.end.x)}
+            height={Math.abs(drag.start.y - drag.end.y)}
+          />
+        )}
         {preview && (
           <text
             className="cad-measure"

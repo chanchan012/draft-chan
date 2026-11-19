@@ -10,6 +10,8 @@ import {
   Hand,
   LayoutGrid,
   MousePointer2,
+  ListChecks,
+  Trash2,
   PanelRight,
   Redo2,
   Ruler,
@@ -32,7 +34,13 @@ import {
   studioSnapshot,
   type StudioDocument,
 } from "@/lib/plans/studio-document";
-import type { Selection } from "./drawing";
+import {
+  isSelected,
+  moveSelection,
+  removeSelection,
+  selectionKey,
+  type Selection,
+} from "@/lib/plans/editor-selection";
 import { Inspector, type DoorSettings, type WallSettings } from "./inspector";
 import { Surface, type Tool } from "./surface";
 import { AuditPanel } from "./audit-panel";
@@ -60,7 +68,7 @@ export function Studio({
   actor: DraftActor;
 }) {
   const [store] = useState(() => createDraftPlanStore(initial.graph));
-  const { plan, past, future, undo, redo, execute } = useStore(store);
+  const { plan, past, future, undo, redo, executeBatch } = useStore(store);
   const [unit, setUnit] = useState(initial.unit);
   const [gridIndex, setGridIndex] = useState(1);
   const [tool, setTool] = useState<Tool>("select");
@@ -86,7 +94,20 @@ export function Studio({
     [plan, auditOpen],
   );
   const issue = audit?.issues.find(({ id }) => id === finding);
-  const [selection, setSelection] = useState<Selection | null>(null);
+  const [picked, setSelection] = useState<readonly Selection[]>([]);
+  const [multi, setMulti] = useState(false);
+  const selection = useMemo(() => {
+    const visible = new Set([
+      ...plan.walls.map(({ id }) => "wall:" + id),
+      ...plan.openings.map(({ id }) => "door:" + id),
+      ...plan.fixtures.map(({ id }) => "fixture:" + id),
+      ...plan.utilities
+        .filter((item) => layers[utilityCatalog[item.template].layer])
+        .map(({ id }) => "utility:" + id),
+    ]);
+    return picked.filter((item) => visible.has(selectionKey(item)));
+  }, [picked, plan, layers]);
+  const active = selection.length === 1 ? selection[0] : undefined;
   const [message, setMessage] = useState("");
   const [saveState, setSaveState] = useState<
     "idle" | "saving" | "error" | "conflict" | "auth"
@@ -100,21 +121,21 @@ export function Studio({
   const dirty = saved !== encoded;
 
   const activeWall =
-    selection?.kind === "wall"
-      ? plan.walls.find((w) => w.id === selection.id)
+    active?.kind === "wall"
+      ? plan.walls.find((w) => w.id === active.id)
       : undefined;
   const activeDoor =
-    selection?.kind === "door"
-      ? plan.openings.find((d) => d.id === selection.id)
+    active?.kind === "door"
+      ? plan.openings.find((d) => d.id === active.id)
       : undefined;
 
   const activeFixture =
-    selection?.kind === "fixture"
-      ? plan.fixtures.find(({ id }) => id === selection.id)
+    active?.kind === "fixture"
+      ? plan.fixtures.find(({ id }) => id === active.id)
       : undefined;
   const activeUtility =
-    selection?.kind === "utility"
-      ? plan.utilities.find(({ id }) => id === selection.id)
+    active?.kind === "utility"
+      ? plan.utilities.find(({ id }) => id === active.id)
       : undefined;
   const save = useCallback(async () => {
     if (!dirty || saving.current || saveState === "conflict") return;
@@ -183,12 +204,48 @@ export function Studio({
 
   const switchTool = useCallback((next: Tool) => {
     setTool(next);
+    if (next !== "select") setMulti(false);
     setAuditOpen(false);
     setFinding(undefined);
-    setSelection(null);
+    setSelection([]);
     setMessage("");
     if (next !== "pan") setIso(false);
   }, []);
+
+  const edit = useCallback(
+    (commands: readonly PlanCommand[]) => {
+      try {
+        const changed = executeBatch(commands, actor);
+        setMessage("");
+        return changed;
+      } catch (error) {
+        setMessage(
+          error instanceof Error
+            ? error.message
+            : "This edit could not be applied.",
+        );
+        return false;
+      }
+    },
+    [executeBatch, actor],
+  );
+  function command(input: PlanCommand) {
+    return edit([input]);
+  }
+  const remove = useCallback(() => {
+    if (edit(removeSelection(plan, selection))) setSelection([]);
+  }, [edit, plan, selection]);
+
+  function choose(items: readonly Selection[], append = false) {
+    setSelection(
+      append
+        ? [
+            ...selection,
+            ...items.filter((item) => !isSelected(selection, item)),
+          ]
+        : items,
+    );
+  }
 
   useEffect(() => {
     function keydown(event: globalThis.KeyboardEvent) {
@@ -200,7 +257,7 @@ export function Studio({
         return;
       }
       if (
-        event.target instanceof HTMLElement &&
+        event.target instanceof Element &&
         event.target.closest("input, select, textarea, [contenteditable]")
       )
         return;
@@ -211,27 +268,22 @@ export function Studio({
         return;
       }
       if (modifier || event.altKey) return;
+      if (
+        (key === "backspace" || key === "delete") &&
+        selection.length &&
+        !iso
+      ) {
+        event.preventDefault();
+        remove();
+        return;
+      }
       const match = tools.find((item) => item.shortcut.toLowerCase() === key);
       if (match) switchTool(match.id);
     }
     window.addEventListener("keydown", keydown);
     return () => window.removeEventListener("keydown", keydown);
-  }, [save, redo, undo, switchTool]);
+  }, [save, redo, undo, switchTool, selection.length, iso, remove]);
 
-  function command(input: PlanCommand) {
-    try {
-      const changed = execute(input, actor);
-      setMessage("");
-      return changed;
-    } catch (error) {
-      setMessage(
-        error instanceof Error
-          ? error.message
-          : "This edit could not be applied.",
-      );
-      return false;
-    }
-  }
   function drawWall(start: Point, end: Point) {
     return command({
       type: "wall.add",
@@ -260,14 +312,22 @@ export function Studio({
             utility: { template: utility, position, id },
           });
     if (added) {
-      setSelection({ kind, id });
+      setSelection([{ kind, id }]);
       setTool("select");
     }
   }
   function toggleLayer(layer: UtilityLayer) {
     setLayers((visible) => ({ ...visible, [layer]: !visible[layer] }));
-    if (activeUtility && utilityCatalog[activeUtility.template].layer === layer)
-      setSelection(null);
+    if (layers[layer]) {
+      const hidden = new Set(
+        plan.utilities
+          .filter((item) => utilityCatalog[item.template].layer === layer)
+          .map(({ id }) => id),
+      );
+      setSelection((items) =>
+        items.filter((item) => item.kind !== "utility" || !hidden.has(item.id)),
+      );
+    }
   }
 
   const status =
@@ -319,7 +379,7 @@ export function Studio({
             aria-pressed={iso}
             onClick={() => {
               setIso(true);
-              setSelection(null);
+              setSelection([]);
             }}
           >
             <Box size={15} /> Isometric
@@ -402,6 +462,32 @@ export function Studio({
               <span>{label}</span>
             </button>
           ))}
+          <div className="studio-selection-actions">
+            <button
+              aria-label="Multi-select"
+              title="Multi-select (or Shift-click)"
+              aria-pressed={tool === "select" && multi && !iso}
+              onClick={() => {
+                if (iso || tool !== "select") switchTool("select");
+                setMulti(tool !== "select" || iso || !multi);
+              }}
+            >
+              <ListChecks size={17} />
+              <span>Multi-select</span>
+            </button>
+            <button
+              aria-label="Delete selection"
+              title="Delete selection (Backspace or Delete)"
+              disabled={!selection.length || iso}
+              onClick={remove}
+            >
+              <Trash2 size={16} />
+              <span>Delete</span>
+            </button>
+          </div>
+          <span className="studio-selection-count" aria-live="polite">
+            {selection.length ? selection.length + " selected" : ""}
+          </span>
         </div>
 
         <Surface
@@ -413,10 +499,21 @@ export function Studio({
           unit={unit}
           thicknessMm={wall.thicknessMm}
           selection={selection}
+          multi={multi}
           layers={layers}
           issue={issue}
           onPlace={place}
-          onSelect={setSelection}
+          onSelect={choose}
+          onToggle={(item) =>
+            setSelection(
+              isSelected(selection, item)
+                ? selection.filter(
+                    (entry) => selectionKey(entry) !== selectionKey(item),
+                  )
+                : [...selection, item],
+            )
+          }
+          onMove={(items, delta) => edit(moveSelection(plan, items, delta))}
           onWall={drawWall}
           onDoor={(wallId, offsetMm) =>
             command({
@@ -461,6 +558,7 @@ export function Studio({
             <Inspector
               plan={plan}
               tool={tool}
+              selectedCount={selection.length}
               unit={unit}
               gridIndex={gridIndex}
               wall={wall}
@@ -490,56 +588,40 @@ export function Studio({
               placementFields={
                 activeFixture || tool === "fixture" ? (
                   <FixtureFields
-                    key={JSON.stringify([activeFixture ?? fixture, unit])}
+                    key={activeFixture?.id ?? "fixture-defaults"}
                     unit={unit}
                     value={activeFixture ?? fixture}
                     active={activeFixture}
-                    onSet={(value, position) => {
-                      if (activeFixture && position)
+                    onSet={(changes) => {
+                      if (activeFixture)
                         command({
                           type: "fixture.update",
                           id: activeFixture.id,
-                          changes: { ...value, position },
+                          changes,
                         });
-                      else {
-                        setFixture(value);
-                        setInspectorOpen(false);
-                      }
+                      else setFixture((value) => ({ ...value, ...changes }));
                     }}
                   />
                 ) : activeUtility || tool === "utility" ? (
                   <UtilityFields
-                    key={JSON.stringify([activeUtility ?? utility, unit])}
+                    key={activeUtility?.id ?? "utility-defaults"}
                     unit={unit}
                     value={activeUtility?.template ?? utility}
                     active={activeUtility}
-                    onSet={(template, position) => {
-                      ensureLayer(template);
-                      if (activeUtility && position)
+                    onSet={(changes) => {
+                      if (changes.template) ensureLayer(changes.template);
+                      if (activeUtility)
                         command({
                           type: "utility.update",
                           id: activeUtility.id,
-                          changes: { template, position },
+                          changes,
                         });
-                      else {
-                        setUtility(template);
-                        setInspectorOpen(false);
-                      }
+                      else if (changes.template) setUtility(changes.template);
                     }}
                   />
                 ) : undefined
               }
-              onRemove={() => {
-                if (activeWall)
-                  command({ type: "wall.remove", id: activeWall.id });
-                if (activeDoor)
-                  command({ type: "door.remove", id: activeDoor.id });
-                if (activeFixture)
-                  command({ type: "fixture.remove", id: activeFixture.id });
-                if (activeUtility)
-                  command({ type: "utility.remove", id: activeUtility.id });
-                setSelection(null);
-              }}
+              onRemove={remove}
             />
           )}
         </aside>

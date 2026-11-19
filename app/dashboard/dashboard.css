@@ -244,3 +244,80 @@
 .dash-form-actions {
   flex-wrap: wrap;
 }
+
+.dash-content {
+  padding-top: clamp(18px, 3.3vh, 44px);
+}
+.dash-heading {
+  padding-bottom: 15px;
+  align-items: center;
+}
+.dash-heading h1 {
+  font-size: clamp(28px, 4vw, 48px);
+  margin-top: 0;
+}
+.dash-heading .primary {
+  min-height: 36px;
+  padding-block: 8px;
+  gap: 7px;
+}
+.dash-controls {
+  margin: 16px 0 12px;
+}
+.dash-card {
+  position: relative;
+  overflow: visible;
+}
+.dash-card-link {
+  display: block;
+  border-radius: inherit;
+  overflow: hidden;
+}
+.dash-card-actions {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+}
+.dash-more {
+  width: 36px;
+  height: 36px;
+  display: grid;
+  place-items: center;
+  border-radius: 5px;
+  border: 1px solid var(--line);
+  background: var(--paper);
+  margin-left: auto;
+}
+.dash-more:hover,
+.dash-more[aria-expanded="true"] {
+  background: #eceee3;
+}
+.dash-card-menu:not([hidden]) {
+  position: absolute;
+  z-index: 3;
+  top: calc(100% + 4px);
+  right: 0;
+  width: 132px;
+  display: grid;
+  gap: 2px;
+  padding: 4px;
+  border-radius: 5px;
+  border: 1px solid var(--line);
+  background: var(--paper);
+  box-shadow: 0 5px 18px #242a2023;
+}
+.dash-card-menu button {
+  min-height: 35px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  border-radius: 3px;
+  padding-inline: 8px;
+  font-size: 13px;
+}
+.dash-card-menu button:hover {
+  background: #eceee3;
+}
+.dash-card-menu button:last-child {
+  color: #943b23;
+}

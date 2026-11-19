@@ -136,9 +136,6 @@ test("draws an ortho wall and door, toggles isometric, and saves the graph", asy
   const inspector = page.getByRole("complementary", { name: "Inspector" });
   if (await toggle.isVisible()) await toggle.click();
   await inspector.getByLabel("Width (mm)").fill("800");
-  await inspector
-    .getByRole("button", { name: "Apply settings", exact: true })
-    .click();
   if (await toggle.isVisible())
     await inspector.getByRole("button", { name: "Close inspector" }).click();
   await point(page, 0.5, 0.5);
@@ -214,14 +211,20 @@ test("places, edits, audits and reloads catalog items and utility layers", async
   await openInspector();
   await inspector.getByLabel("Fixture template").selectOption("queenBed");
   await inspector.getByLabel("Width (mm)").fill("1600");
-  await inspector
-    .getByRole("button", { name: "Apply fixture settings" })
-    .click();
+  await closeInspector();
   await point(page, 0.48, 0.52);
   await expect(page.locator("[data-fixture]")).toHaveCount(1);
   await openInspector();
+  const selectedWidth = inspector.getByLabel("Width (mm)");
+  await selectedWidth.fill("1700");
+  await expect(page.locator("[data-fixture] > rect")).toHaveAttribute(
+    "width",
+    "1700",
+  );
+  await selectedWidth.press("Backspace");
+  await expect(page.locator("[data-fixture]")).toHaveCount(1);
+  await selectedWidth.fill("1600");
   await inspector.getByLabel("Rotation").selectOption("90");
-  await inspector.getByRole("button", { name: "Update fixture" }).click();
   await expect(page.locator("[data-fixture]")).toHaveAttribute(
     "transform",
     /rotate\(90\)/,
@@ -240,9 +243,7 @@ test("places, edits, audits and reloads catalog items and utility layers", async
   await page.getByRole("button", { name: "Utility", exact: true }).click();
   await openInspector();
   await inspector.getByLabel("Utility symbol").selectOption("drain");
-  await inspector
-    .getByRole("button", { name: "Apply utility settings" })
-    .click();
+  await closeInspector();
   await point(page, 0.75, 0.35);
   await expect(page.locator('[data-layer="plumbing"]')).toHaveCount(1);
   await openInspector();
@@ -281,4 +282,93 @@ test("places, edits, audits and reloads catalog items and utility layers", async
   await page.reload();
   await expect(page.locator("[data-fixture]")).toHaveCount(2);
   await expect(page.locator("[data-utility]")).toHaveCount(2);
+});
+
+test("pinches both ways, multi-selects, moves and deletes a group in one undo step", async ({
+  page,
+  context,
+}) => {
+  await studio(page);
+  const canvas = page.getByRole("region", { name: "Drawing surface" });
+  const box = (await canvas.boundingBox())!;
+  const scale = async () => {
+    const transform = await page
+      .locator(".studio-canvas > g[transform]")
+      .getAttribute("transform");
+    return Number(/scale\(([^)]+)\)/.exec(transform ?? "")?.[1]);
+  };
+  const session = await context.newCDPSession(page);
+  const y = box.y + box.height * 0.48;
+  const x = box.x + box.width * 0.5;
+  const finger = (delta: number, id: number) => ({ x: x + delta, y, id });
+  await page.getByRole("button", { name: "Wall", exact: true }).click();
+  const before = await scale();
+  await session.send("Input.dispatchTouchEvent", {
+    type: "touchStart",
+    touchPoints: [finger(-25, 0)],
+  });
+  await session.send("Input.dispatchTouchEvent", {
+    type: "touchStart",
+    touchPoints: [finger(-25, 0), finger(25, 1)],
+  });
+  await session.send("Input.dispatchTouchEvent", {
+    type: "touchMove",
+    touchPoints: [finger(-45, 0), finger(45, 1)],
+  });
+  await expect.poll(scale).toBeGreaterThan(before * 1.5);
+  await session.send("Input.dispatchTouchEvent", {
+    type: "touchMove",
+    touchPoints: [finger(-17, 0), finger(17, 1)],
+  });
+  await expect.poll(scale).toBeLessThan(before);
+  await session.send("Input.dispatchTouchEvent", {
+    type: "touchEnd",
+    touchPoints: [],
+  });
+  await expect(page.locator("[data-wall]")).toHaveCount(0);
+  await page.getByRole("button", { name: "Fit drawing" }).click();
+
+  const utility = page.getByRole("button", { name: "Utility", exact: true });
+  await utility.click();
+  await point(page, 0.36, 0.52);
+  await utility.click();
+  await point(page, 0.65, 0.52);
+  const markers = page.locator("[data-utility]");
+  await expect(markers).toHaveCount(2);
+  await page.getByRole("button", { name: "Select", exact: true }).click();
+  const screenPoint = (rx: number, ry: number) =>
+    [box.x + box.width * rx, box.y + box.height * ry] as const;
+  await page.mouse.move(...screenPoint(0.22, 0.38));
+  await page.mouse.down();
+  await page.mouse.move(...screenPoint(0.8, 0.67), { steps: 6 });
+  await expect(page.locator(".cad-marquee")).toBeVisible();
+  await page.mouse.up();
+  await expect(page.locator("[data-utility].is-selected")).toHaveCount(2);
+  const initial = await markers.first().getAttribute("transform");
+  const anchor = (await markers.first().boundingBox())!;
+  await page.mouse.move(
+    anchor.x + anchor.width / 2,
+    anchor.y + anchor.height / 2,
+  );
+  await page.mouse.down();
+  await page.mouse.move(
+    anchor.x + anchor.width / 2,
+    anchor.y + anchor.height / 2 + 32,
+    { steps: 5 },
+  );
+  await page.mouse.up();
+  await expect(markers.first()).not.toHaveAttribute("transform", initial!);
+  await page.keyboard.press("Backspace");
+  await expect(markers).toHaveCount(0);
+  await page.getByRole("button", { name: "Undo", exact: true }).click();
+  await expect(markers).toHaveCount(2);
+  await page.getByRole("button", { name: "Undo", exact: true }).click();
+  await expect(markers.first()).toHaveAttribute("transform", initial!);
+  await page.getByRole("button", { name: "Multi-select" }).click();
+  await point(page, 0.36, 0.52);
+  await point(page, 0.65, 0.52);
+  await expect(page.locator("[data-utility].is-selected")).toHaveCount(2);
+  await page.getByRole("button", { name: "Delete selection" }).click();
+  await expect(markers).toHaveCount(0);
+  await frame(page);
 });

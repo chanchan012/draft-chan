@@ -53,9 +53,11 @@ test("member grid, CRUD dialogs and area units", async ({ page }) => {
   // The private route is tested separately. Mount its real client component
   // with a fixture account and mocked RPC to exercise the responsive UI.
   await page.goto("/");
-  const globalStyles = await page.locator('link[rel="stylesheet"]').evaluateAll(
-    (links) => links.map((link) => (link as HTMLLinkElement).href),
-  );
+  const globalStyles = await page
+    .locator('link[rel="stylesheet"]')
+    .evaluateAll((links) =>
+      links.map((link) => (link as HTMLLinkElement).href),
+    );
   await page.route("**/tests/dashboard.js", (route) =>
     route.fulfill({ contentType: "application/javascript", body: script }),
   );
@@ -92,13 +94,33 @@ test("member grid, CRUD dialogs and area units", async ({ page }) => {
   await page.getByLabel("Plan name").fill("Office");
   await page.getByLabel("Starting layout").selectOption("room");
   await page.getByRole("button", { name: "Create floorplan" }).click();
-  await page.getByRole("button", { name: /Office.*24 m².*258.33 ft²/ }).click();
-  await expect(page.getByRole("link", { name: "Open Studio" })).toHaveAttribute("href", /^\/studio\//);
+  const office = page.getByRole("link", { name: /Office.*24 m².*258.33 ft²/ });
+  const href = (await office.getAttribute("href"))!;
+  expect(href).toMatch(/^\/studio\//);
+  await page.route("**" + href, (route) =>
+    route.fulfill({ contentType: "text/html", body: "<h1>Office Studio</h1>" }),
+  );
+  await office.click();
+  await expect(page).toHaveURL(href);
+  await expect(
+    page.getByRole("heading", { name: "Office Studio" }),
+  ).toBeVisible();
+  await expect(page.getByRole("dialog")).toHaveCount(0);
+  await page.goto("/dashboard");
+  const actions = page.getByRole("button", {
+    name: "Actions for Office",
+    exact: true,
+  });
+  await actions.click();
+  await page.keyboard.press("Escape");
+  await expect(actions).toHaveAttribute("aria-expanded", "false");
+  await expect(actions).toBeFocused();
+  await actions.click();
   await page.getByRole("button", { name: "Rename", exact: true }).click();
   await page.getByLabel("Plan name").fill("Office B");
   await page.getByRole("button", { name: "Save name" }).click();
   await page.getByLabel("Search floorplans").fill("Office B");
-  await page.getByRole("button", { name: /Office B/ }).click();
+  await page.getByRole("button", { name: "Actions for Office B" }).click();
   await page.getByRole("button", { name: "Delete", exact: true }).click();
   await page
     .getByRole("button", { name: "Delete floorplan", exact: true })

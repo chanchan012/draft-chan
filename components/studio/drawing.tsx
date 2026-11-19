@@ -16,10 +16,8 @@ import type {
   Wall,
 } from "@/lib/plans/model";
 
-export type Selection = {
-  kind: "wall" | "door" | "fixture" | "utility";
-  id: string;
-};
+import { isSelected, type Selection } from "@/lib/plans/editor-selection";
+export type { Selection } from "@/lib/plans/editor-selection";
 export type WallPreview = { start: Point; end: Point };
 const pair = ({ x, y }: Point) => `${x},${y}`;
 const ring = (points: Point[]) => "M" + points.map(pair).join(" ") + "Z";
@@ -146,7 +144,7 @@ export function PlanDrawing({
   scale,
 }: {
   plan: DraftPlanState;
-  selection: Selection | null;
+  selection: readonly Selection[];
   layers: Record<UtilityLayer, boolean>;
   scale: number;
 }) {
@@ -168,7 +166,7 @@ export function PlanDrawing({
           className={
             "cad-wall" +
             (wall.kind === "exterior" ? " is-exterior" : "") +
-            (selection?.kind === "wall" && selection.id === wall.id
+            (isSelected(selection, { kind: "wall", id: wall.id })
               ? " is-selected"
               : "")
           }
@@ -189,7 +187,7 @@ export function PlanDrawing({
         <FixtureShape
           key={fixture.id}
           fixture={fixture}
-          active={selection?.kind === "fixture" && selection.id === fixture.id}
+          active={isSelected(selection, { kind: "fixture", id: fixture.id })}
         />
       ))}
       {plan.openings.map((door) => (
@@ -197,14 +195,16 @@ export function PlanDrawing({
           key={door.id}
           door={door}
           wall={walls.get(door.wallId)!}
-          active={selection?.kind === "door" && selection.id === door.id}
+          active={isSelected(selection, { kind: "door", id: door.id })}
         />
       ))}
       {plan.utilities.map((marker) => {
         const template = utilityCatalog[marker.template];
         if (!layers[template.layer]) return null;
-        const active =
-          selection?.kind === "utility" && selection.id === marker.id;
+        const active = isSelected(selection, {
+          kind: "utility",
+          id: marker.id,
+        });
         return (
           <g
             key={marker.id}
