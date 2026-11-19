@@ -14,7 +14,7 @@ The Upstash limiter allows 60 requests per 60-second sliding window. It uses the
 
 ## Persistence
 
-The Drizzle source of truth is db/schema.ts. Its checked-in SQL migration creates the display_unit enum (mm, in) and floorplans table. Each row contains a UUID id, Clerk owner_id, name, display unit, nonnegative revision, JSONB graph and timestamptz creation/update times. The owner and update time form a composite index. Graph version 1 has arrays for walls, rooms, openings, fixtures and dimensions. The default graph is empty. Future CRUD must scope every query by the verified owner, update updated_at on writes and compare revisions for concurrent updates.
+The Drizzle source of truth is db/schema.ts. Its checked-in SQL migration creates the display_unit enum (mm, in) and floorplans table. Each row contains a UUID id, Clerk owner_id, name, display unit, nonnegative revision, JSONB graph and timestamptz creation/update times. The owner and update time form a composite index. Graph version 1 has arrays for walls, rooms, openings, fixtures and dimensions. The default graph is empty. Dashboard RPC scopes queries by the authenticated owner and compares revisions for rename and delete.
 
 The Neon HTTP adapter connects lazily through DATABASE_URL. M1.1 performs no database writes at runtime. Migrations run explicitly against the chosen database.
 
@@ -22,4 +22,14 @@ The Neon HTTP adapter connects lazily through DATABASE_URL. M1.1 performs no dat
 
 GitHub repository chanchan012/draft-chan supplies the tested branches to the Vercel Next.js project draft-chan. Vercel serves the static landing page and image assets, dynamic sign-in/sign-up routes, the Next proxy and the Hono catch-all function. The production domain is https://draft-chan.vercel.app. Production and Preview use the same Clerk development instance, so an account can sign in on either deployment. Production uses Upstash throttling and Preview uses per-process throttling. Both environments point to the same Neon database, `draft`. The `draft_app` role has read and write access to floorplans. Apply schema migrations with the database owner credential.
 
-The shared database has db/migrations/0000_broad_spyke.sql applied and recorded in the Drizzle migration ledger. The dashboard, background job endpoint, SSE endpoint, versioned command engine and MCP transports are future subgoals.
+The shared database has db/migrations/0000_broad_spyke.sql applied and recorded in the Drizzle migration ledger. The dashboard and job endpoint arrived in M1.2. SSE, the command engine and MCP transports remain future subgoals.
+
+## M1.2 dashboard and background processing
+
+The landing workspace link and Clerk fallback redirects lead to /dashboard. The dashboard fetches /api/floorplans. Guests see the read-only sample. Members can create, inspect, search, rename and delete plans. The shell occupies 100dvh and the library scrolls internally. See [DESIGN.md](../DESIGN.md) for the design capture and styling decisions.
+
+The collection supports GET and POST. The /api/floorplans/:id route supports GET, PATCH and DELETE. Mutations validate strict request bodies. Creation uses a client-generated UUID so retries stay on one row. Rename and delete require the observed revision and return 409 for a stale or unavailable plan. Every user-facing database operation includes the verified Clerk owner. Unsafe requests with a foreign Origin receive HTTP 403.
+
+Room polygons are arrays of {x,y} vertices in millimeters. The rectangle starter records one room in the version 1 graph. Dashboard area uses the sum of absolute shoelace areas converted to m² and ft². Empty and pre-M1.2 graphs without room polygons give zero. M2.1 will derive rooms from connected walls.
+
+Migration db/migrations/0001_watery_rachel_grey.sql adds nullable floorplans.thumbnail text. A null value means pending. The Inngest app draft-cad-studio serves /api/inngest. Creation sends draft/floorplan.thumbnail.requested with the plan UUID. The render-floorplan-thumbnail function generates SVG from numeric coordinates and writes only a still-pending matching revision. Deleted plans and duplicate deliveries are harmless. The recover-pending-thumbnails function scans up to 100 pending rows every 15 minutes, including legacy rows and failed initial sends. The client refreshes pending thumbnails while the library is visible.

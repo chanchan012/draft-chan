@@ -26,16 +26,6 @@ The initial Drizzle migration is already applied to `draft`. For future migratio
 npm run db:migrate
 ```
 
-## Start M1.2
-
-```sh
-git switch main
-git pull --ff-only
-git switch -c feature/1.2-dashboard
-```
-
-Brief the dashboard schema/API changes and acceptance criteria. Implement owner-scoped CRUD, square-foot/square-meter stats and the Inngest thumbnail pipeline. Add RPC and job tests plus browser grid and viewport coverage. Follow the requested test, merge, build, deployment and documentation cycle.
-
 ## M1.1 release checkpoint
 
 Source is at https://github.com/chanchan012/draft-chan. The feature branch is feature/1.1-foundation. Application merge 0a0adcde04ab7fb14818dbdcea9e570e89d977b2 passed the production build. The main branch also carries the post-release documentation.
@@ -50,7 +40,27 @@ The Vercel project ID is prj_TTJ9f3B8EwiM9e76d8iknhBTSPBx. Recheck guest product
 ```sh
 curl -fsS https://draft-chan.vercel.app/api/session
 curl -sS -o /dev/null -w '%{http_code}\n' https://draft-chan.vercel.app/api/account
-PLAYWRIGHT_BASE_URL=https://draft-chan.vercel.app npm run test:e2e
 ```
 
-Expected responses are a guest identity and HTTP 401. In a managed network, configure the Playwright runner to use the environment's outbound HTTPS proxy and certificate trust. Credentialed sign-in and multi-instance rate limiting remain to be verified. M1.2 should test owner-scoped CRUD against the floorplans schema. Production and Preview access the same data, so use their configured Clerk identity boundaries for all writes. There are no Inngest, CAD geometry, export or MCP endpoints in this release.
+Expected responses are a guest identity and HTTP 401. In a managed network, configure the Playwright runner to use the environment's outbound HTTPS proxy and certificate trust. Credentialed sign-in and multi-instance rate limiting remain to be verified. M1.2 should test owner-scoped CRUD against the floorplans schema. Production and Preview access the same data, so use their configured Clerk identity boundaries for all writes. The M1.2 checkpoint below supersedes the initial dashboard and Inngest status.
+
+## M1.2 release checkpoint
+
+The application merge is 32746d1d4463b0c926dec17a0381c0cdce5ec0cb. Production deployment dpl_BE57tzfgWqERwgdW9QLBEaqJrSWv and Preview deployment dpl_GKu517pHjJkgnbezQhYb8hd8dQ2J reached READY. [Dashboard](https://draft-chan.vercel.app/dashboard) · [Feature preview](https://draft-chan-iksc4g24o-chanchans-projects-aada625f.vercel.app/dashboard)
+
+The shared Neon database draft has migration 0001 applied with Drizzle timestamp 1795051066909 and hash 8f776ab5daa1754cff217c662c7144d92113909faa43173ff5978bb4e358d695. The application role can update the thumbnail column. For a fresh database, run the checked-in migrations with a schema owner using the instructions above.
+
+Inngest Production is synced to https://draft-chan.vercel.app/api/inngest. Event 01M7RPRD41WAYN0R9VC6C1QN9S produced completed run 01M7RPRD8YA57T0ZMCKY0D1VA2 and a stored SVG. The disposable plan was removed. Preview has Clerk and Neon available. Live Preview thumbnail jobs require separate Inngest environment configuration. The checkout's Vitest worker tests use PGlite and its browser suite uses guest configuration plus intercepted member RPC responses. Live credentialed browser CRUD remains unverified because automated sign-up stopped at Clerk verification.
+
+## Start M2.1
+
+```sh
+git switch main
+git pull --ff-only
+git switch -c feature/2.1-geometry
+npm ci
+npm run typecheck
+npm test
+```
+
+Brief the graph compatibility rules before building the geometry engine. Preserve existing blank and rectangular starter graphs. Add undo/redo, wall joining and polygon area tests, then run the complete viewport and CRUD regression suite. Follow the requested merge, deployment and documentation cycle.

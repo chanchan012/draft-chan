@@ -23,6 +23,23 @@ Production and Preview use the same Neon database, `draft`, with the `draft_app`
 
 The viewport matrix covers 1440×900, 768×1024, 390×844, 320×568 and 844×390. The production browser run used the managed network proxy with runner-local certificate handling. Separate HTTPS smoke requests using the system trust store verified the production origin. The post-release Vercel runtime error check returned zero errors.
 
+## M1.2 · Dashboard and thumbnails
+
+Released 2026-11-19. The feature commit is `6cf6dc3` on `feature/1.2-dashboard`. The tested application merge is `32746d1`.
+
+| Phase | Result |
+| --- | --- |
+| Brief | Dashboard CRUD, dual-unit area summaries, responsive grid and background thumbnails. |
+| Build | Firecrawl design capture informed the dashboard. Signed-in users can start blank or with a rectangular room, inspect, rename, search and delete their plans. Guests can open the sample. |
+| Test | Strict TypeScript, 14 Vitest tests and 35 Playwright tests passed. PostgreSQL-backed tests cover authorization, persisted mutations, stale revisions and worker retries. Member browser flows used intercepted RPC responses at five viewport sizes. |
+| Merge | Feature branch merged to main and both branches pushed to GitHub. |
+| Deploy | Production build passed. Production and Preview reached READY. Neon migration 0001 is applied. Inngest Cloud synced the production app and completed a thumbnail run. |
+| Document | Architecture and resume handoff include the graph layout, migration, worker recovery and verification boundaries. |
+
+The public dashboard fit a 390×844 viewport. The signed-out plan endpoint returned HTTP 401 and the dashboard sign-in action loaded Clerk. Automated signup reached Clerk request verification, leaving the live credentialed browser CRUD flow unverified. Production job run `01M7RPRD8YA57T0ZMCKY0D1VA2` returned `written: true`. The test plan held a 443-character SVG with a room polygon and was deleted after inspection.
+
+[Public dashboard](https://draft-chan.vercel.app/dashboard) · [M1.2 preview](https://draft-chan-iksc4g24o-chanchans-projects-aada625f.vercel.app/dashboard) · [Design reference](DESIGN.md)
+
 ## Next subgoal
 
-M1.2 adds owner-scoped dashboard CRUD, square-foot/square-meter statistics and Inngest thumbnail jobs. M2–M4 remain pending. Geometry, drawing commands, editable CAD, exports, real-time synchronization and MCP parity belong to those milestones.
+M2.1 adds deterministic geometry, wall intersections, room solving, command history and attribution. The CAD editor, exports, real-time collaboration and MCP remain later milestones.
