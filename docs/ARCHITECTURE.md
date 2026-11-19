@@ -4,7 +4,7 @@
 
 Next.js 16 App Router renders the landing page and optional catch-all Clerk sign-in and sign-up routes. React 19 handles the sample viewer and native modal field guide. Tailwind 4 and app/globals.css supply responsive layout and locally bundled fonts. The page shell uses 100dvh. Dialogs and the authentication region permit internal scrolling on short screens.
 
-The public landing displays a static isometric illustration. Signed-in members can open the interactive sample from the dashboard, switch views, magnify the drawing, and toggle the grid. Its two-dimensional SVG and isometric image are independent study drawings. The shared graph geometry engine begins in M2.
+The public landing displays a static isometric illustration. Signed-in members can open the interactive sample from the dashboard, switch views, magnify the drawing, and toggle the grid. Its two-dimensional SVG and isometric image are independent study drawings. The shared graph engine is described under M2.1.
 
 ## Identity and RPC
 
@@ -32,6 +32,14 @@ The landing workspace link and Clerk fallback redirects lead to /dashboard. The 
 
 The collection supports GET and POST. The /api/floorplans/:id route supports GET, PATCH and DELETE. Mutations validate strict request bodies. Creation uses a client-generated UUID so retries stay on one row. Rename and delete require the observed revision and return 409 for a stale or unavailable plan. Every user-facing database operation includes the verified Clerk owner. Unsafe requests with a foreign Origin receive HTTP 403.
 
-Room polygons are arrays of {x,y} vertices in millimeters. The rectangle starter records one room in the version 1 graph. Dashboard area uses the sum of absolute shoelace areas converted to m² and ft². Empty and pre-M1.2 graphs without room polygons give zero. M2.1 will derive rooms from connected walls.
+Room polygons are arrays of {x,y} vertices in millimeters. The rectangle starter records one room in the version 1 graph. Dashboard area uses the sum of absolute shoelace areas converted to m² and ft². Empty and pre-M1.2 graphs without room polygons give zero. M2.1 derives rooms from connected walls and subtracts inner boundaries from the surrounding room area.
 
 Migration db/migrations/0001_watery_rachel_grey.sql adds nullable floorplans.thumbnail text. A null value means pending. The Inngest app draft-cad-studio serves /api/inngest. Creation sends draft/floorplan.thumbnail.requested with the plan UUID. The render-floorplan-thumbnail function generates SVG from numeric coordinates and writes only a still-pending matching revision. Deleted plans and duplicate deliveries are harmless. The recover-pending-thumbnails function scans up to 100 pending rows every 15 minutes, including legacy rows and failed initial sends. The client refreshes pending thumbnails while the library is visible.
+
+## M2.1 geometry and command store
+
+The graph stays on JSON version 1 and uses the existing PostgreSQL migrations. A wall is identified by its authored ID and carries `start`, `end`, `thicknessMm`, `kind`, and optional `createdBy` and `updatedBy` actors. Authored endpoints are integer millimeters within ±1,000,000 mm. Thickness is a positive integer from 1 through 10,000 mm. Actor records contain a `kind` of `human` or `ai` and an `id`. Dashboard creation uses the verified Clerk owner for newly authored walls. A saved rectangular starter gets four deterministic 120 mm interior walls when loaded into the store. Legacy starter walls have empty attribution until edited.
+
+`solveWallTopology` in `lib/plans/wall-topology.ts` intersects centerlines, splits T-junctions and crossings, deduplicates collinear spans while retaining their contributing wall IDs, and walks the resulting graph to derive bounded faces. Intersections are reduced rational coordinates internally and are emitted as millimeter numbers. Canonical boundary order and geometry-derived room IDs keep a layout stable across wall order, reversal, and redundant collinear subdivisions. The room record contains `id`, `polygon`, and optional `holes`. Inner enclosures yield a bounded room of their own and a hole in the surrounding room. Dashboard areas and thumbnail polygons use these same boundaries. Areas measure to wall centerlines and exclude holes.
+
+`createDraftPlanStore` in `lib/plans/command-store.ts` wraps a Zustand vanilla store and accepts the saved graph. `execute(command, actor)` validates wall add, update, and remove operations before committing to the store. Each edit records the actor and its forward and inverse Immer patches. Undo and redo restore walls, rooms, and attribution together. These histories belong to the local store. The dashboard RPC still returns plan cards, and Studio will use an owner-scoped graph read to hydrate the store.

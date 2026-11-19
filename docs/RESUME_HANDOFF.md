@@ -60,15 +60,23 @@ PLAYWRIGHT_CHECK_CLERK=1 PLAYWRIGHT_BASE_URL=https://draft-chan.vercel.app npm r
 
 Expect page redirects to Draft’s /sign-in and HTTP 401 with a JSON error from the API. All 35 Playwright checks passed locally and on production. The layout matrix covers 1440×900, 768×1024, 390×844, 320×568 and 844×390. To run from a managed network, use PLAYWRIGHT_PROXY_SERVER if needed and configure the runner’s certificate trust. Live sign-in and sign-up form rendering passed. Credentialed live browser CRUD still needs an authenticated test session. Fixtures cover the signed-in UI and PGlite verifies owner-scoped writes.
 
-## Start M2.1
+## M2.1 release checkpoint
+
+The verified feature head is `1c2894a816630466da26298dfaeed75f27241bab` on `feature/2.1-geometry`. The application merge is `5331c5742aa01a5e424fcd96a64bae86dd69197b`. Production deployment `dpl_EkcEwwnxFEB6EMi4jbcRPVX5T6Xu` and Preview deployment `dpl_6kiNBV8v7AWideruhUBnymVMaFZX` reached READY. [Production](https://draft-chan.vercel.app) · [Feature preview](https://draft-chan-86qe8lmsb-chanchans-projects-aada625f.vercel.app)
+
+The Neon database uses the same Drizzle migrations through 0001. JSON graph version 1 now carries typed walls and optional room holes. Dashboard starters write walls and a derived room and record the verified owner as the author. Legacy blank and rectangular starters load into the store. The rectangle loader uses 120 mm interior walls and computes the original area from the wall centerlines. Existing saved rows can be read in place.
+
+To run the engine tests alone, use `npm test -- tests/geometry.unit.test.ts`. The verified release passed strict TypeScript, 29 Vitest tests, and the 35-check Chromium matrix against `npm run build` served with `npm start`. Use `PLAYWRIGHT_BASE_URL=http://127.0.0.1:3000 npm run test:e2e` with the server running. The database-backed RPC test verifies owner attribution and starter geometry. The browser dashboard tests intercept member RPC.
+
+## Start M2.2
 
 ```sh
 git switch main
 git pull --ff-only
-git switch -c feature/2.1-geometry
+git switch -c feature/2.2-studio
 npm ci
 npm run typecheck
 npm test
 ```
 
-Brief the graph compatibility rules before building the geometry engine. Preserve existing blank and rectangular starter graphs. Add undo/redo, wall joining and polygon area tests, then run the complete viewport and CRUD regression suite. Follow the requested merge, deployment and documentation cycle.
+Start with an owner-scoped graph read for the protected `/studio/[id]` route. Hydrate `createDraftPlanStore(graph)` and call `getState().execute(command, actor)` for wall edits. Use `solveWallTopology(plan.walls).spans` for joined centerlines and `polygonAreaMm2(room.polygon, room.holes)` for per-room area. Keep pointer previews separate from committed history. Add viewport, wall and door drawing, and isometric toggle coverage in Playwright. The Studio must fit within 100dvh.

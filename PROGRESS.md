@@ -55,6 +55,21 @@ Released 2026-11-19. The final application merge is `e22bac18d799a75078840e3cfdf
 
 [Sign in](https://draft-chan.vercel.app/sign-in) · [Final application merge](https://github.com/chanchan012/draft-chan/commit/e22bac18d799a75078840e3cfdf902066eb52c40)
 
+## M2.1 · Deterministic geometry and command history
+
+Released 2026-11-19. Feature commit `1c2894a816630466da26298dfaeed75f27241bab` on `feature/2.1-geometry` was merged as `5331c5742aa01a5e424fcd96a64bae86dd69197b`.
+
+| Phase | Result |
+| --- | --- |
+| Brief | Solve wall topology, derive room polygons, preserve existing plan graphs, and attribute undoable wall edits to humans or AI agents. |
+| Build | Added the typed graph, intersection solver, and Zustand/Immer command store. Dashboard starters persist authored walls. Area summaries and thumbnails use derived room boundaries. |
+| Test | Strict TypeScript, 29 Vitest tests, and all 35 Playwright checks against a local production build passed. PGlite verified starter graph persistence and owner attribution. |
+| Merge | The tested feature tree was committed to its branch and merged into GitHub main. |
+| Deploy | The standard Next build passed. Preview `dpl_6kiNBV8v7AWideruhUBnymVMaFZX` and Production `dpl_EkcEwwnxFEB6EMi4jbcRPVX5T6Xu` reached READY. The public landing returned 200, unsigned floorplan RPC returned 401, and the dashboard redirected to sign-in. |
+| Document | Architecture and resume handoff record the version 1 graph extension, centerline area convention, and Studio integration steps. |
+
+[Application merge](https://github.com/chanchan012/draft-chan/commit/5331c5742aa01a5e424fcd96a64bae86dd69197b) · [Production](https://draft-chan.vercel.app)
+
 ## Next subgoal
 
-M2.1 adds deterministic geometry, wall intersections, room solving, command history and attribution. The CAD editor, exports, real-time collaboration and MCP remain later milestones.
+M2.2 connects the geometry engine to the protected Studio canvas with snap and ortho drawing, a responsive inspector, and an isometric preview.
