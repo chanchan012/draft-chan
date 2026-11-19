@@ -2,17 +2,15 @@ import { describe, expect, it, vi } from "vitest";
 import { createApi, type IdentityMiddleware } from "../lib/server/api";
 import { localWindow } from "../lib/server/rate-limit";
 import { clerkEnabled } from "../lib/server/auth";
-const guest: IdentityMiddleware = async (c, next) => {
-  c.set("identity", { mode: "guest" });
-  await next();
-};
+const unsigned: IdentityMiddleware = async (_c, next) => next();
 describe("Hono RPC", () => {
-  it("serves a read-only guest identity and ignores user-supplied identity headers", async () => {
-    const app = createApi(guest, localWindow());
+  it("rejects unsigned requests and ignores user-supplied identity headers", async () => {
+    const app = createApi(unsigned, localWindow());
     const session = await app.request("/api/session", {
       headers: { "x-user-id": "impersonated" },
     });
-    expect(await session.json()).toEqual({ mode: "guest" });
+    expect(session.status).toBe(401);
+    expect(await session.json()).toEqual({ error: "Sign in required" });
     expect(session.headers.get("cache-control")).toContain("no-store");
     expect((await app.request("/api/account")).status).toBe(401);
   });
@@ -37,14 +35,14 @@ describe("Hono RPC", () => {
     }
   });
   it("returns Retry-After when throttled", async () => {
-    const app = createApi(guest, localWindow(1));
+    const app = createApi(unsigned, localWindow(1));
     await app.request("/api/session");
     const response = await app.request("/api/session");
     expect(response.status).toBe(429);
     expect(Number(response.headers.get("Retry-After"))).toBeGreaterThan(0);
   });
   it("fails closed when the configured limiter is unavailable", async () => {
-    const app = createApi(guest, async () => {
+    const app = createApi(unsigned, async () => {
       throw new Error("offline");
     });
     expect((await app.request("/api/session")).status).toBe(503);

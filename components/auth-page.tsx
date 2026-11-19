@@ -1,8 +1,32 @@
 import Link from "next/link";
 import { SignIn, SignUp } from "@clerk/nextjs";
-import { ArrowLeft, ArrowRight, KeyRound } from "lucide-react";
-import { Brand } from "./brand";
+import { ArrowLeft } from "lucide-react";
 import { clerkEnabled } from "@/lib/server/auth";
+import { Brand } from "./brand";
+import "./auth-page.css";
+
+const appearance = {
+  variables: {
+    colorPrimary: "#a84023",
+    colorBackground: "#faf9f6",
+    colorText: "#252720",
+    colorInputBackground: "#fffefa",
+    fontFamily: "Inter, Arial, sans-serif",
+    borderRadius: "6px",
+  },
+  elements: {
+    rootBox: "draft-clerk-root",
+    cardBox: "draft-clerk-card-box",
+    card: "draft-clerk-card",
+    header: "draft-clerk-header",
+    footer: "draft-clerk-footer",
+    formFieldInput: "draft-clerk-input",
+    formButtonPrimary: "draft-clerk-action",
+    socialButtonsBlockButton: "draft-clerk-action",
+    footerActionLink: "draft-clerk-link",
+  },
+};
+
 export function AuthPage({ signup = false }: { signup?: boolean }) {
   return (
     <div className="auth-page">
@@ -14,38 +38,40 @@ export function AuthPage({ signup = false }: { signup?: boolean }) {
           </Link>
         </div>
       </header>
-      <main className="auth-main">
-        <div className="auth-panel">
-          <span className="eyebrow">
-            <span className="orange-rule" /> STUDIO ACCESS
-          </span>
-          {clerkEnabled() ? (
-            signup ? (
-              <SignUp routing="path" path="/sign-up" />
+      <main className="auth-scroll">
+        <div className="auth-layout">
+          <section className="auth-panel" aria-labelledby="auth-title">
+            <h1 id="auth-title">
+              {signup ? "Start a drawing." : "Back to the drawing board."}
+            </h1>
+            {clerkEnabled() ? (
+              signup ? (
+                <SignUp routing="path" path="/sign-up" appearance={appearance} />
+              ) : (
+                <SignIn routing="path" path="/sign-in" appearance={appearance} />
+              )
             ) : (
-              <SignIn routing="path" path="/sign-in" />
-            )
-          ) : (
-            <>
-              <KeyRound className="auth-key" size={25} />
-              <h1>{signup ? "Open your studio." : "Welcome back."}</h1>
-              <p>
-                This workspace is in guest demo mode. Explore the Courtyard
-                House sample without an account.
+              <p className="auth-unavailable">
+                Sign-in is temporarily unavailable. Please try again later.
               </p>
-              <Link href="/?view=sample" className="primary">
-                Continue as guest <ArrowRight size={16} />
-              </Link>
-            </>
-          )}
+            )}
+          </section>
+          <figure className="auth-study">
+            <div className="auth-study-art grid-on">
+              <img
+                src="/isometric.webp"
+                width="1448"
+                height="1086"
+                alt=""
+              />
+            </div>
+            <figcaption>
+              <strong>Courtyard House</strong>
+              <span>AXONOMETRIC STUDY</span>
+            </figcaption>
+          </figure>
         </div>
       </main>
-      <footer className="footer">
-        <div>DRAFT SYSTEMS / V0.1</div>
-        <span className="foot-status">
-          <span className="signal" /> GUEST DEMO ONLINE
-        </span>
-      </footer>
     </div>
   );
 }

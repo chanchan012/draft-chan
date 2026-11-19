@@ -5,9 +5,9 @@ import {
   useRef,
   useState,
   type FormEvent,
+  type ReactNode,
 } from "react";
 import Link from "next/link";
-import { UserButton } from "@clerk/nextjs";
 import {
   ArrowLeft,
   ArrowUpRight,
@@ -18,6 +18,7 @@ import {
   X,
 } from "lucide-react";
 import { Brand } from "./brand";
+import { Sheet } from "./sheet";
 import type { PlanCard } from "@/lib/plans/geometry";
 
 const format = new Intl.NumberFormat("en-US", { maximumFractionDigits: 2 });
@@ -29,11 +30,9 @@ function area(value: number) {
 type Editor =
   | { mode: "create"; id: string }
   | { mode: "view" | "rename" | "delete"; plan: PlanCard };
-export function Dashboard({ accountsEnabled }: { accountsEnabled: boolean }) {
+export function Dashboard({ account }: { account: ReactNode }) {
   const [plans, setPlans] = useState<PlanCard[]>([]);
-  const [access, setAccess] = useState<"loading" | "guest" | "member">(
-    "loading",
-  );
+  const [loaded, setLoaded] = useState(false);
   const [error, setError] = useState(""),
     [search, setSearch] = useState("");
   const [editor, setEditor] = useState<Editor | null>(null),
@@ -42,32 +41,37 @@ export function Dashboard({ accountsEnabled }: { accountsEnabled: boolean }) {
   const [busy, setBusy] = useState(false),
     [formError, setFormError] = useState("");
   const dialog = useRef<HTMLDialogElement>(null),
+    sampleDialog = useRef<HTMLDialogElement>(null),
     generation = useRef(0),
     lock = useRef(false);
+  const endSession = useCallback(() => {
+    generation.current++;
+    setPlans([]);
+    setLoaded(false);
+    setEditor(null);
+    location.replace("/sign-in");
+  }, []);
   const load = useCallback(async () => {
     const version = ++generation.current;
     try {
       const response = await fetch("/api/floorplans", { cache: "no-store" });
       if (version !== generation.current) return;
       if (response.status === 401) {
-        setPlans([]);
-        setAccess("guest");
-        setEditor(null);
-        setError("");
+        endSession();
         return;
       }
       if (!response.ok) throw Error();
       const rows = (await response.json()) as PlanCard[];
       if (version === generation.current) {
         setPlans(rows);
-        setAccess("member");
+        setLoaded(true);
         setError("");
       }
     } catch {
       if (version === generation.current)
         setError("Your floorplans could not be loaded.");
     }
-  }, []);
+  }, [endSession]);
   useEffect(() => {
     void load();
     return () => {
@@ -130,7 +134,7 @@ export function Dashboard({ accountsEnabled }: { accountsEnabled: boolean }) {
       });
       if (!response.ok) {
         if (response.status === 401) {
-          await load();
+          endSession();
           return;
         }
         if (response.status === 409) {
@@ -170,7 +174,7 @@ export function Dashboard({ accountsEnabled }: { accountsEnabled: boolean }) {
             <ArrowLeft size={15} />
             Overview
           </Link>
-          {accountsEnabled && access === "member" && <UserButton />}
+          {account}
         </div>
       </header>
       <main className="dash-scroll">
@@ -182,7 +186,7 @@ export function Dashboard({ accountsEnabled }: { accountsEnabled: boolean }) {
               </span>
               <h1>Floorplans</h1>
             </div>
-            {access === "member" ? (
+            {loaded && (
               <button
                 className="primary"
                 onClick={() =>
@@ -192,21 +196,17 @@ export function Dashboard({ accountsEnabled }: { accountsEnabled: boolean }) {
                 <Plus size={17} />
                 New floorplan
               </button>
-            ) : access === "guest" ? (
-              <Link className="primary" href="/sign-in">
-                Sign in to create <ArrowUpRight size={16} />
-              </Link>
-            ) : null}
+            )}
           </div>
           {error && (
             <p role="alert" className="dash-error">
               {error} <button onClick={() => void load()}>Refresh</button>
             </p>
           )}
-          {access === "loading" && !error && (
+          {!loaded && !error && (
             <p role="status">Loading your workspace…</p>
           )}
-          {access === "member" && (
+          {loaded && (
             <section aria-label="Saved floorplans">
               <div className="dash-controls">
                 <h2>
@@ -268,7 +268,7 @@ export function Dashboard({ accountsEnabled }: { accountsEnabled: boolean }) {
               )}
             </section>
           )}
-          {access !== "loading" && (
+          {loaded && (
             <section className="dash-study">
               <div>
                 <span className="eyebrow">
@@ -279,9 +279,12 @@ export function Dashboard({ accountsEnabled }: { accountsEnabled: boolean }) {
                   Explore a furnished two-bedroom home in plan and isometric
                   views.
                 </p>
-                <Link className="text-action" href="/?view=sample">
+                <button
+                  className="text-action"
+                  onClick={() => sampleDialog.current?.showModal()}
+                >
                   Open sample <ArrowUpRight size={16} />
-                </Link>
+                </button>
               </div>
               <div className="grid-on study-image">
                 <img
@@ -293,6 +296,25 @@ export function Dashboard({ accountsEnabled }: { accountsEnabled: boolean }) {
           )}
         </div>
       </main>
+      <dialog
+        ref={sampleDialog}
+        className="modal sample-modal"
+        aria-labelledby="sample-title"
+      >
+        <div className="modal-inner">
+          <div className="modal-title">
+            <h2 id="sample-title">Sample plan</h2>
+            <button
+              className="icon-btn"
+              aria-label="Close sample"
+              onClick={() => sampleDialog.current?.close()}
+            >
+              <X size={18} />
+            </button>
+          </div>
+          <Sheet expanded />
+        </div>
+      </dialog>
       <dialog
         ref={dialog}
         className="modal dash-modal"

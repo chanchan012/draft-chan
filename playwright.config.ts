@@ -6,6 +6,10 @@ export default defineConfig({
   timeout: 90_000,
   use: {
     baseURL,
+    ...(process.env.PLAYWRIGHT_PROXY_SERVER
+      ? { proxy: { server: process.env.PLAYWRIGHT_PROXY_SERVER } }
+      : {}),
+    ignoreHTTPSErrors: process.env.PLAYWRIGHT_IGNORE_HTTPS_ERRORS === "1",
     launchOptions: {
       executablePath: process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE_PATH,
     },

@@ -1,7 +1,13 @@
+import { UserButton } from "@clerk/nextjs";
+import { auth } from "@clerk/nextjs/server";
+import { redirect } from "next/navigation";
 import { Dashboard } from "@/components/dashboard";
 import { clerkEnabled } from "@/lib/server/auth";
 import "./dashboard.css";
 
-export default function DashboardPage() {
-  return <Dashboard accountsEnabled={clerkEnabled()} />;
+export default async function DashboardPage() {
+  if (!clerkEnabled()) redirect("/sign-in");
+  const session = await auth();
+  if (!session.isAuthenticated) return session.redirectToSignIn();
+  return <Dashboard account={<UserButton />} />;
 }

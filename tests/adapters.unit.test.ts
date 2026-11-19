@@ -32,7 +32,7 @@ describe("production route wiring", () => {
       secretKey: "test-secret",
     });
   });
-  it("treats an unsigned Clerk request as a guest", async () => {
+  it("rejects an unsigned Clerk request", async () => {
     vi.stubEnv("NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY", "test-publishable");
     vi.stubEnv("CLERK_SECRET_KEY", "test-secret");
     clerk.getAuth.mockReturnValue({ userId: null });
@@ -41,10 +41,18 @@ describe("production route wiring", () => {
       (await GET(new Request("https://draft.test/api/account"))).status,
     ).toBe(401);
   });
+  it("fails closed when Clerk keys are missing", async () => {
+    vi.stubEnv("NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY", "");
+    vi.stubEnv("CLERK_SECRET_KEY", "");
+    const { GET } = await import("../app/api/[[...route]]/route");
+    const response = await GET(new Request("https://draft.test/api/session"));
+    expect(response.status).toBe(401);
+    expect(clerk.authenticate).not.toHaveBeenCalled();
+  });
   it("rejects a partially configured Redis connection", async () => {
     vi.stubEnv("UPSTASH_REDIS_REST_URL", "https://example.invalid");
     vi.stubEnv("UPSTASH_REDIS_REST_TOKEN", "");
-    await expect(configuredLimiter()("guest")).rejects.toThrow(
+    await expect(configuredLimiter()("test-client")).rejects.toThrow(
       "Incomplete Redis configuration",
     );
   });

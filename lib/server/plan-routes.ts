@@ -12,7 +12,7 @@ export function planRoutes(
   const app = new Hono<Environment & { Variables: { owner: string } }>();
   app.use("*", async (c, next) => {
     const identity = c.get("identity");
-    if (identity.mode !== "member")
+    if (!identity)
       return c.json({ error: "Sign in required" }, 401);
     if (c.req.method !== "GET") {
       const origin = c.req.header("Origin");
