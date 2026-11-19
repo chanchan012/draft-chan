@@ -1,0 +1,68 @@
+.modal.auth-dialog {
+  width: min(440px, calc(100vw - 24px));
+  max-height: calc(100dvh - 24px);
+  overflow: auto;
+  overscroll-behavior: contain;
+}
+.auth-dialog-content {
+  padding: clamp(12px, 3vw, 20px);
+}
+.auth-dialog-heading {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 8px;
+}
+.auth-dialog .auth-dialog-heading h2 {
+  margin: 0;
+  font-size: clamp(25px, 5vw, 33px);
+}
+.auth-dialog-heading .icon-btn {
+  min-width: 44px;
+  min-height: 44px;
+  display: grid;
+  place-items: center;
+}
+.draft-clerk-root,
+.draft-clerk-card-box,
+.draft-clerk-card {
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
+}
+.draft-clerk-card-box {
+  border: 1px solid var(--line);
+  box-shadow: none;
+}
+.draft-clerk-card {
+  padding-inline: clamp(12px, 3vw, 22px);
+}
+.draft-clerk-input {
+  min-height: 44px;
+  font-size: 16px;
+}
+.draft-clerk-action {
+  min-height: 44px;
+}
+.auth-switch {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 8px;
+  margin-top: 14px;
+  font-size: 13px;
+  color: var(--muted);
+}
+.auth-switch a {
+  font-weight: 620;
+  color: #a84023;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+.auth-unavailable {
+  padding: 14px;
+  border: 1px solid var(--line);
+  color: var(--muted);
+  border-radius: 6px;
+}

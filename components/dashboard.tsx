@@ -7,9 +7,7 @@ import {
   type FormEvent,
   type ReactNode,
 } from "react";
-import Link from "next/link";
 import {
-  ArrowLeft,
   ArrowUpRight,
   FolderOpen,
   Plus,
@@ -17,6 +15,7 @@ import {
   Search,
   X,
 } from "lucide-react";
+import { authModalHref } from "@/lib/auth-navigation";
 import { Brand } from "./brand";
 import { Sheet } from "./sheet";
 import type { PlanCard } from "@/lib/plans/geometry";
@@ -49,7 +48,7 @@ export function Dashboard({ account }: { account: ReactNode }) {
     setPlans([]);
     setLoaded(false);
     setEditor(null);
-    location.replace("/sign-in");
+    location.replace(authModalHref("sign-in", "/dashboard"));
   }, []);
   const load = useCallback(async () => {
     const version = ++generation.current;
@@ -170,11 +169,7 @@ export function Dashboard({ account }: { account: ReactNode }) {
       <header className="header">
         <div className="header-inner">
           <Brand />
-          <Link className="back" href="/">
-            <ArrowLeft size={15} />
-            Overview
-          </Link>
-          {account}
+          <div className="dash-account">{account}</div>
         </div>
       </header>
       <main className="dash-scroll">

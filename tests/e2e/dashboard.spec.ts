@@ -69,6 +69,11 @@ test("member grid, CRUD dialogs and area units", async ({ page }) => {
   );
   await page.goto("/dashboard");
   await expect(page.locator(".dash-card")).toHaveCount(16);
+  const header = page.getByRole("banner");
+  await expect(header.getByRole("link", { name: "Draft home" })).toBeVisible();
+  await expect(header.getByRole("button", { name: "Account" })).toBeVisible();
+  await expect(header.getByText("Overview")).toHaveCount(0);
+  await expect(page.getByRole("contentinfo")).toHaveCount(0);
   expect(
     await page.evaluate(
       () =>

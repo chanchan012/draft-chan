@@ -60,8 +60,7 @@ button,
 a {
   touch-action: manipulation;
 }
-.page,
-.auth-page {
+.page {
   height: 100dvh;
   display: flex;
   flex-direction: column;
@@ -73,8 +72,7 @@ a {
   border-bottom: 1px solid var(--line);
 }
 .header-inner,
-.home-main,
-.footer {
+.home-main {
   width: min(100% - 8.4vw, 1580px);
   margin-inline: auto;
 }
@@ -102,7 +100,6 @@ a {
   height: 100%;
 }
 .header nav button,
-.login,
 .back {
   font-size: 13px;
   font-weight: 520;
@@ -177,7 +174,6 @@ a {
 }
 .eyebrow,
 .mono,
-.footer,
 .sheet-label {
   font-family: var(--mono);
   font-size: 10px;
@@ -239,7 +235,6 @@ a {
 }
 .guide-link:hover,
 .header nav button:hover,
-.login:hover,
 .text-action:hover {
   color: var(--accent);
 }
@@ -483,30 +478,6 @@ a {
   line-height: 1.45;
   margin: 0;
 }
-.footer {
-  height: 43px;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  border-top: 1px solid var(--line);
-  color: #777c70;
-  font-size: 9px;
-  letter-spacing: 0.85px;
-  flex: none;
-}
-.footer > div {
-  display: flex;
-  align-items: center;
-  gap: 9px;
-}
-.footer-mark {
-  font-size: 22px;
-  line-height: 1;
-  color: #606757;
-}
-.foot-divider {
-  color: #b2b5a9;
-}
 .modal {
   margin: auto;
   padding: 0;
@@ -642,14 +613,10 @@ a {
   .section-heading {
     margin-bottom: 9px;
   }
-  .footer {
-    height: 30px;
-  }
 }
 @media (max-width: 1000px) {
   .header-inner,
-  .home-main,
-  .footer {
+  .home-main {
     width: 92%;
   }
   .hero {
@@ -739,9 +706,6 @@ a {
     right: 9px;
     top: 12px;
   }
-  .footer {
-    height: 30px;
-  }
   .section-heading {
     margin-bottom: 9px;
   }
@@ -760,8 +724,7 @@ a {
     display: none;
   }
   .header-inner,
-  .home-main,
-  .footer {
+  .home-main {
     width: calc(100% - 32px);
   }
   .header-actions {
@@ -867,10 +830,6 @@ a {
     width: 27px;
     height: 27px;
   }
-  .footer {
-    height: 28px;
-    font-size: 7px;
-  }
   .guide-body {
     grid-template-columns: 1fr;
     gap: 10px;
@@ -910,9 +869,8 @@ a {
     line-height: 1.35;
     margin: 7px 0;
   }
-    .feature p,
-  .section-heading,
-  .footer {
+  .feature p,
+  .section-heading {
     display: none;
   }
   .feature {

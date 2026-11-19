@@ -14,6 +14,8 @@ import {
   X,
 } from "lucide-react";
 import { Brand } from "./brand";
+import { AuthDialog } from "./auth-dialog";
+import { authModalHref, type AuthMode } from "@/lib/auth-navigation";
 
 const features = [
   {
@@ -45,7 +47,17 @@ const features = [
       "The clearance engine is planned for milestone 3. It will report door-swing conflicts and narrow pathways for design review.",
   },
 ];
-export function Home() {
+export function Home({
+  signedIn,
+  authConfigured,
+  authMode,
+  returnTo,
+}: {
+  signedIn: boolean;
+  authConfigured: boolean;
+  authMode: AuthMode | null;
+  returnTo?: string;
+}) {
   const [guideOpen, setGuideOpen] = useState(false);
   const [topic, setTopic] = useState(0);
   const dialog = useRef<HTMLDialogElement>(null);
@@ -69,12 +81,19 @@ export function Home() {
             <button onClick={() => guide()}>Field guide</button>
           </nav>
           <div className="header-actions">
-            <Link className="login" href="/sign-in">
-              Sign in
-            </Link>
-            <Link className="dark-btn" href="/dashboard">
-              Workspace <ArrowUpRight size={15} />
-            </Link>
+            {signedIn ? (
+              <Link className="dark-btn" href="/dashboard">
+                Workspace <ArrowUpRight size={15} />
+              </Link>
+            ) : (
+              <Link
+                className="dark-btn"
+                href={authModalHref("sign-in")}
+                scroll={false}
+              >
+                Sign in
+              </Link>
+            )}
           </div>
         </div>
       </header>
@@ -94,9 +113,19 @@ export function Home() {
               and explore architectural spaces in one shared workspace.
             </p>
             <div className="hero-actions">
-              <Link className="primary" href="/sign-up">
-                Create account <ArrowRight size={17} />
-              </Link>
+              {signedIn ? (
+                <Link className="primary" href="/dashboard">
+                  Open workspace <ArrowRight size={17} />
+                </Link>
+              ) : (
+                <Link
+                  className="primary"
+                  href={authModalHref("sign-up")}
+                  scroll={false}
+                >
+                  Create account <ArrowRight size={17} />
+                </Link>
+              )}
               <button className="guide-link" onClick={() => guide()}>
                 <BookOpen size={16} /> Field guide
               </button>
@@ -150,12 +179,11 @@ export function Home() {
           </div>
         </section>
       </main>
-      <footer className="footer">
-        <div>
-          <span className="footer-mark">⌖</span> DRAFT SYSTEMS{" "}
-          <span className="foot-divider">/</span> <span>V0.1</span>
-        </div>
-      </footer>
+      <AuthDialog
+        mode={authMode}
+        configured={authConfigured}
+        returnTo={returnTo}
+      />
       <dialog
         ref={dialog}
         onClose={() => setGuideOpen(false)}
