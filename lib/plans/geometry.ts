@@ -1,8 +1,8 @@
 import { z } from "zod";
 
-const point = z.object({ x: z.number().finite(), y: z.number().finite() });
-const polygon = z.array(point).min(3);
-type Point = z.infer<typeof point>;
+import { polygonSchema } from "./model";
+import { polygonAreaMm2 } from "./polygon";
+export { initialGraph } from "./plan-state";
 
 export const newPlan = z
   .object({
@@ -21,51 +21,33 @@ export const renamePlan = newPlan
   .extend({ revision: z.number().int().nonnegative() })
   .strict();
 
-export function initialGraph(room?: { width: number; depth: number }) {
-  const rooms = room
-    ? [
-        {
-          id: "room-1",
-          polygon: [
-            { x: 0, y: 0 },
-            { x: room.width, y: 0 },
-            { x: room.width, y: room.depth },
-            { x: 0, y: room.depth },
-          ],
-        },
-      ]
-    : [];
-  return {
-    version: 1,
-    walls: [],
-    rooms,
-    openings: [],
-    fixtures: [],
-    dimensions: [],
-  };
-}
-function roomPolygons(graph: unknown): Point[][] {
+const roomBoundary = z.object({
+  polygon: polygonSchema,
+  holes: z.array(polygonSchema).optional(),
+});
+function roomBoundaries(graph: unknown) {
   const rooms = z.object({ rooms: z.array(z.unknown()) }).safeParse(graph);
   if (!rooms.success) return [];
   return rooms.data.rooms.flatMap((room) => {
-    const parsed = z.object({ polygon }).safeParse(room);
-    return parsed.success ? [parsed.data.polygon] : [];
+    const parsed = roomBoundary.safeParse(room);
+    return parsed.success ? [parsed.data] : [];
   });
 }
 export function areaM2(graph: unknown) {
-  return roomPolygons(graph).reduce((sum, points) => {
-    const twice = points.reduce((total, a, index) => {
-      const b = points[(index + 1) % points.length];
-      return total + a.x * b.y - b.x * a.y;
-    }, 0);
-    return sum + Math.abs(twice) / 2_000_000;
-  }, 0);
+  return (
+    roomBoundaries(graph).reduce(
+      (sum, room) => sum + polygonAreaMm2(room.polygon, room.holes),
+      0,
+    ) / 1_000_000
+  );
 }
 export function thumbnailSvg(graph: unknown) {
-  const polygons = roomPolygons(graph);
+  const rooms = roomBoundaries(graph);
   let shapes = '<path d="M148 84h24m-12-12v24" fill="none" stroke="#969d88"/>';
-  if (polygons.length) {
-    const points = polygons.flat();
+  if (rooms.length) {
+    const points = rooms
+      .flatMap(({ polygon, holes = [] }) => [polygon, ...holes])
+      .flat();
     let xmin = Infinity,
       ymin = Infinity,
       xmax = -Infinity,
@@ -80,20 +62,23 @@ export function thumbnailSvg(graph: unknown) {
       268 / Math.max(1, xmax - xmin),
       124 / Math.max(1, ymax - ymin),
     );
-    shapes = polygons
-      .map(
-        (poly) =>
-          '<polygon fill="#e6ddc8" stroke="#4b5145" stroke-width="3" points="' +
-          poly
-            .map((p) =>
-              [
-                (160 + (p.x - (xmin + xmax) / 2) * scale).toFixed(2),
-                (84 + (p.y - (ymin + ymax) / 2) * scale).toFixed(2),
-              ].join(","),
-            )
-            .join(" ") +
-          '"/>',
-      )
+    function project(p: { x: number; y: number }) {
+      return [
+        (160 + (p.x - (xmin + xmax) / 2) * scale).toFixed(2),
+        (84 + (p.y - (ymin + ymax) / 2) * scale).toFixed(2),
+      ].join(",");
+    }
+    const style = 'fill="#e6ddc8" stroke="#4b5145" stroke-width="3"';
+    shapes = rooms
+      .map(({ polygon, holes }) => {
+        if (!holes?.length) {
+          return `<polygon ${style} points="${polygon.map(project).join(" ")}"/>`;
+        }
+        const path = [polygon, ...holes]
+          .map((ring) => `M${ring.map(project).join(" ")}Z`)
+          .join(" ");
+        return `<path ${style} fill-rule="evenodd" d="${path}"/>`;
+      })
       .join("");
   }
   return (

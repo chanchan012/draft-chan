@@ -1,4 +1,7 @@
 import { beforeAll, afterAll, describe, it, expect, vi } from "vitest";
+import { eq } from "drizzle-orm";
+import { floorplans } from "../db/schema";
+import { loadDraftPlan } from "../lib/plans/plan-state";
 import { PGlite } from "@electric-sql/pglite";
 import { drizzle } from "drizzle-orm/pglite";
 import { migrate } from "drizzle-orm/pglite/migrator";
@@ -36,6 +39,13 @@ describe("floorplan persistence", () => {
     const input = { id, name: "Study", room: { width: 5000, depth: 4000 } };
     expect((await a("POST", "", input)).status).toBe(201);
     expect((await a("POST", "", input)).status).toBe(201);
+    const [stored] = await db.select({ graph: floorplans.graph })
+      .from(floorplans)
+      .where(eq(floorplans.id, id));
+    const plan = loadDraftPlan(stored.graph);
+    expect(plan.walls).toHaveLength(4);
+    expect(plan.walls[0].createdBy).toEqual({ kind: "human", id: "member-a" });
+    expect(areaM2(plan)).toBe(20);
     expect(await (await a("GET")).json()).toHaveLength(1);
     expect(await (await a("GET", id)).json()).toMatchObject({
       id,

@@ -46,7 +46,7 @@ export const plans = {
         id: input.id,
         name: input.name,
         ownerId: owner,
-        graph: initialGraph(input.room),
+        graph: initialGraph(input.room, { kind: "human", id: owner }),
       })
       .onConflictDoNothing()
       .returning();
