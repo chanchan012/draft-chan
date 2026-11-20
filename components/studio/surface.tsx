@@ -36,10 +36,10 @@ import type { LivePeer } from "@/lib/plans/live";
 import {
   DrawingGrid,
   ClearanceDrawing,
-  IsometricDrawing,
   PlanDrawing,
   type Selection,
 } from "./drawing";
+import { IsometricDrawing } from "./isometric-drawing";
 
 export type Tool =
   | "select"

@@ -212,7 +212,7 @@
   background: var(--studio-paper);
 }
 .studio-isometric {
-  background: radial-gradient(ellipse at 50% 55%, #fcfbf4 10%, #e9ecdf 85%);
+  background: radial-gradient(ellipse at 50% 45%, #faf9f4 15%, #e7ebe5 100%);
 }
 .studio-canvas {
   display: block;
@@ -259,13 +259,18 @@
   fill-opacity: 0.56;
 }
 .cad-wall {
-  stroke: #56634f;
+  --cad-wall-ink: #56634f;
+  stroke: var(--cad-wall-ink);
 }
 .cad-wall.is-exterior {
-  stroke: #27382d;
+  --cad-wall-ink: #27382d;
 }
 .cad-wall.is-selected {
-  stroke: #ad492b;
+  --cad-wall-ink: #ad492b;
+}
+.cad-wall-join {
+  fill: var(--cad-wall-ink);
+  stroke-width: 0.35px;
 }
 .cad-door {
   stroke: #704a38;
@@ -295,22 +300,105 @@
   stroke-width: 1.7;
 }
 .cad-iso-floor {
-  fill: #d1d9c6;
-  stroke: #8f9e85;
-  stroke-width: 1;
+  fill: #e9ddc8;
+}
+.iso-wet-room .cad-iso-floor {
+  fill: #dce4df;
+}
+.cad-iso-floor-grain {
+  fill: none;
+  stroke: #b59a78;
+  stroke-opacity: 0.29;
+  stroke-width: 10;
+}
+.cad-iso-shadow {
+  fill: #565a46;
+  opacity: 0.28;
+  transform: translate(125px, 140px);
+  filter: blur(135px);
 }
 .cad-prism {
-  stroke: #56634f;
-  stroke-width: 1;
+  stroke: var(--iso-edge, #7e8478);
+  stroke-width: 0.7px;
+  stroke-linejoin: round;
 }
 .cad-face {
-  fill: #b5c0a9;
+  fill: var(--iso-face, #e4e2d6);
 }
 .cad-cap {
-  fill: #929f84;
+  fill: var(--iso-side, #c8cabe);
 }
 .cad-top {
-  fill: #f1f0e3;
+  fill: var(--iso-top, #f8f6eb);
+}
+.iso-wall-rear {
+  --iso-face: #efede2;
+  --iso-side: #d2d5c8;
+  --iso-top: #fbf9ef;
+}
+.iso-wall-interior,
+.iso-wall-front {
+  --iso-edge: #707c6f;
+  --iso-top: #728174;
+}
+.iso-wall-front {
+  --iso-face: #e0dfd2;
+  --iso-side: #c0c6b9;
+}
+.iso-slab {
+  --iso-face: #c6c1b0;
+  --iso-side: #afa99a;
+  --iso-top: #e9ddc8;
+}
+.iso-wood {
+  --iso-edge: #8b6f53;
+  --iso-face: #b59470;
+  --iso-side: #947755;
+  --iso-top: #cfb18b;
+}
+.iso-linen {
+  --iso-edge: #aa9d87;
+  --iso-face: #e5dfd0;
+  --iso-side: #d3cbbc;
+  --iso-top: #faf5e7;
+}
+.iso-sage {
+  --iso-edge: #718777;
+  --iso-face: #95a490;
+  --iso-side: #7d907e;
+  --iso-top: #a9b6a0;
+}
+.iso-clay,
+.iso-clay-light {
+  --iso-edge: #8d604c;
+  --iso-face: #ae7862;
+  --iso-side: #a26753;
+  --iso-top: #c28e77;
+}
+.iso-clay-light {
+  --iso-top: #d6a48a;
+}
+.iso-stone {
+  --iso-edge: #849691;
+  --iso-face: #cad8d0;
+  --iso-side: #a9bfba;
+  --iso-top: #f2f2e6;
+}
+.iso-cabinet {
+  --iso-edge: #8a8b73;
+  --iso-face: #c2bda6;
+  --iso-side: #a8aa94;
+  --iso-top: #e2d6ba;
+}
+.cad-iso-seam {
+  fill: none;
+  stroke: #9e6b57;
+  stroke-width: 0.8px;
+}
+.cad-iso-basin {
+  fill: #c4d7d1;
+  stroke: #819a93;
+  stroke-width: 0.65px;
 }
 .studio-scale {
   position: absolute;
@@ -529,15 +617,6 @@
 .cad-fixture.is-selected {
   stroke: #a84023;
   stroke-width: 2px;
-}
-.cad-iso-fixture .cad-top {
-  fill: #e6d5b9;
-}
-.cad-iso-fixture .cad-face {
-  fill: #bb9e75;
-}
-.cad-iso-fixture .cad-cap {
-  fill: #a68a67;
 }
 .cad-utility {
   color: #77602d;
@@ -986,12 +1065,16 @@
   stroke: var(--accent);
   stroke-width: 2;
 }
-.cad-iso-window {
-  stroke: #5c848f;
-  fill-opacity: 0.65;
+.cad-iso-glass {
+  fill: #b4d4d7;
+  fill-opacity: 0.76;
+  stroke: #759b9b;
+  stroke-width: 1.05px;
 }
-.cad-iso-window path {
-  fill: #b2cfd5;
+.cad-iso-mullion {
+  fill: none;
+  stroke: #eff6ec;
+  stroke-width: 1.2px;
 }
 .cad-dimension {
   color: #496354;

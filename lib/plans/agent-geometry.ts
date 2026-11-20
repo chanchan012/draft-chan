@@ -10,7 +10,7 @@ import {
 } from "./model";
 import { doorBounds, pointAlong, wallLength } from "./openings";
 import { loadDraftPlan } from "./plan-state";
-import { polygonAreaMm2 } from "./polygon";
+import { inRoom, polygonAreaMm2 } from "./polygon";
 
 const equal = (a: Point, b: Point) => a.x === b.x && a.y === b.y;
 const cross = (a: Point, b: Point, p: Point) =>
@@ -151,26 +151,6 @@ export function joinWalls(plan: DraftPlanState, first: string, second: string) {
       { ...a, start, end },
     ],
   });
-}
-
-function inRing(point: Point, ring: readonly Point[]) {
-  let inside = false;
-  for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) {
-    const a = ring[i],
-      b = ring[j];
-    if (
-      a.y > point.y !== b.y > point.y &&
-      point.x < ((b.x - a.x) * (point.y - a.y)) / (b.y - a.y) + a.x
-    )
-      inside = !inside;
-  }
-  return inside;
-}
-function inRoom(room: Room, point: Point) {
-  return (
-    inRing(point, room.polygon) &&
-    !(room.holes ?? []).some((hole) => inRing(point, hole))
-  );
 }
 
 export function spatialAudit(plan: DraftPlanState) {

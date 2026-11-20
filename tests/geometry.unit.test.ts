@@ -5,6 +5,13 @@ import type { DraftActor, Point, Wall } from "../lib/plans/model";
 import { initialGraph, loadDraftPlan } from "../lib/plans/plan-state";
 import { polygonAreaMm2 } from "../lib/plans/polygon";
 import { solveWallTopology } from "../lib/plans/wall-topology";
+import { wallMesh } from "../lib/plans/wall-mesh";
+import {
+  buildIsometric,
+  cutawayHeight,
+  wallRole,
+} from "../lib/plans/isometric";
+import { bounds } from "../lib/plans/footprints";
 
 const pt = (x: number, y: number): Point => ({ x, y });
 const wall = (id: string, start: Point, end: Point) => ({
@@ -27,6 +34,77 @@ function box(prefix: string, ox = 0, oy = 0, size = 4000) {
     pt(ox, oy + size),
   ]);
 }
+
+describe("Studio wall surfaces", () => {
+  it("fills the outer corner at shared endpoints with unequal thickness", () => {
+    const corner = [
+      wall("east", pt(0, 0), pt(4000, 0)),
+      { ...wall("south", pt(0, 3000), pt(0, 0)), thicknessMm: 200 },
+    ];
+    for (const walls of [corner, corner.slice().reverse()]) {
+      expect(wallMesh(walls).joints.map(({ footprint }) => footprint)).toEqual([
+        [pt(0, 0), pt(0, -60), pt(-100, -60), pt(-100, 0)],
+      ]);
+    }
+  });
+
+  it("bevels acute joins and preserves deliberate gaps and opening jambs", () => {
+    const east = wall("east", pt(0, 0), pt(4000, 0));
+    const sharp = wall("sharp", pt(0, 0), pt(4000, 80));
+    expect(wallMesh([east, sharp]).joints[0].footprint).toHaveLength(3);
+    const south = wall("south", pt(0, 0), pt(0, 3000));
+    expect(wallMesh([east, { ...south, start: pt(0, 1) }]).joints).toEqual([]);
+    expect(
+      wallMesh(
+        [east, south],
+        [{ id: "at-corner", wallId: east.id, offsetMm: 450, widthMm: 900 }],
+      ).joints,
+    ).toEqual([]);
+  });
+
+  it("builds a joined slab and clips front walls and windows at the cutaway", () => {
+    const graph = initialGraph({ width: 4000, depth: 3000 });
+    const [rear, front] = graph.walls;
+    graph.windows = [
+      {
+        id: "rear",
+        wallId: rear.id,
+        offsetMm: 1500,
+        widthMm: 1100,
+        sillMm: 800,
+        heightMm: 980,
+      },
+      {
+        id: "front",
+        wallId: front.id,
+        offsetMm: 1500,
+        widthMm: 1100,
+        sillMm: 800,
+        heightMm: 980,
+      },
+    ];
+    expect(graph.walls.map((wall) => wallRole(wall, graph.rooms))).toEqual([
+      "rear",
+      "front",
+      "front",
+      "rear",
+    ]);
+    const model = buildIsometric(graph);
+    expect(model.slab).toHaveLength(1);
+    expect(model.slab[0]).toHaveLength(1);
+    expect(bounds(model.slab[0][0])).toEqual({
+      left: -60,
+      top: -60,
+      right: 4060,
+      bottom: 3060,
+    });
+    expect(model.windows.map(({ id, height }) => ({ id, height }))).toEqual([
+      { id: "rear", height: 980 },
+      { id: "front", height: cutawayHeight.front - 800 },
+    ]);
+    expect(buildIsometric(initialGraph()).slab).toEqual([]);
+  });
+});
 
 describe("wall topology", () => {
   it("joins shared endpoints and ignores open branches when solving rooms", () => {
