@@ -239,3 +239,22 @@ npm start
 ```
 
 With the optimized server running, use `PLAYWRIGHT_BASE_URL=http://127.0.0.1:3000 npm run test:e2e`. The release passed 62 Vitest tests and 85 Playwright checks. Live production rejected unsigned grant changes and missing and invalid MCP credentials. Clerk’s public checker passed the challenge, protected resource, HTTPS issuer, PKCE, CIMD, and audience checks. It reported advisory scope guidance because the challenge has no requested scope. Codex’s public CIMD client and an S256 authorization request reached Clerk’s account sign-in screen. Next, complete consent and verify an agent edits the enabled production floorplan, appears in Studio, queues a DXF, and loses access after the grant is disabled.
+
+## Wall joins and isometric release checkpoint
+
+Feature commit `d12d05624cefd381288a1fe4a451d991ed01f225` on `fix/studio-wall-joins-isometric` was merged as `e45eee8cebeffce978c81516df87f6a3ae22f9d8`. Vercel Preview `dpl_2q6tf6ngwMhYiJj7PqAox2VctJUr` and Production `dpl_2QuP1wK3TDBmWJNGUvmLCqbTMZEJ` reached READY. The rendering applies to existing floorplans on reload and uses graph version 1 and migrations through 0004. [Dashboard](https://draft-chan.vercel.app/dashboard) · [Preview](https://draft-chan-kmmyrjui2-chanchans-projects-aada625f.vercel.app)
+
+In Studio, join two walls at the same endpoint and check that the outer corner fills in 2D. Switch to **Isometric** on a furnished layout and check that the foreground walls reveal the room layout. The rear walls retain their full rendered height. The user reported a successful MCP connection before this release.
+
+```sh
+git switch main
+git pull --ff-only
+npm ci
+npm run typecheck
+npm test -- tests/geometry.unit.test.ts tests/mcp.unit.test.ts
+npm test
+npm run build
+npm start
+```
+
+With the optimized server running, run `PLAYWRIGHT_BASE_URL=http://127.0.0.1:3000 npm run test:e2e`. All 65 Vitest tests and 85 Playwright checks passed. The MCP browser fixture verifies a joined outer corner and the furnished cutaway across five viewport sizes. Production returned HTTP 200 for the landing page and OAuth resource metadata, preserved the Studio sign-in destination, and returned the OAuth challenge for unauthenticated MCP requests. Signed-in rendering was verified on fixture plans.

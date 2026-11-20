@@ -206,3 +206,20 @@ Released 2026-11-20. Feature `e1cb4c5cece4c348e81974015f5ad96a933bd22c` on `feat
 The live smoke reached Clerk sign-in. Account consent, token exchange, and an authenticated production MCP edit remain to be verified with a signed-in account.
 
 [Dashboard](https://draft-chan.vercel.app/dashboard) · [Application merge](https://github.com/chanchan012/draft-chan/commit/5adc5583144c4fe0155bebd05da143a44bba63f5) · [Feature preview](https://draft-chan-puigf0ma0-chanchans-projects-aada625f.vercel.app)
+
+## Studio wall joins and isometric cutaway
+
+Released 2026-11-21. Feature commit `d12d05624cefd381288a1fe4a451d991ed01f225` on `fix/studio-wall-joins-isometric` was merged as `e45eee8cebeffce978c81516df87f6a3ae22f9d8`.
+
+| Phase | Result |
+| --- | --- |
+| Brief | Close the visible corner notches in Studio and make the isometric view readable on a furnished plan. |
+| Build | Derived corner fills from shared endpoints, rendered a raised floor slab and cutaway walls, and gave glazing and furniture distinct materials and details. |
+| Test | Strict TypeScript, the Next build, 65 Vitest tests, and 85 Playwright checks passed. The MCP browser fixture verified the joined 2D corners and furnished isometric view across five viewport sizes. Reviewed rendered desktop and compact phone frames. |
+| Merge | The tested tree was merged into GitHub `main`. |
+| Deploy | Vercel Preview `dpl_2q6tf6ngwMhYiJj7PqAox2VctJUr` and Production `dpl_2QuP1wK3TDBmWJNGUvmLCqbTMZEJ` reached READY. Landing, Studio’s sign-in redirect, and MCP OAuth discovery passed production smoke checks. |
+| Document | Architecture and handoff record the view geometry, release IDs, and reproduction commands. |
+
+The user reported a successful MCP connection. Release verification used fixture plans for browser checks and public endpoints for production smoke checks.
+
+[Dashboard](https://draft-chan.vercel.app/dashboard) · [Application merge](https://github.com/chanchan012/draft-chan/commit/e45eee8cebeffce978c81516df87f6a3ae22f9d8) · [Feature preview](https://draft-chan-kmmyrjui2-chanchans-projects-aada625f.vercel.app)
