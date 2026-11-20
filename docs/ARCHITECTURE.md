@@ -144,3 +144,12 @@ Studio derives corner fill polygons from solid wall runs in `lib/plans/wall-mesh
 ## Precision drafting
 
 `lib/plans/precision.ts` is shared by Studio and MCP. Queries page stable kind/ID references, use model-space bounding envelopes and report the saved revision over MCP. Centerline snaps resolve endpoints, midpoints, finite-segment intersections and perpendicular feet. Wall-face mode resolves either longitudinal face of a directed wall. The positive edge is the offset along `(-dy, dx)` in Draft's Y-down coordinates. Finish-to-finish measurements use the shortest segment between the requested faces. Measurements preserve fractional millimeters. The write boundary rounds input coordinates once to integer model millimeters. Existing OAuth scopes govern all new read tools.
+
+
+## Sketch geometry and polar input
+
+Graph v1 has an optional `sketches` array of up to 512 records. Each record has a stable ID, typed geometry and authored attribution. The four kinds are `construction`, `polyline`, `circle` and `arc`. Polylines hold up to 128 vertices. Linear coordinates and circle or arc centers store integer millimeters. Radii and angles preserve fractional values. The model uses Y-down coordinates, zero degrees pointing right and an increasing clockwise angle. DXF reverses Y and swaps arc endpoints to maintain the model's occupied sweep.
+
+`lib/plans/sketch.ts` supplies SVG path generation, bounds, hit testing and polar input. The command store applies add, replace and remove within existing undo batches. Snapshot saves validate the optional collection and preserve the saved array if an older client omits it. The rebase merges disjoint sketches by ID and surfaces conflicts on simultaneous edits of the same sketch. Construction lines appear dashed in Studio and SVG and are placed on a separate CONSTRUCTION layer in DXF. Sketch records remain separate from wall topology, clearance and material quantities.
+
+In Studio, the local origin shifts the drawing grid and the coordinate input frame for the open workspace. The public graph and MCP tools keep absolute model coordinates. Numeric distance and angle input bypasses snap and tracking. With pointer input the active object snap takes precedence, followed by wall Ortho, optional polar tracking and grid snapping. The precision measurement tools continue to use wall references and model points.

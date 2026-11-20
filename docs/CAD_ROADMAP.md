@@ -1,17 +1,17 @@
 # Architectural CAD and agent roadmap
 
-**Status: proposed backlog.** Draft already supports floorplans, hosted openings, furnishing, an isometric cutaway, clearance screening, quantities and blueprint exports. Its authenticated MCP server exposes nine tools and three resources. The names below describe proposed additions. The product focus is architectural drafting from measured survey through an issued drawing set.
+Draft supports floorplans, hosted openings, furnishing, an isometric cutaway, clearance screening, quantities, blueprint exports and the precision tools shipped in M5. Its authenticated MCP server exposes 17 tools and three resources. M6–M17 describe planned additions. The product focus is architectural drafting from measured survey through an issued drawing set.
 
-**Start with two small deliveries.** M13.1 is the next visual priority. Open an existing apartment as a furnished, sunlit architectural model, rotate it, and select the same window in plan and isometric views. M5.1 is the drafting priority. Find that window’s host wall, snap to its midpoint and measure the room face to face. Both can ship against today's single-storey plans. The sequence below identifies dependencies and suggested release order.
+M5.1 and M5.2 shipped precision measurements, object snaps, exact entry and 2D sketch primitives. M6.1 is the next drafting subgoal. M13.1 is the next visual milestone. The sequence below identifies dependencies and suggested release order.
 
 ## Milestones
 
-### M5 · Precision drafting
+### M5 · Precision drafting (shipped)
 
 - **5.1** Query by type, layer or bounds. Add stable geometric references, midpoint/intersection/perpendicular snaps, face and centerline measurements, exact coordinate entry and explicit unit conversion.
 - **5.2** Add construction lines, polylines, arcs and circles, polar tracking, local origins and numeric distance/angle input.
 
-Proposed MCP tools include `query_entities`, `inspect_entity`, `resolve_snap`, `measure_geometry`, `draw_polyline`, `draw_arc`, `draw_circle`.
+Available MCP tools include `query_entities`, `inspect_entity`, `resolve_snap`, `measure_geometry`, `draw_construction_line`, `draw_polyline`, `draw_arc` and `draw_circle`.
 
 **Acceptance.** On a rotated room, Studio and MCP return the same snap reference and face-to-face width. A 12 ft input yields 3657.6 mm before documented storage rounding. Construction geometry contributes zero room area and BOM quantity.
 
@@ -135,7 +135,7 @@ Proposed MCP tools include `attach_site_observation`, `compare_site_measurement`
 
 ## Suggested release sequence
 
-1. **Next visual release.** M13.1 on a saved two-bedroom apartment. Build one excellent furnished scene and test it on a phone before expanding the asset catalog. In the drafting track, start M5.1 and share stable entity references between both views.
-2. **Next client review.** M13.2–13.3 and M15.1. Compare a daylight kitchen and an evening kitchen from the same camera, review the brief and publish a revision-linked image. Ship M5.2 and M6 for precise, reversible edits.
+1. **Next visual release.** M13.1 on a saved two-bedroom apartment. Build one excellent furnished scene and test it on a phone before expanding the asset catalog. Use the stable entity references from M5 across both views.
+2. **Next client review.** M13.2–13.3 and M15.1. Compare a daylight kitchen and an evening kitchen from the same camera, review the brief and publish a revision-linked image. Ship M6 for reversible editing and agent previews.
 3. **Next design decision.** Use M14.1 and M16.1 to compare keeping an existing sofa with buying a smaller one. Show the path around the entrance corner, the cost difference and the furnished result. These first slices can use one storey and local comparison snapshots.
 4. **Project delivery.** M7–M12 support constrained drafting, storeys, construction sheets, interchange, coordination and team review. Use their completed capabilities for multi-storey rehearsals, named alternative reviews, construction phasing and M17 handover. Exercise recovery, permissions and performance with each release.

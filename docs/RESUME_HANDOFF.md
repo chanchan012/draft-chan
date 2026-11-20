@@ -2,7 +2,9 @@
 
 ## Next proposed subgoal
 
-M5.1 is implemented in `lib/plans/precision.ts`, `components/studio/surface.tsx` and `lib/server/draft-mcp.ts`. M5.2 is the next drafting subgoal. For a focused check run `npm test -- tests/precision.unit.test.ts tests/mcp.unit.test.ts` and `npm run test:e2e -- --grep "places precise"` with a Studio test server. The graph is v1 with database migrations through 0004. There are 13 released MCP tools after M5.1.
+M5.1 and M5.2 are complete. M6.1 is next in the drafting track. Read the [architectural CAD roadmap](CAD_ROADMAP.md), then inspect `lib/plans/editor-selection.ts`, `lib/plans/precision.ts`, `lib/plans/sketch.ts` and `lib/plans/command-store.ts` before adding transformations. Existing exact-entry tests use the 12 ft example and a 500 mm circle centered at a local origin.
+
+The M5.2 application merge is `b63368f95fd7e8999c68d812485df150d0817dba`. The graph is v1 with optional `sketches` and database migrations through 0004. MCP exposes 17 tools and the same three resources. Run `npm test -- tests/precision.unit.test.ts tests/mcp.unit.test.ts` for focused geometry and authenticated MCP coverage. Run `npm run test:e2e -- --grep "places precise|exact circle"` with a Studio test server for the coordinate and polar flows.
 
 The visual track starts at M13.1 in the [architectural CAD roadmap](CAD_ROADMAP.md). Inspect the current renderer with `rg --files components/studio lib/plans | rg "isometric|wall-mesh"`. Use the existing MCP-furnished apartment in `tests/e2e/studio.spec.ts` as the first reference scene.
 

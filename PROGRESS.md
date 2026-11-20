@@ -1,14 +1,24 @@
 # Draft progress
 
-## Planned work after M4.2
+## CAD roadmap
 
-The [architectural CAD roadmap](docs/CAD_ROADMAP.md) records proposed milestones M5–M17, candidate MCP tools and release checks. M13.1 is the next visual priority for lifelike furnished isometrics. M5.1 leads precision drafting. Later milestones cover move-in rehearsals, client briefs, renovation and owner handover. The release history below records shipped work.
+The [architectural CAD roadmap](docs/CAD_ROADMAP.md) tracks shipped M5 and planned M6–M17, with candidate MCP tools and release checks. M6 is next in the drafting track. M13.1 is the next visual milestone. Later milestones cover move-in rehearsals, client briefs, renovation and owner handover. The release history below records shipped work.
 
 ## M5.1 · Precision drafting
 
 Application merge `92e2b58653e508b0df4dbbfeb0f9a8c043a8b44b` adds model queries, stable wall references, snaps and measurements. In Wall or Measure, open Precision input to choose object snaps, wall faces or grid only, and place exact coordinates in mm, cm, m, in or ft. The MCP tools are `query_entities`, `inspect_entity`, `resolve_snap` and `measure_geometry`.
 
-Type check, 67 Vitest checks and the optimized Next build passed. The initial browser run passed 88 checks. After the mobile form placement fix, all five precision-input viewport checks passed on rerun. Graph v1 and the database schema require no migration.
+Type check, 67 Vitest checks and the optimized Next build passed. The initial browser run passed 88 checks. After the mobile form placement fix, all five precision-input viewport checks passed on rerun. Graph v1 and the database schema require no migration. Vercel Preview `dpl_2YgvLmVDBZYx8uQzH9XD5XVxw2bR` and Production `dpl_AgjMyQvsoPPjL1sia3NbqDnqRmUR` reached Ready.
+
+## M5.2 · Drawing primitives and exact entry
+
+Application merge `b63368f95fd7e8999c68d812485df150d0817dba` adds the 2D Sketch tool for construction lines, open or closed polylines, circles and clockwise arcs. Precision input adds a local origin, optional angular tracking and distance/angle entry. Sketches support undo, selection, movement, deletion, revisioned saves and live sync. SVG uses vector paths, and DXF exports native lines, polylines, circles and arcs. Sketch geometry contributes zero room area or BOM quantity.
+
+Vercel Preview `dpl_J2yrxSbKzD2LyRHzPkJemcmjPk29` and Production `dpl_2bbNLZjy68ifxM1UJoPs9zNdeaaB` reached Ready. Production returned HTTP 200 for the landing page, 307 for signed-out Studio access and 401 with the OAuth discovery challenge for signed-out MCP.
+
+MCP adds `draw_construction_line`, `draw_polyline`, `draw_circle` and `draw_arc`. Authenticated clients discover 17 tools in total. Graph v1 gains optional `sketches`. Database migrations are current through 0004, with no new migration for M5.
+
+Type checking, 68 Vitest checks and the optimized Next build passed. After correcting the circle test locator and save fixture, all 95 Chromium checks passed across desktop, tablet, phone, compact phone and landscape viewports.
 
 ## M1.1 · Foundation and shell
 
