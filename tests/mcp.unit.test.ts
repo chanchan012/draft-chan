@@ -176,7 +176,7 @@ it("validates Clerk OAuth tokens for Draft and enforces the signed-in owner's fl
     async (input: RequestInfo | URL, init?: RequestInit) => {
       const request = new Request(input, init);
       expect(new URL(request.url).pathname).toBe(
-      "/oauth_applications/access_tokens/verify",
+        "/oauth_applications/access_tokens/verify",
       );
       const { access_token } = (await request.json()) as {
         access_token: string;
@@ -358,8 +358,12 @@ it("lays out a two-bedroom plan using all MCP resources and tools over HTTP", as
       "check_clearance_codes",
       "draw_wall",
       "furnish_room_preset",
+      "inspect_entity",
+      "measure_geometry",
       "place_fixture",
       "place_opening",
+      "query_entities",
+      "resolve_snap",
       "split_or_join_wall",
       "trigger_dxf_export",
     ]);
@@ -426,6 +430,35 @@ it("lays out a two-bedroom plan using all MCP resources and tools over HTTP", as
     await draw(0, 7000, 0, 0, "exterior");
     const partition = await draw(0, 3500, 10000, 3500);
     await draw(5000, 0, 5000, 3500);
+    expect(
+      await call("query_entities", {
+        kind: "wall",
+        bounds: { left: 4000, right: 6000, top: -50, bottom: 50 },
+        limit: 1,
+      }),
+    ).toMatchObject({ total: 2, nextOffset: 1, revision });
+    expect(
+      await call("inspect_entity", { kind: "wall", id: north.wallId }),
+    ).toMatchObject({ entity: { thicknessMm: 120 } });
+    expect(
+      await call("resolve_snap", {
+        point: { x: 5000, y: 10 },
+        radiusMm: 20,
+        modes: ["midpoint"],
+      }),
+    ).toMatchObject({
+      snap: {
+        point: { x: 5000, y: 0 },
+        references: [{ wallId: north.wallId, edge: "center" }],
+      },
+    });
+    expect(
+      await call("measure_geometry", {
+        mode: "wall_edges",
+        from: { wallId: north.wallId, edge: "positive" },
+        to: { wallId: partition.wallId, edge: "negative" },
+      }),
+    ).toMatchObject({ distanceMm: 3380 });
     const door = await call("place_opening", {
       expectedRevision: revision,
       kind: "door",
@@ -587,7 +620,7 @@ it("bridges stdio to the authenticated HTTP tools without sharing the database c
         },
       }),
     );
-    expect((await client.listTools()).tools).toHaveLength(9);
+    expect((await client.listTools()).tools).toHaveLength(13);
     expect((await client.listResources()).resources).toHaveLength(3);
     expect(
       (await client.readResource({ uri: "draft://floorplan-graph" })).contents,
