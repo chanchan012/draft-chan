@@ -31,6 +31,8 @@ import {
   fixtureInput,
   utilityInput,
   annotationInput,
+  sketchFields,
+  type SketchGeometry,
   type DraftActor,
   type DraftPlanState,
   type PlanCommand,
@@ -398,6 +400,48 @@ export function createDraftMcp(scope: AgentScope, backend = draftMcpBackend) {
         );
       return { planId, revision: doc.revision, ...measurement };
     },
+  );
+
+  function addSketch(doc: StudioDocument, geometry: SketchGeometry): AgentEdit {
+    const id = crypto.randomUUID();
+    return {
+      plan: commands(doc, [{ type: "sketch.add", sketch: { id, geometry } }]),
+      cursor:
+        geometry.kind === "polyline"
+          ? geometry.points.at(-1)
+          : geometry.kind === "construction"
+            ? geometry.end
+            : geometry.center,
+      result: { sketchId: id, kind: geometry.kind },
+    };
+  }
+  edit(
+    "draw_construction_line",
+    "Add a two-point guide in model millimeters.",
+    sketchFields[0].omit({ kind: true }).extend(revision),
+    (doc, { expectedRevision: _, ...geometry }) =>
+      addSketch(doc, { kind: "construction", ...geometry }),
+  );
+  edit(
+    "draw_polyline",
+    "Add an open or closed polyline in model millimeters. Omit the duplicate closing point.",
+    sketchFields[1].omit({ kind: true }).extend(revision),
+    (doc, { expectedRevision: _, ...geometry }) =>
+      addSketch(doc, { kind: "polyline", ...geometry }),
+  );
+  edit(
+    "draw_circle",
+    "Add a circle with a center and radius in model millimeters.",
+    sketchFields[2].omit({ kind: true }).extend(revision),
+    (doc, { expectedRevision: _, ...geometry }) =>
+      addSketch(doc, { kind: "circle", ...geometry }),
+  );
+  edit(
+    "draw_arc",
+    "Add an arc with a center and radius in model millimeters. Angles are clockwise degrees from right in Draft's Y-down model.",
+    sketchFields[3].omit({ kind: true }).extend(revision),
+    (doc, { expectedRevision: _, ...geometry }) =>
+      addSketch(doc, { kind: "arc", ...geometry }),
   );
 
   edit(

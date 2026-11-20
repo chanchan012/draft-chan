@@ -10,6 +10,7 @@ import {
   Layers3,
   Zap,
   ScanLine,
+  Spline,
   DoorOpen,
   Hand,
   MousePointer2,
@@ -69,6 +70,7 @@ const tools = [
   { id: "fixture", label: "Fixture", icon: Armchair, shortcut: "F" },
   { id: "utility", label: "Utility", icon: Zap, shortcut: "U" },
   { id: "measure", label: "Measure", icon: MoveHorizontal, shortcut: "M" },
+  { id: "sketch", label: "Sketch", icon: Spline, shortcut: "G" },
   { id: "pan", label: "Pan", icon: Hand, shortcut: "H" },
 ] as const;
 const overlayPanels = "(max-width: 1000px)";
@@ -140,6 +142,7 @@ export function Studio({
   const [multi, setMulti] = useState(false);
   const selection = useMemo(() => {
     const visible = new Set([
+      ...(plan.sketches ?? []).map(({ id }) => "sketch:" + id),
       ...plan.walls.map(({ id }) => "wall:" + id),
       ...plan.openings.map(({ id }) => "door:" + id),
       ...(plan.windows ?? []).map(({ id }) => "window:" + id),
@@ -555,6 +558,12 @@ export function Studio({
             }
             onMove={(items, delta) => edit(moveSelection(plan, items, delta))}
             onWall={drawWall}
+            onSketch={(geometry) =>
+              command({
+                type: "sketch.add",
+                sketch: { id: crypto.randomUUID(), geometry },
+              })
+            }
             onDimension={(start, end) =>
               command({
                 type: "dimension.add",

@@ -1,3 +1,4 @@
+import { sketchPath } from "@/lib/plans/sketch";
 import { useId, useMemo } from "react";
 import {
   fixtureCatalog,
@@ -256,6 +257,17 @@ export function PlanDrawing({
           />
         );
       })}
+      {plan.sketches?.map(({ id, geometry }) => (
+        <path
+          key={id}
+          data-sketch={id}
+          data-kind={geometry.kind}
+          className="cad-sketch"
+          data-selected={isSelected(selection, { kind: "sketch", id })}
+          d={sketchPath(geometry)}
+          vectorEffect="non-scaling-stroke"
+        />
+      ))}
       {plan.annotations?.map(({ id, start, end }) => (
         <g
           key={id}

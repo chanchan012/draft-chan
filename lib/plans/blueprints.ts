@@ -15,6 +15,7 @@ import {
   wallLength,
   wallRuns,
 } from "./openings";
+import { normalizeDegrees, sketchPath, sketchPoints } from "./sketch";
 import type { DraftPlanState, Point } from "./model";
 import type { BlueprintFormat } from "./exports";
 
@@ -22,6 +23,7 @@ function blueprintGeometry(plan: DraftPlanState) {
   const wallsById = new Map(plan.walls.map((wall) => [wall.id, wall]));
   const openings = [...plan.openings, ...(plan.windows ?? [])];
   return {
+    sketches: (plan.sketches ?? []).map(({ geometry }) => geometry),
     walls: plan.walls.flatMap((wall) =>
       wallRuns(wall, openings).map(({ start, end }) =>
         wallFootprint(start, end, wall.thicknessMm),
@@ -76,6 +78,7 @@ function exportDxf({
   dimensions,
   fixtures,
   utilities,
+  sketches,
 }: Geometry) {
   const writer = new DxfWriter();
   writer.setUnits(Units.Millimeters);
@@ -95,6 +98,38 @@ function exportDxf({
     );
   }
 
+  if (sketches.some(({ kind }) => kind === "construction"))
+    writer.addLayer("CONSTRUCTION", Colors.Cyan);
+  if (sketches.some(({ kind }) => kind !== "construction"))
+    writer.addLayer("SKETCH", Colors.White);
+  for (const geometry of sketches) {
+    const layerName =
+      geometry.kind === "construction" ? "CONSTRUCTION" : "SKETCH";
+    const options = { layerName };
+    switch (geometry.kind) {
+      case "construction":
+        writer.addLine(vertex(geometry.start), vertex(geometry.end), options);
+        break;
+      case "polyline":
+        writer.addLWPolyline(
+          geometry.points.map((p) => ({ point: point2d(p.x, -p.y) })),
+          { ...options, flags: geometry.closed ? LWPolylineFlags.Closed : 0 },
+        );
+        break;
+      case "circle":
+        writer.addCircle(vertex(geometry.center), geometry.radiusMm, options);
+        break;
+      case "arc":
+        writer.addArc(
+          vertex(geometry.center),
+          geometry.radiusMm,
+          normalizeDegrees(-geometry.startDeg - geometry.sweepDeg),
+          normalizeDegrees(-geometry.startDeg),
+          options,
+        );
+        break;
+    }
+  }
   for (const points of walls) polygon(points, "WALLS");
   for (const { hinge, closed, leaf, clockwise, radius } of doors) {
     const angle = (p: Point) =>
@@ -145,11 +180,20 @@ const polygonTag = (points: Point[]) =>
   `<polygon points="${points.map(coordinate).join(" ")}"/>`;
 
 function exportSvg(
-  { walls, doors, windows, dimensions, fixtures, utilities }: Geometry,
+  {
+    walls,
+    doors,
+    windows,
+    dimensions,
+    fixtures,
+    utilities,
+    sketches,
+  }: Geometry,
   title: string,
 ) {
   const points = [
     ...walls.flat(),
+    ...sketches.flatMap(sketchPoints),
     ...fixtures.flat(),
     ...doors.flatMap(({ hinge, radius }) => square(hinge, radius)),
     ...windows.flatMap(({ outline }) => outline),
@@ -224,6 +268,21 @@ function exportSvg(
       : []),
     ...(dimensions.length
       ? [layer("dimensions", "none", "#466358", dimensionShapes)]
+      : []),
+    ...(sketches.length
+      ? [
+          layer(
+            "sketch",
+            "none",
+            "#3c6672",
+            sketches
+              .map(
+                (geometry) =>
+                  `<path d="${sketchPath(geometry)}"${geometry.kind === "construction" ? ' stroke-dasharray="32 20"' : ""}/>`,
+              )
+              .join(""),
+          ),
+        ]
       : []),
     layer("fixtures", "#e9eff3", "#38566c", fixtures.map(polygonTag).join("")),
     layer("electrical", "#edf6ff", "#2463a3", utilityShapes("electrical")),

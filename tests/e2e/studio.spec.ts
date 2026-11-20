@@ -120,6 +120,7 @@ async function studio(
         openings: input.openings,
         windows: input.windows ?? current.graph.windows,
         annotations: input.annotations ?? current.graph.annotations,
+        sketches: input.sketches ?? current.graph.sketches,
         fixtures: input.fixtures ?? current.graph.fixtures,
         utilities: input.utilities ?? current.graph.utilities,
       },
@@ -583,6 +584,47 @@ test("places precise coordinates using explicit input units", async ({
   await expect(page.locator("[data-wall]")).toHaveCount(1);
   await saveIfNeeded(page);
   expect(edits.at(-1)?.walls[0].end).toEqual({ x: 3658, y: 0 });
+  await frame(page);
+});
+
+test("sketches an exact circle from a local origin and restores it after reload", async ({
+  page,
+}) => {
+  const edits = await studio(page);
+  await page.getByRole("button", { name: "Sketch", exact: true }).click();
+  await page.getByLabel("Sketch shape").selectOption("circle");
+  await page.getByRole("button", { name: "Precision input" }).click();
+  await page.getByLabel("X", { exact: true }).fill("350");
+  await page.getByLabel("Y", { exact: true }).fill("450");
+  await page.getByText("Tracking and origin").click();
+  await page.getByRole("button", { name: "Set local origin from X/Y" }).click();
+  await expect(page.locator(".cad-local-origin")).toBeVisible();
+  await page.getByText("Tracking and origin").click();
+  await page.getByLabel("X", { exact: true }).fill("0");
+  await page.getByLabel("Y", { exact: true }).fill("0");
+  await page.getByRole("button", { name: "Set first point" }).click();
+  await page.getByLabel("Point entry").selectOption("polar");
+  await page.getByLabel("Distance", { exact: true }).fill("500");
+  await page
+    .getByRole("spinbutton", { name: "Angle (°)", exact: true })
+    .fill("45");
+  await page.getByRole("button", { name: "Place next point" }).click();
+  const circle = page.locator('[data-sketch][data-kind="circle"]');
+  await expect(circle).toHaveCount(1);
+  await page.getByRole("button", { name: "Undo", exact: true }).click();
+  await expect(circle).toHaveCount(0);
+  await page.getByRole("button", { name: "Redo", exact: true }).click();
+  await expect(circle).toHaveCount(1);
+  await saveIfNeeded(page);
+  const geometry = edits.at(-1)?.sketches?.[0].geometry;
+  expect(geometry).toMatchObject({
+    kind: "circle",
+    center: { x: 350, y: 450 },
+  });
+  if (geometry?.kind !== "circle") throw new Error("Expected a circle");
+  expect(geometry.radiusMm).toBeCloseTo(500);
+  await page.reload();
+  await expect(circle).toHaveCount(1);
   await frame(page);
 });
 

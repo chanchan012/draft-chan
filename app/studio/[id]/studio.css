@@ -1166,3 +1166,68 @@
     bottom: 117px;
   }
 }
+
+.studio-precision-form {
+  width: min(205px, 52vw);
+  max-height: max(120px, calc(100dvh - 260px));
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+.studio-precision-pair {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 6px;
+}
+
+.studio-precision-form details button {
+  white-space: normal;
+  text-align: left;
+  width: 100%;
+}
+
+.studio-sketch-tools {
+  z-index: 3;
+  top: 64px;
+  left: 50%;
+  transform: translateX(-50%);
+  gap: 6px;
+  white-space: nowrap;
+  font-size: 12px;
+}
+
+.studio-sketch-tools select {
+  min-width: 0;
+  max-width: 135px;
+  border-radius: 5px;
+  border: 1px solid var(--studio-rule);
+  padding: 5px;
+}
+
+.studio-sketch-tools button {
+  height: 28px;
+  padding-inline: 5px;
+}
+
+.cad-sketch,
+.cad-local-origin {
+  fill: none;
+  stroke: #355f6c;
+  stroke-width: 1.6;
+}
+
+.cad-sketch[data-kind="construction"],
+.cad-sketch-preview {
+  stroke-dasharray: 5 4;
+}
+
+.cad-sketch[data-selected="true"] {
+  stroke: var(--accent);
+  stroke-width: 2.6;
+}
+
+@media (max-width: 370px) {
+  .studio-tools button {
+    min-width: 27px;
+  }
+}

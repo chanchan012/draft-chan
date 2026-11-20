@@ -9,6 +9,7 @@ import { createStore } from "zustand/vanilla";
 import {
   actorSchema,
   annotationSchema,
+  sketchSchema,
   compareText,
   doorSchema,
   fixtureSchema,
@@ -121,6 +122,25 @@ function applyEdit(
         command.changes,
         windowSchema,
       );
+    case "sketch.add":
+      return addPlacement(
+        (draft.sketches ??= []),
+        sketchSchema.parse({
+          ...command.sketch,
+          createdBy: actor,
+          updatedBy: actor,
+        }),
+      );
+    case "sketch.update":
+      return editPlacement(
+        draft.sketches ?? [],
+        command.id,
+        actor,
+        { geometry: command.geometry },
+        sketchSchema,
+      );
+    case "sketch.remove":
+      return editPlacement(draft.sketches ?? [], command.id, actor);
     case "dimension.add":
       return addPlacement(
         (draft.annotations ??= []),

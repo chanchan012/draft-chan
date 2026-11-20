@@ -30,7 +30,13 @@ import {
   type LengthUnit,
   type SnapResult,
 } from "@/lib/plans/precision";
-import { modelPointInput } from "@/lib/plans/model";
+import {
+  arcFromPoints,
+  pointAt,
+  polarTarget,
+  sketchPath,
+} from "@/lib/plans/sketch";
+import { modelPointInput, type SketchGeometry } from "@/lib/plans/model";
 import { utilityCatalog, type UtilityLayer } from "@/lib/plans/catalog";
 import { bounds } from "@/lib/plans/footprints";
 import type { ClearanceIssue } from "@/lib/plans/clearance";
@@ -58,6 +64,7 @@ export type Tool =
   | "fixture"
   | "utility"
   | "measure"
+  | "sketch"
   | "pan";
 type SurfaceProps = {
   plan: DraftPlanState;
@@ -78,6 +85,7 @@ type SurfaceProps = {
   onToggle(item: Selection): void;
   onMove(items: readonly Selection[], delta: Point): void;
   onPlace(tool: "fixture" | "utility", point: Point): void;
+  onSketch(geometry: SketchGeometry): boolean;
   onWall(start: Point, end: Point): boolean;
   onDimension(start: Point, end: Point): boolean;
   onDoor(wallId: string, offsetMm: number): void;
@@ -120,6 +128,7 @@ export function Surface({
   onMove,
   onPlace,
   onWall,
+  onSketch,
   onDimension,
   onDoor,
 }: SurfaceProps) {
@@ -140,6 +149,15 @@ export function Surface({
   const [precisionOpen, setPrecisionOpen] = useState(false);
   const [snapMode, setSnapMode] = useState("center");
   const [inputUnit, setInputUnit] = useState<LengthUnit>();
+  const [sketchKind, setSketchKind] =
+    useState<SketchGeometry["kind"]>("construction");
+  const [vertices, setVertices] = useState<Point[]>([]);
+  const [polygonClosed, setPolygonClosed] = useState(false);
+  const [localOrigin, setLocalOrigin] = useState<Point>();
+  const [entryMode, setEntryMode] = useState<"coordinates" | "polar">(
+    "coordinates",
+  );
+  const [polarStep, setPolarStep] = useState(0);
   const [precisionError, setPrecisionError] = useState("");
   const setCamera = iso ? setIsoCamera : setPlanCamera;
   const geometry = iso ? plan : initial.current;
@@ -154,6 +172,7 @@ export function Surface({
         (marker) => layers[utilityCatalog[marker.template].layer],
       ),
       geometry.annotations,
+      geometry.sketches,
     );
   const center = { x: size.width / 2, y: size.height / 2 };
   const origin = {
@@ -174,11 +193,13 @@ export function Surface({
 
   useEffect(() => {
     setAnchor(null);
+    setVertices([]);
+    setPrecisionError("");
     setSnapMatch(undefined);
     setCursor(null);
     setDrag(null);
     gesture.current = null;
-  }, [tool, iso]);
+  }, [tool, iso, sketchKind]);
   useEffect(() => {
     setIsoCamera(null);
   }, [plan]);
@@ -242,52 +263,171 @@ export function Surface({
         });
   }
 
-  function snap(point: Point, start = anchor) {
-    return (
-      resolved(point, start)?.point ??
-      snapPoint(point, grid, start ?? undefined, ortho && tool === "wall")
-    );
+  const drawingLine = tool === "wall" || tool === "measure";
+  const drawing = drawingLine || tool === "sketch";
+  const drawingAnchor =
+    tool === "sketch"
+      ? ((sketchKind === "polyline" ? vertices.at(-1) : vertices[0]) ?? null)
+      : anchor;
+  const viewGridOrigin =
+    !iso && localOrigin
+      ? {
+          x: origin.x + camera.scale * localOrigin.x,
+          y: origin.y + camera.scale * localOrigin.y,
+        }
+      : origin;
+
+  function gridTarget(point: Point, start: Point | null) {
+    if (start && polarStep && !(ortho && tool === "wall")) {
+      const target = polarTarget(start, point, polarStep, grid);
+      if (modelPointInput.safeParse(modelPrecision(target)).success)
+        return target;
+    }
+    if (!localOrigin)
+      return snapPoint(
+        point,
+        grid,
+        start ?? undefined,
+        ortho && tool === "wall",
+      );
+    const shifted = {
+      x: localOrigin.x + Math.round((point.x - localOrigin.x) / grid) * grid,
+      y: localOrigin.y + Math.round((point.y - localOrigin.y) / grid) * grid,
+    };
+    if (start && ortho && tool === "wall") {
+      if (Math.abs(point.x - start.x) >= Math.abs(point.y - start.y))
+        shifted.y = start.y;
+      else shifted.x = start.x;
+    }
+    return {
+      x: Math.max(-1e6, Math.min(1e6, shifted.x)),
+      y: Math.max(-1e6, Math.min(1e6, shifted.y)),
+    };
   }
 
-  const drawingLine = tool === "wall" || tool === "measure";
+  function snap(point: Point, start = drawingAnchor) {
+    return resolved(point, start)?.point ?? gridTarget(point, start);
+  }
+
   const commitLine = (start: Point, end: Point) =>
     (tool === "measure" ? onDimension : onWall)(
       modelPrecision(start),
       modelPrecision(end),
     );
 
+  function commitSketch(geometry: SketchGeometry) {
+    if (onSketch(geometry)) {
+      setVertices([]);
+      setCursor(null);
+    }
+  }
+
+  function finishPolyline() {
+    if (vertices.length >= (polygonClosed ? 3 : 2))
+      commitSketch({
+        kind: "polyline",
+        points: vertices,
+        closed: polygonClosed,
+      });
+  }
+
+  function fromSketchPoints(point: Point): SketchGeometry | undefined {
+    const [first, second] = vertices;
+    if (!first) return;
+    switch (sketchKind) {
+      case "construction":
+        return { kind: "construction", start: first, end: point };
+      case "circle":
+        return {
+          kind: "circle",
+          center: first,
+          radiusMm: separation(first, point),
+        };
+      case "arc":
+        return second
+          ? arcFromPoints(first, second, point)
+          : { kind: "construction", start: first, end: point };
+      case "polyline":
+        return {
+          kind: "polyline",
+          points: [...vertices, point],
+          closed: false,
+        };
+    }
+  }
+
   function placePoint(end: Point) {
-    if (!anchor) setAnchor(end);
-    else if (
-      !same(modelPrecision(anchor), modelPrecision(end)) &&
-      commitLine(anchor, end)
-    )
-      setAnchor(null);
+    setPrecisionError("");
     setCursor(end);
+    const rounded = modelPrecision(end);
+    if (tool === "sketch") {
+      const [first, second] = vertices;
+      if (
+        !vertices.length ||
+        sketchKind === "polyline" ||
+        (sketchKind === "arc" && !second)
+      ) {
+        if (vertices.length >= 128) {
+          setPrecisionError("Finish the polyline at 128 vertices.");
+          return;
+        }
+        if (!vertices.length || !same(vertices[vertices.length - 1], rounded))
+          setVertices([
+            ...vertices,
+            sketchKind === "arc" && first ? end : rounded,
+          ]);
+        return;
+      }
+      if (same(first, rounded)) return;
+      const geometry = fromSketchPoints(
+        sketchKind === "construction" ? rounded : end,
+      );
+      if (geometry) commitSketch(geometry);
+      return;
+    }
+    if (!anchor) setAnchor(end);
+    else if (!same(modelPrecision(anchor), rounded) && commitLine(anchor, end))
+      setAnchor(null);
   }
 
   function submitPoint(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    const trigger = (event.nativeEvent as SubmitEvent).submitter;
+    const setOrigin = trigger?.getAttribute("value") === "set-origin";
     const data = new FormData(event.currentTarget);
-    const x = String(data.get("x") ?? "").trim();
-    const y = String(data.get("y") ?? "").trim();
     const factor = millimeters[inputUnit ?? unit];
-    const point = { x: Number(x) * factor, y: Number(y) * factor };
-    if (!x || !y || !modelPointInput.safeParse(modelPrecision(point)).success) {
+    let point: Point;
+    if (entryMode === "polar" && drawingAnchor && !setOrigin) {
+      const distance = Number(data.get("distance")) * factor;
+      const angle = Number(data.get("angle"));
+      if (!(distance > 0) || !Number.isFinite(angle)) {
+        setPrecisionError("Enter a positive distance and an angle.");
+        return;
+      }
+      point = pointAt(drawingAnchor, distance, angle % 360);
+    } else {
+      const base = setOrigin ? undefined : localOrigin;
+      point = {
+        x: Number(data.get("x")) * factor + (base?.x ?? 0),
+        y: Number(data.get("y")) * factor + (base?.y ?? 0),
+      };
+    }
+    if (!modelPointInput.safeParse(modelPrecision(point)).success) {
       setPrecisionError("Enter coordinates within the drawing bounds.");
       return;
     }
     setPrecisionError("");
     setSnapMatch(undefined);
-    placePoint(point);
+    if (setOrigin) setLocalOrigin(modelPrecision(point));
+    else placePoint(point);
   }
 
   function activate(point: Point, additive = multi) {
     if (iso || tool === "pan") return;
-    if (drawingLine) {
-      const match = resolved(point, anchor);
+    if (drawing) {
+      const match = resolved(point, drawingAnchor);
       setSnapMatch(match);
-      placePoint(match?.point ?? snap(point));
+      placePoint(match?.point ?? gridTarget(point, drawingAnchor));
       return;
     }
     if (tool === "fixture" || tool === "utility") {
@@ -325,6 +465,8 @@ export function Surface({
       suppressTouchTap.current = true;
       gesture.current = null;
       setAnchor(null);
+      setVertices([]);
+      setPrecisionError("");
       setCursor(null);
       setDrag(null);
     }
@@ -406,17 +548,18 @@ export function Surface({
       else setDrag(null);
       return;
     }
-    if (!iso && drawingLine) {
+    if (!iso && drawing) {
       const start =
+        drawingLine &&
         current &&
         !anchor &&
         Math.hypot(point.x - current.start.x, point.y - current.start.y) > 6
           ? snap(modelPoint(current.start, size, current.camera), null)
-          : anchor;
+          : drawingAnchor;
       const probe = modelPoint(point, size, camera);
       const match = resolved(probe, start);
       setSnapMatch(match);
-      setCursor(match?.point ?? snap(probe, start));
+      setCursor(match?.point ?? gridTarget(probe, start));
     }
   }
 
@@ -504,7 +647,14 @@ export function Surface({
     const point = cursor ?? snap({ x: camera.x, y: camera.y });
     if (event.key === "Enter") {
       event.preventDefault();
-      if (drawingLine && cursor) placePoint(cursor);
+      if (
+        tool === "sketch" &&
+        sketchKind === "polyline" &&
+        vertices.length >= 2 &&
+        (!cursor || same(modelPrecision(cursor), vertices.at(-1)!))
+      )
+        finishPolyline();
+      else if (drawing && cursor) placePoint(cursor);
       else activate(point);
       return;
     }
@@ -521,7 +671,7 @@ export function Surface({
       onMove(selection, { x: Math.round(delta.x), y: Math.round(delta.y) });
     } else {
       const probe = { x: point.x + delta.x, y: point.y + delta.y };
-      setSnapMatch(resolved(probe, anchor));
+      setSnapMatch(resolved(probe, drawingAnchor));
       setCursor(snap(probe));
     }
   }
@@ -555,6 +705,10 @@ export function Surface({
   const start = anchor ?? dragStart;
   const preview =
     start && cursor && !same(start, cursor) && drawingLine && !iso;
+  const sketchPreview =
+    tool === "sketch" && vertices.length && cursor
+      ? fromSketchPoints(cursor)
+      : undefined;
   const step = grid * camera.scale;
   const gridPx = step * 2 ** Math.max(0, Math.ceil(Math.log2(8 / step)));
   const scaleMm = unit === "mm" ? 1000 : 36 * unitFactor(unit);
@@ -592,7 +746,12 @@ export function Surface({
         }}
         onKeyDown={keyboard}
       >
-        <DrawingGrid step={gridPx} x={origin.x} y={origin.y} isometric={iso} />
+        <DrawingGrid
+          step={gridPx}
+          x={viewGridOrigin.x}
+          y={viewGridOrigin.y}
+          isometric={iso}
+        />
         <g
           transform={`translate(${origin.x} ${origin.y}) scale(${camera.scale})`}
         >
@@ -610,6 +769,20 @@ export function Surface({
             />
           )}
           {!iso && <ClearanceDrawing issue={issue} scale={camera.scale} />}
+          {!iso && localOrigin && (
+            <path
+              className="cad-local-origin"
+              vectorEffect="non-scaling-stroke"
+              d={`M ${localOrigin.x - 9 / camera.scale} ${localOrigin.y} h ${18 / camera.scale} M ${localOrigin.x} ${localOrigin.y - 9 / camera.scale} v ${18 / camera.scale}`}
+            />
+          )}
+          {!iso && sketchPreview && (
+            <path
+              className="cad-sketch cad-sketch-preview"
+              d={sketchPath(sketchPreview)}
+              vectorEffect="non-scaling-stroke"
+            />
+          )}
           {preview && (
             <line
               className="cad-preview"
@@ -700,6 +873,8 @@ export function Surface({
         !plan.fixtures.length &&
         !plan.utilities.length &&
         !plan.annotations?.length &&
+        !plan.sketches?.length &&
+        tool !== "sketch" &&
         !start && (
           <div className="studio-empty">
             <strong>A blank drawing</strong>
@@ -710,7 +885,7 @@ export function Surface({
             </span>
           </div>
         )}
-      {!iso && drawingLine && (
+      {!iso && drawing && (
         <div className="studio-floating studio-precision">
           <button
             type="button"
@@ -747,21 +922,130 @@ export function Surface({
                   ))}
                 </select>
               </label>
-              <label>
-                X <input name="x" type="number" step="any" required />
-              </label>
-              <label>
-                Y <input name="y" type="number" step="any" required />
-              </label>
+              {drawingAnchor && (
+                <label>
+                  Point entry
+                  <select
+                    value={entryMode}
+                    onChange={(event) =>
+                      setEntryMode(
+                        event.target.value === "polar"
+                          ? "polar"
+                          : "coordinates",
+                      )
+                    }
+                  >
+                    <option value="coordinates">Coordinates</option>
+                    <option value="polar">Distance and angle</option>
+                  </select>
+                </label>
+              )}
+              {entryMode === "polar" && drawingAnchor ? (
+                <div className="studio-precision-pair">
+                  <label>
+                    Distance{" "}
+                    <input name="distance" type="number" step="any" required />
+                  </label>
+                  <label>
+                    Angle (°){" "}
+                    <input name="angle" type="number" step="any" required />
+                  </label>
+                </div>
+              ) : (
+                <div className="studio-precision-pair">
+                  <label>
+                    X <input name="x" type="number" step="any" required />
+                  </label>
+                  <label>
+                    Y <input name="y" type="number" step="any" required />
+                  </label>
+                </div>
+              )}
               <button type="submit">
-                {anchor ? "Place next point" : "Set first point"}
+                {drawingAnchor ? "Place next point" : "Set first point"}
               </button>
+              <details>
+                <summary>Tracking and origin</summary>
+                <label>
+                  Polar tracking
+                  <select
+                    value={polarStep}
+                    onChange={(event) =>
+                      setPolarStep(Number(event.target.value))
+                    }
+                  >
+                    <option value="0">Off</option>
+                    {[15, 30, 45, 90].map((angle) => (
+                      <option key={angle} value={angle}>
+                        {angle}°
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                {(!drawingAnchor || entryMode === "coordinates") && (
+                  <button type="submit" value="set-origin">
+                    Set local origin from X/Y
+                  </button>
+                )}
+                {localOrigin && (
+                  <button
+                    type="button"
+                    onClick={() => setLocalOrigin(undefined)}
+                  >
+                    Reset local origin
+                  </button>
+                )}
+              </details>
               {precisionError && <span role="alert">{precisionError}</span>}
             </form>
           )}
         </div>
       )}
-      {!iso && drawingLine && snapMatch && cursor && (
+      {!iso && tool === "sketch" && (
+        <div className="studio-floating studio-sketch-tools">
+          <select
+            aria-label="Sketch shape"
+            value={sketchKind}
+            onChange={(event) =>
+              setSketchKind(event.target.value as SketchGeometry["kind"])
+            }
+          >
+            <option value="construction">Construction line</option>
+            <option value="polyline">Polyline</option>
+            <option value="circle">Circle</option>
+            <option value="arc">Arc</option>
+          </select>
+          {sketchKind === "polyline" && (
+            <>
+              <label>
+                <input
+                  type="checkbox"
+                  checked={polygonClosed}
+                  onChange={(event) => setPolygonClosed(event.target.checked)}
+                />{" "}
+                Closed
+              </label>
+              <button
+                type="button"
+                disabled={vertices.length < (polygonClosed ? 3 : 2)}
+                onClick={finishPolyline}
+              >
+                Finish
+              </button>
+            </>
+          )}
+          {sketchKind === "arc" && (
+            <span>
+              {vertices.length === 0
+                ? "Set center"
+                : vertices.length === 1
+                  ? "Set radius"
+                  : "Set end angle"}
+            </span>
+          )}
+        </div>
+      )}
+      {!iso && drawing && snapMatch && cursor && (
         <span className="studio-snap-label" data-kind={snapMatch.kind}>
           {snapMatch.kind}
         </span>
@@ -794,6 +1078,7 @@ export function Surface({
                       (item) => layers[utilityCatalog[item.template].layer],
                     ),
                     plan.annotations,
+                    plan.sketches,
                   ),
                 )
               }
