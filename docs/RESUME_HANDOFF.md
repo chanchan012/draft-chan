@@ -1,5 +1,9 @@
 # Resume handoff
 
+## Next proposed subgoal
+
+Start at M5.1 in the [architectural CAD roadmap](CAD_ROADMAP.md). The planning update preserves graph version 1, migrations through 0004 and the nine released MCP tools. When implementation begins, run `npm test` for the baseline and inspect `lib/plans/cad.ts`, `lib/plans/geometry.ts` and `lib/server/draft-mcp.ts` before writing the precision-query brief.
+
 ## Reproduce the foundation
 
 Use Node 24 and npm. From the repository root run:
