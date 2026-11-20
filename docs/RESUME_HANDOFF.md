@@ -212,3 +212,30 @@ npm start
 With the optimized server running, use `PLAYWRIGHT_BASE_URL=http://127.0.0.1:3000 npm run test:e2e`. All 61 Vitest tests and 80 Playwright checks passed. The live Studio browser scenario uses a real MCP client and Hono handler with a fixture workspace. The integration suite uses PGlite and exercises actual token storage, revision-checked saves, presence fan-out, DXF rendering, and a stdio subprocess. Production returned HTTP 401 for missing and nonexistent agent tokens and unsigned token management, and preserved Studio’s redirect destination. Vercel Preview retains its authentication gate. Signed-in production agent writes remain unverified.
 
 M4.2 completes the requested milestone sequence. The commands above reproduce the current release checks before any follow-up work.
+
+## Clerk OAuth release checkpoint
+
+The feature head is `e1cb4c5cece4c348e81974015f5ad96a933bd22c` on `feature/mcp-clerk-oauth`. The application merge is `5adc5583144c4fe0155bebd05da143a44bba63f5`. Vercel Production `dpl_2vYHe5VphCqeKC8e12UNGu8dSLcA` and Preview `dpl_7Et1UaKmUx6ijB6kN2BQb9pZj2j7` reached READY. OAuth uses the production hostname as its exact registered audience. [Dashboard](https://draft-chan.vercel.app/dashboard)
+
+Migration `0004_mcp_oauth_floorplans.sql` is recorded in Neon `draft` with timestamp `1795159694291` and hash `ff5f67aee90a8a506b9a393fd3257825acb86e28db96bff26cd23b171c3be76b`. Apply the checked-in migrations as the database owner on a fresh installation, then run `GRANT SELECT, INSERT, DELETE ON TABLE public.floorplan_oauth_grants TO draft_app;`. Clerk resource `oares_3MMVE8Mr27znPn0UnHtm4ns3xWQ` belongs to Draft’s development instance `ins_3MHwRxmFb476GCO5P6M9jEHHwEa`. Production uses the existing Clerk keys and requires no new environment variables. Preview uses an alternate origin and can use existing manual tokens.
+
+Sign in to Draft and open a disposable plan. In **Connect an agent**, choose **Enable OAuth access**. Add `https://draft-chan.vercel.app/api/mcp` as a custom MCP server in ChatGPT Plugins. Choose **OAuth** and **CIMD**, then sign in and approve the connection with Clerk. Install the resulting plugin before selecting it in a conversation. [ChatGPT custom MCP setup](https://developers.openai.com/api/docs/guides/custom-mcp-server)
+
+For Codex CLI, add the server and complete its browser login when prompted.
+
+```sh
+codex mcp add draft --url https://draft-chan.vercel.app/api/mcp
+codex mcp login draft
+```
+
+The browser sign-in and consent flow replaces manual token entry. If an existing Codex entry named `draft` uses a bearer token environment variable, replace that entry with the OAuth configuration. To end access to the floorplan, choose **Disable OAuth access** in Studio.
+
+```sh
+npm run typecheck
+npm test -- tests/mcp.unit.test.ts
+npm test
+npm run build
+npm start
+```
+
+With the optimized server running, use `PLAYWRIGHT_BASE_URL=http://127.0.0.1:3000 npm run test:e2e`. The release passed 62 Vitest tests and 85 Playwright checks. Live production rejected unsigned grant changes and missing and invalid MCP credentials. Clerk’s public checker passed the challenge, protected resource, HTTPS issuer, PKCE, CIMD, and audience checks. It reported advisory scope guidance because the challenge has no requested scope. Codex’s public CIMD client and an S256 authorization request reached Clerk’s account sign-in screen. Next, complete consent and verify an agent edits the enabled production floorplan, appears in Studio, queues a DXF, and loses access after the grant is disabled.

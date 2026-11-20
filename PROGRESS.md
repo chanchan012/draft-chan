@@ -189,3 +189,20 @@ Released 2026-11-20. Feature commit `91612291c00da0361d530e5ee071c2287a32f218` o
 M4.2 is the last subgoal in the requested roadmap. The signed-in browser and agent workflows were verified using fixtures and isolated Postgres integration tests. The production smoke used unsigned requests and a nonexistent agent token.
 
 [Dashboard](https://draft-chan.vercel.app/dashboard) · [Application merge](https://github.com/chanchan012/draft-chan/commit/cbcaa7ac04614bbb190cae35b9a950fa35de42c8) · [Feature preview](https://draft-chan-9aktdeqgj-chanchans-projects-aada625f.vercel.app)
+
+## Post-M4.2 · Clerk OAuth for MCP
+
+Released 2026-11-20. Feature `e1cb4c5cece4c348e81974015f5ad96a933bd22c` on `feature/mcp-clerk-oauth` was merged as `5adc5583144c4fe0155bebd05da143a44bba63f5`.
+
+| Phase | Result |
+| --- | --- |
+| Brief | Connect Codex and ChatGPT-compatible clients through Clerk without copying a floorplan token. |
+| Build | Added Clerk OAuth discovery and verification at `/api/mcp`. Studio lets a signed-in owner enable or disable access for one floorplan at a time. Manual tokens remain available for existing clients. |
+| Test | TypeScript, the optimized Next build, 62 Vitest tests, and 85 Playwright checks passed. The integration test used the Clerk SDK with a mocked Clerk verification endpoint and PGlite. It checked audience rejection, owner isolation, an authorized edit, and grant revocation. |
+| Merge | The tested tree was merged into GitHub `main`. |
+| Deploy | Neon migration 0004 was applied. Vercel Preview `dpl_7Et1UaKmUx6ijB6kN2BQb9pZj2j7` and Production `dpl_2vYHe5VphCqeKC8e12UNGu8dSLcA` reached READY. Draft’s existing Clerk development instance registered the production resource. The live challenge, issuer discovery, invalid-token rejection, and Codex CIMD redirect to Clerk sign-in passed. |
+| Document | Architecture and handoff record token verification, the selected floorplan grant, and OAuth setup for ChatGPT and Codex. |
+
+The live smoke reached Clerk sign-in. Account consent, token exchange, and an authenticated production MCP edit remain to be verified with a signed-in account.
+
+[Dashboard](https://draft-chan.vercel.app/dashboard) · [Application merge](https://github.com/chanchan012/draft-chan/commit/5adc5583144c4fe0155bebd05da143a44bba63f5) · [Feature preview](https://draft-chan-puigf0ma0-chanchans-projects-aada625f.vercel.app)
