@@ -1102,3 +1102,67 @@
     min-width: 31px;
   }
 }
+
+.studio-floating.studio-precision {
+  position: absolute;
+  right: 12px;
+  bottom: 62px;
+  z-index: 4;
+  padding: 4px;
+  flex-direction: column;
+  align-items: flex-end;
+}
+
+.studio-precision-form {
+  display: grid;
+  gap: 6px;
+  padding: 8px;
+  max-width: min(205px, 50vw);
+  font-size: 12px;
+  color: var(--studio-ink, #223229);
+}
+
+.studio-precision-form label {
+  display: grid;
+  gap: 3px;
+}
+
+.studio-precision-form :is(input, select) {
+  width: 100%;
+  min-width: 0;
+  padding: 4px;
+  border: 1px solid #adb8aa;
+  border-radius: 4px;
+  background: #fff;
+}
+
+.studio-precision-form button {
+  font-size: 12px;
+}
+
+.studio-snap-label {
+  position: absolute;
+  left: 50%;
+  bottom: 48px;
+  transform: translateX(-50%);
+  pointer-events: none;
+  color: #21463b;
+  background: #f9faf4;
+  border: 1px solid #b9cabc;
+  padding: 2px 7px;
+  border-radius: 5px;
+  font-size: 11px;
+  text-transform: capitalize;
+}
+
+.cad-cursor[data-snap] {
+  fill: #fafcf3;
+  stroke: #21765b;
+  stroke-width: 2;
+}
+
+@media (max-width: 620px) {
+  .studio-floating.studio-precision {
+    bottom: 117px;
+  }
+}

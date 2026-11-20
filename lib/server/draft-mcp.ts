@@ -38,6 +38,18 @@ import {
 } from "../plans/model";
 import { pointAlong } from "../plans/openings";
 import {
+  entityKinds,
+  inspectEntity,
+  lengthUnits,
+  measurePoints,
+  measureWallEdges,
+  modelPrecision,
+  queryEntities,
+  resolveSnap,
+  snapKinds,
+  wallEdges,
+} from "../plans/precision";
+import {
   saveStudioSchema,
   studioSnapshot,
   type StudioDocument,
@@ -50,6 +62,15 @@ import { plans } from "./plans";
 import { queueThumbnail } from "./thumbnails";
 
 const objectId = z.string().trim().min(1).max(128);
+const preciseCoordinate = z.number().finite().min(-1_010_000).max(1_010_000);
+const precisePoint = z.strictObject({
+  x: preciseCoordinate,
+  y: preciseCoordinate,
+});
+const wallEdgeReference = z.strictObject({
+  wallId: objectId,
+  edge: z.enum(wallEdges),
+});
 const revision = {
   expectedRevision: exportRevision.describe(
     "Current revision from floorplan-graph.",
@@ -276,6 +297,109 @@ export function createDraftMcp(scope: AgentScope, backend = draftMcpBackend) {
     async () => catalog,
   );
 
+  tool(
+    "query_entities",
+    "List entities at the saved revision. Bounds select overlapping envelopes in millimeters. Page with nextOffset on the same revision.",
+    z.strictObject({
+      kind: z.enum(entityKinds).optional(),
+      layer: objectId.optional(),
+      bounds: z
+        .strictObject({
+          left: preciseCoordinate,
+          top: preciseCoordinate,
+          right: preciseCoordinate,
+          bottom: preciseCoordinate,
+        })
+        .refine(
+          ({ left, right, top, bottom }) => left <= right && top <= bottom,
+        )
+        .optional(),
+      offset: z.int().min(0).max(100_000).default(0),
+      limit: z.int().min(1).max(100).default(25),
+    }),
+    true,
+    async (input) => {
+      const doc = await current();
+      return {
+        planId,
+        revision: doc.revision,
+        ...queryEntities(doc.graph, input),
+      };
+    },
+  );
+  tool(
+    "inspect_entity",
+    "Inspect an entity by its stable kind and ID, including authored parameters and drawing bounds.",
+    z.strictObject({
+      kind: z.enum(entityKinds),
+      id: objectId,
+    }),
+    true,
+    async (ref) => {
+      const doc = await current();
+      const entity = inspectEntity(doc.graph, ref);
+      if (!entity)
+        throw new ToolFailure(
+          "entity_unavailable",
+          "No entity matches this reference.",
+        );
+      return { planId, revision: doc.revision, ...entity };
+    },
+  );
+  tool(
+    "resolve_snap",
+    "Find a wall endpoint, midpoint, centerline intersection, perpendicular foot or finished face near a point in millimeters. Include an anchor for perpendicular snaps. Returns the exact point and integer model point for subsequent edits.",
+    z.strictObject({
+      point: precisePoint,
+      radiusMm: z.number().positive().max(2_000_000),
+      modes: z.array(z.enum(snapKinds)).min(1).max(5).optional(),
+      anchor: precisePoint.optional(),
+      ortho: z.boolean().optional(),
+    }),
+    true,
+    async ({ point, ...options }) => {
+      const doc = await current();
+      const snap = resolveSnap(doc.graph.walls, point, options);
+      return {
+        planId,
+        revision: doc.revision,
+        snap: snap ? { ...snap, modelPoint: modelPrecision(snap.point) } : null,
+      };
+    },
+  );
+  tool(
+    "measure_geometry",
+    "Measure between model points, or the shortest distance between two wall centerlines or finished faces. A positive edge is on the +(-dy, dx) side of the directed wall in Draft's Y-down model.",
+    z.discriminatedUnion("mode", [
+      z.strictObject({
+        mode: z.literal("points"),
+        start: precisePoint,
+        end: precisePoint,
+        unit: z.enum(lengthUnits).default("mm"),
+      }),
+      z.strictObject({
+        mode: z.literal("wall_edges"),
+        from: wallEdgeReference,
+        to: wallEdgeReference,
+        unit: z.enum(lengthUnits).default("mm"),
+      }),
+    ]),
+    true,
+    async (input) => {
+      const doc = await current();
+      const measurement =
+        input.mode === "points"
+          ? measurePoints(input.start, input.end, input.unit)
+          : measureWallEdges(doc.graph.walls, input.from, input.to, input.unit);
+      if (!measurement)
+        throw new ToolFailure(
+          "entity_unavailable",
+          "A wall in this reference is unavailable.",
+        );
+      return { planId, revision: doc.revision, ...measurement };
+    },
+  );
+
   edit(
     "draw_wall",
     "Draw a wall between two integer millimeter coordinates.",
@@ -382,13 +506,11 @@ export function createDraftMcp(scope: AgentScope, backend = draftMcpBackend) {
           })
           .partial().shape,
       }),
-      utilityInput
-        .omit({ id: true, template: true })
-        .extend({
-          ...revision,
-          kind: z.literal("utility"),
-          template: z.enum(utilityKinds),
-        }),
+      utilityInput.omit({ id: true, template: true }).extend({
+        ...revision,
+        kind: z.literal("utility"),
+        template: z.enum(utilityKinds),
+      }),
     ]),
     (doc, input) => {
       const id = crypto.randomUUID();

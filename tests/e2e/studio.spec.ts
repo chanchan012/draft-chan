@@ -568,6 +568,24 @@ test("draws a window and dimension and preserves them after reload", async ({
   await frame(page);
 });
 
+test("places precise coordinates using explicit input units", async ({
+  page,
+}) => {
+  const edits = await studio(page);
+  await page.getByRole("button", { name: "Wall", exact: true }).click();
+  await page.getByRole("button", { name: "Precision input" }).click();
+  await page.getByLabel("Input unit").selectOption("ft");
+  await page.getByLabel("X", { exact: true }).fill("0");
+  await page.getByLabel("Y", { exact: true }).fill("0");
+  await page.getByRole("button", { name: "Set first point" }).click();
+  await page.getByLabel("X", { exact: true }).fill("12");
+  await page.getByRole("button", { name: "Place next point" }).click();
+  await expect(page.locator("[data-wall]")).toHaveCount(1);
+  await saveIfNeeded(page);
+  expect(edits.at(-1)?.walls[0].end).toEqual({ x: 3658, y: 0 });
+  await frame(page);
+});
+
 test("keeps unsaved drawing after a revision conflict", async ({ page }) => {
   await studio(page, true);
   await page.getByRole("button", { name: "Wall", exact: true }).click();

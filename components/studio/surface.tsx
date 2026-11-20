@@ -1,10 +1,11 @@
 "use client";
 
-import { Focus, Minus, Plus } from "lucide-react";
+import { Crosshair, Focus, Minus, Plus } from "lucide-react";
 import {
   useEffect,
   useRef,
   useState,
+  type FormEvent,
   type KeyboardEvent,
   type PointerEvent,
 } from "react";
@@ -13,7 +14,6 @@ import {
   fitCamera,
   modelPoint,
   pinchCamera,
-  snapWallPoint,
   snapPoint,
   unitFactor,
   wallHit,
@@ -21,6 +21,16 @@ import {
   type Camera,
   type Viewport,
 } from "@/lib/plans/cad";
+import {
+  lengthUnits,
+  measurePoints,
+  millimeters,
+  modelPrecision,
+  resolveSnap,
+  type LengthUnit,
+  type SnapResult,
+} from "@/lib/plans/precision";
+import { modelPointInput } from "@/lib/plans/model";
 import { utilityCatalog, type UtilityLayer } from "@/lib/plans/catalog";
 import { bounds } from "@/lib/plans/footprints";
 import type { ClearanceIssue } from "@/lib/plans/clearance";
@@ -126,6 +136,11 @@ export function Surface({
   const [isoCamera, setIsoCamera] = useState<Camera | null>(null);
   const [anchor, setAnchor] = useState<Point | null>(null);
   const [cursor, setCursor] = useState<Point | null>(null);
+  const [snapMatch, setSnapMatch] = useState<SnapResult>();
+  const [precisionOpen, setPrecisionOpen] = useState(false);
+  const [snapMode, setSnapMode] = useState("center");
+  const [inputUnit, setInputUnit] = useState<LengthUnit>();
+  const [precisionError, setPrecisionError] = useState("");
   const setCamera = iso ? setIsoCamera : setPlanCamera;
   const geometry = iso ? plan : initial.current;
   const camera =
@@ -159,6 +174,7 @@ export function Surface({
 
   useEffect(() => {
     setAnchor(null);
+    setSnapMatch(undefined);
     setCursor(null);
     setDrag(null);
     gesture.current = null;
@@ -212,27 +228,66 @@ export function Surface({
     return () => element.removeEventListener("wheel", wheel);
   }, [camera, size, setCamera]);
 
+  function resolved(point: Point, start: Point | null) {
+    return snapMode === "grid"
+      ? undefined
+      : resolveSnap(plan.walls, point, {
+          radiusMm: 9 / camera.scale,
+          anchor: start ?? undefined,
+          ortho: ortho && tool === "wall",
+          modes:
+            snapMode === "faces"
+              ? ["face"]
+              : ["endpoint", "midpoint", "intersection", "perpendicular"],
+        });
+  }
+
   function snap(point: Point, start = anchor) {
-    return snapWallPoint(
-      point,
-      plan.walls,
-      grid,
-      9 / camera.scale,
-      start ?? undefined,
-      ortho && tool === "wall",
+    return (
+      resolved(point, start)?.point ??
+      snapPoint(point, grid, start ?? undefined, ortho && tool === "wall")
     );
   }
 
   const drawingLine = tool === "wall" || tool === "measure";
-  const commitLine = tool === "measure" ? onDimension : onWall;
+  const commitLine = (start: Point, end: Point) =>
+    (tool === "measure" ? onDimension : onWall)(
+      modelPrecision(start),
+      modelPrecision(end),
+    );
+
+  function placePoint(end: Point) {
+    if (!anchor) setAnchor(end);
+    else if (
+      !same(modelPrecision(anchor), modelPrecision(end)) &&
+      commitLine(anchor, end)
+    )
+      setAnchor(null);
+    setCursor(end);
+  }
+
+  function submitPoint(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const data = new FormData(event.currentTarget);
+    const x = String(data.get("x") ?? "").trim();
+    const y = String(data.get("y") ?? "").trim();
+    const factor = millimeters[inputUnit ?? unit];
+    const point = { x: Number(x) * factor, y: Number(y) * factor };
+    if (!x || !y || !modelPointInput.safeParse(modelPrecision(point)).success) {
+      setPrecisionError("Enter coordinates within the drawing bounds.");
+      return;
+    }
+    setPrecisionError("");
+    setSnapMatch(undefined);
+    placePoint(point);
+  }
 
   function activate(point: Point, additive = multi) {
     if (iso || tool === "pan") return;
     if (drawingLine) {
-      const end = snap(point);
-      if (!anchor) setAnchor(end);
-      else if (!same(anchor, end) && commitLine(anchor, end)) setAnchor(null);
-      setCursor(end);
+      const match = resolved(point, anchor);
+      setSnapMatch(match);
+      placePoint(match?.point ?? snap(point));
       return;
     }
     if (tool === "fixture" || tool === "utility") {
@@ -358,7 +413,10 @@ export function Surface({
         Math.hypot(point.x - current.start.x, point.y - current.start.y) > 6
           ? snap(modelPoint(current.start, size, current.camera), null)
           : anchor;
-      setCursor(snap(modelPoint(point, size, camera), start));
+      const probe = modelPoint(point, size, camera);
+      const match = resolved(probe, start);
+      setSnapMatch(match);
+      setCursor(match?.point ?? snap(probe, start));
     }
   }
 
@@ -446,7 +504,8 @@ export function Surface({
     const point = cursor ?? snap({ x: camera.x, y: camera.y });
     if (event.key === "Enter") {
       event.preventDefault();
-      activate(point);
+      if (drawingLine && cursor) placePoint(cursor);
+      else activate(point);
       return;
     }
     const movement: Record<string, Point> = {
@@ -460,7 +519,11 @@ export function Surface({
     event.preventDefault();
     if (tool === "select" && selection.length) {
       onMove(selection, { x: Math.round(delta.x), y: Math.round(delta.y) });
-    } else setCursor(snap({ x: point.x + delta.x, y: point.y + delta.y }));
+    } else {
+      const probe = { x: point.x + delta.x, y: point.y + delta.y };
+      setSnapMatch(resolved(probe, anchor));
+      setCursor(snap(probe));
+    }
   }
 
   const current = gesture.current;
@@ -560,6 +623,7 @@ export function Surface({
           {!iso && cursor && (
             <circle
               className="cad-cursor"
+              data-snap={snapMatch?.kind}
               cx={cursor.x}
               cy={cursor.y}
               r={4 / camera.scale}
@@ -628,11 +692,7 @@ export function Surface({
               origin.y + ((start.y + cursor.y) * camera.scale) / 2 - 13,
             )}
           >
-            {Math.round(
-              Math.hypot(cursor.x - start.x, cursor.y - start.y) /
-                unitFactor(unit),
-            )}{" "}
-            {unit}
+            {Number(measurePoints(start, cursor, unit).value.toFixed(2))} {unit}
           </text>
         )}
       </svg>
@@ -650,6 +710,62 @@ export function Surface({
             </span>
           </div>
         )}
+      {!iso && drawingLine && (
+        <div className="studio-floating studio-precision">
+          <button
+            type="button"
+            aria-label="Precision input"
+            aria-expanded={precisionOpen}
+            onClick={() => setPrecisionOpen(!precisionOpen)}
+            title="Precision input"
+          >
+            <Crosshair size={17} />
+          </button>
+          {precisionOpen && (
+            <form onSubmit={submitPoint} className="studio-precision-form">
+              <label>
+                Snap
+                <select
+                  value={snapMode}
+                  onChange={(event) => setSnapMode(event.target.value)}
+                >
+                  <option value="center">Object snaps</option>
+                  <option value="faces">Wall faces</option>
+                  <option value="grid">Grid only</option>
+                </select>
+              </label>
+              <label>
+                Input unit
+                <select
+                  value={inputUnit ?? unit}
+                  onChange={(event) =>
+                    setInputUnit(event.target.value as LengthUnit)
+                  }
+                >
+                  {lengthUnits.map((name) => (
+                    <option key={name}>{name}</option>
+                  ))}
+                </select>
+              </label>
+              <label>
+                X <input name="x" type="number" step="any" required />
+              </label>
+              <label>
+                Y <input name="y" type="number" step="any" required />
+              </label>
+              <button type="submit">
+                {anchor ? "Place next point" : "Set first point"}
+              </button>
+              {precisionError && <span role="alert">{precisionError}</span>}
+            </form>
+          )}
+        </div>
+      )}
+      {!iso && drawingLine && snapMatch && cursor && (
+        <span className="studio-snap-label" data-kind={snapMatch.kind}>
+          {snapMatch.kind}
+        </span>
+      )}
       <div className="studio-scale" aria-hidden="true">
         {scaleText} {unit}
         {scaleWidth >= 12 && <i style={{ width: scaleWidth }} />}
