@@ -4,6 +4,12 @@
 
 The [architectural CAD roadmap](docs/CAD_ROADMAP.md) records proposed milestones M5–M17, candidate MCP tools and release checks. M13.1 is the next visual priority for lifelike furnished isometrics. M5.1 leads precision drafting. Later milestones cover move-in rehearsals, client briefs, renovation and owner handover. The release history below records shipped work.
 
+## M5.1 · Precision drafting
+
+Application merge `92e2b58653e508b0df4dbbfeb0f9a8c043a8b44b` adds model queries, stable wall references, snaps and measurements. In Wall or Measure, open Precision input to choose object snaps, wall faces or grid only, and place exact coordinates in mm, cm, m, in or ft. The MCP tools are `query_entities`, `inspect_entity`, `resolve_snap` and `measure_geometry`.
+
+Type check, 67 Vitest checks and the optimized Next build passed. The initial browser run passed 88 checks. After the mobile form placement fix, all five precision-input viewport checks passed on rerun. Graph v1 and the database schema require no migration.
+
 ## M1.1 · Foundation and shell
 
 Released on 2026-11-18. The verified application merge is `0a0adcde04ab7fb14818dbdcea9e570e89d977b2`. The release documentation follows the application merge on main.
