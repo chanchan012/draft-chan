@@ -2,7 +2,7 @@
 
 ## Next proposed subgoal
 
-Start at M5.1 in the [architectural CAD roadmap](CAD_ROADMAP.md). The planning update preserves graph version 1, migrations through 0004 and the nine released MCP tools. When implementation begins, run `npm test` for the baseline and inspect `lib/plans/cad.ts`, `lib/plans/geometry.ts` and `lib/server/draft-mcp.ts` before writing the precision-query brief.
+Start the visual track at M13.1 in the [architectural CAD roadmap](CAD_ROADMAP.md). Inspect the current renderer with `rg --files components/studio lib/plans | rg "isometric|wall-mesh"`. Use the existing MCP-furnished apartment in `tests/e2e/studio.spec.ts` as the first reference scene. M5.1 remains the next precision drafting subgoal. The planning update preserves graph version 1, migrations through 0004 and the nine released MCP tools. When implementation begins, run `npm test` for the baseline and inspect `lib/plans/cad.ts`, `lib/plans/geometry.ts` and `lib/server/draft-mcp.ts` before writing the precision-query brief.
 
 ## Reproduce the foundation
 
