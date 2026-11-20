@@ -3,10 +3,12 @@ import type {
   DisplayUnit,
   Fixture,
   Point,
+  Sketch,
   Utility,
   Wall,
 } from "./model";
 import { fixtureFootprint, bounds } from "./footprints";
+import { sketchPoints } from "./sketch";
 import { wallLength } from "./openings";
 
 export interface Viewport {
@@ -112,11 +114,12 @@ export function fitCamera(
   fixtures: readonly Fixture[] = [],
   utilities: readonly Utility[] = [],
   dimensions: readonly DimensionAnnotation[] = [],
+  sketches: readonly Sketch[] = [],
 ): Camera {
   if (
     !walls.length &&
     !fixtures.length &&
-    (isometric || (!utilities.length && !dimensions.length))
+    (isometric || (!utilities.length && !dimensions.length && !sketches.length))
   )
     return {
       x: 0,
@@ -153,6 +156,8 @@ export function fitCamera(
   }
   if (!isometric) {
     points.push(...utilities.map(({ position }) => position));
+    for (const sketch of sketches)
+      points.push(...sketchPoints(sketch.geometry));
     points.push(...dimensions.flatMap(({ start, end }) => [start, end]));
   }
   const { left, right, top, bottom } = bounds(points);

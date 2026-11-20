@@ -2,10 +2,18 @@ import { utilityCatalog, type UtilityLayer } from "./catalog";
 import { bounds, fixtureFootprint, wallFootprint } from "./footprints";
 import { wallHit } from "./cad";
 import { doorBounds, pointAlong, wallLength } from "./openings";
+import { shiftSketch, sketchDistance, sketchPoints } from "./sketch";
 import type { DraftPlanState, PlanCommand, Point } from "./model";
 
 export type Selection = {
-  kind: "wall" | "door" | "window" | "dimension" | "fixture" | "utility";
+  kind:
+    | "wall"
+    | "door"
+    | "window"
+    | "dimension"
+    | "fixture"
+    | "utility"
+    | "sketch";
   id: string;
 };
 type Layers = Record<UtilityLayer, boolean>;
@@ -60,6 +68,10 @@ export function selectInBox(
     if (inside(bounds([dimension.start, dimension.end])))
       result.push({ kind: "dimension", id: dimension.id });
   }
+  for (const sketch of plan.sketches ?? []) {
+    if (inside(bounds(sketchPoints(sketch.geometry))))
+      result.push({ kind: "sketch", id: sketch.id });
+  }
   for (const marker of plan.utilities) {
     if (
       layers[utilityCatalog[marker.template].layer] &&
@@ -111,7 +123,12 @@ export function selectAt(
   });
   if (dimension) return { kind: "dimension", id: dimension.id };
   const hit = wallHit(point, plan.walls, 11 / scale);
-  if (!hit) return null;
+  if (!hit) {
+    const sketch = plan.sketches?.findLast(
+      (item) => sketchDistance(item.geometry, point) <= 7 / scale,
+    );
+    return sketch ? { kind: "sketch", id: sketch.id } : null;
+  }
   const door = plan.openings.find((item) => {
     const [start, end] = doorBounds(item);
     return (
@@ -143,6 +160,17 @@ export function moveSelection(
   const keys = new Set(items.map(selectionKey));
   const walls = new Map(plan.walls.map((wall) => [wall.id, wall]));
   return [
+    ...(plan.sketches ?? []).flatMap((item): PlanCommand[] =>
+      keys.has("sketch:" + item.id)
+        ? [
+            {
+              type: "sketch.update",
+              id: item.id,
+              geometry: shiftSketch(item.geometry, delta),
+            },
+          ]
+        : [],
+    ),
     ...plan.walls.flatMap((wall): PlanCommand[] =>
       keys.has("wall:" + wall.id)
         ? [
@@ -227,6 +255,11 @@ export function removeSelection(
 ): PlanCommand[] {
   const keys = new Set(items.map(selectionKey));
   return [
+    ...(plan.sketches ?? []).flatMap((item): PlanCommand[] =>
+      keys.has("sketch:" + item.id)
+        ? [{ type: "sketch.remove", id: item.id }]
+        : [],
+    ),
     ...plan.openings.flatMap((door): PlanCommand[] =>
       keys.has("door:" + door.id) && !keys.has("wall:" + door.wallId)
         ? [{ type: "door.remove", id: door.id }]
@@ -268,6 +301,11 @@ export function previewSelection(
   const commands = moveSelection(plan, items, delta);
   for (const edit of commands) {
     switch (edit.type) {
+      case "sketch.update":
+        result.sketches = result.sketches?.map((item) =>
+          item.id === edit.id ? { ...item, geometry: edit.geometry } : item,
+        );
+        break;
       case "wall.update":
         result.walls = result.walls.map((wall) =>
           wall.id === edit.id ? { ...wall, ...edit.changes } : wall,

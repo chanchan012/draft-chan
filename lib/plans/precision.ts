@@ -14,6 +14,7 @@ import {
   type Wall,
 } from "./model";
 import { pointAlong } from "./openings";
+import { sketchPoints } from "./sketch";
 
 export const entityKinds = [
   "wall",
@@ -23,6 +24,7 @@ export const entityKinds = [
   "utility",
   "dimension",
   "room",
+  "sketch",
 ] as const;
 export const snapKinds = [
   "endpoint",
@@ -48,6 +50,7 @@ export const millimeters = {
 export type EntityRef = { kind: EntityKind; id: string };
 type PlanObject =
   | DraftPlanState["walls"][number]
+  | NonNullable<DraftPlanState["sketches"]>[number]
   | DraftPlanState["rooms"][number]
   | DraftPlanState["openings"][number]
   | NonNullable<DraftPlanState["windows"]>[number]
@@ -124,6 +127,15 @@ function entries(
             utility,
             [utility.position],
             utilityCatalog[utility.template].layer,
+          ),
+        );
+      case "sketch":
+        return (plan.sketches ?? []).map((item) =>
+          entry(
+            kind,
+            item,
+            sketchPoints(item.geometry),
+            item.geometry.kind === "construction" ? "construction" : "sketch",
           ),
         );
       case "dimension":

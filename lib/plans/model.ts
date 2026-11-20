@@ -128,10 +128,78 @@ const furnishingCommandSchema = z.discriminatedUnion("type", [
   }),
   z.strictObject({ type: z.literal("utility.remove"), id: identifier }),
 ]);
+const sketchCenter = {
+  center: modelPointInput,
+  radiusMm: z.number().finite().min(1).max(1_000_000),
+};
+const lineParameters = { start: modelPointInput, end: modelPointInput };
+export const sketchFields = [
+  z.strictObject({ kind: z.literal("construction"), ...lineParameters }),
+  z.strictObject({
+    kind: z.literal("polyline"),
+    points: z.array(modelPointInput).min(2).max(128),
+    closed: z.boolean(),
+  }),
+  z.strictObject({ kind: z.literal("circle"), ...sketchCenter }),
+  z.strictObject({
+    kind: z.literal("arc"),
+    ...sketchCenter,
+    startDeg: z.number().finite().min(0).lt(360),
+    sweepDeg: z.number().finite().min(0.01).lt(360),
+  }),
+] as const;
+export const sketchGeometry = z.discriminatedUnion("kind", sketchFields);
+export type SketchGeometry = z.infer<typeof sketchGeometry>;
+export const sketchInput = z.strictObject({
+  id: identifier,
+  geometry: sketchGeometry,
+});
+export const sketchSchema = sketchInput
+  .extend(authors)
+  .superRefine(({ geometry }, context) => {
+    const report = (message: string) =>
+      context.addIssue({ code: "custom", message });
+    if (geometry.kind === "construction") {
+      if (!hasLength(geometry))
+        report("A construction line requires distinct endpoints.");
+    } else if (geometry.kind === "polyline") {
+      const { points, closed } = geometry;
+      if (
+        points.some(
+          (start, i) => i > 0 && !hasLength({ start, end: points[i - 1] }),
+        )
+      )
+        report("Adjacent polyline vertices must be distinct.");
+      if (
+        closed &&
+        (new Set(points.map((p) => p.x + "," + p.y)).size < 3 ||
+          !hasLength({ start: points[0], end: points[points.length - 1] }))
+      )
+        report(
+          "Use at least three distinct vertices and omit the duplicate closing vertex.",
+        );
+    } else {
+      const { center, radiusMm } = geometry;
+      if (
+        Math.abs(center.x) + radiusMm > 1_000_000 ||
+        Math.abs(center.y) + radiusMm > 1_000_000
+      )
+        report("The curve must fit inside the model bounds.");
+    }
+  });
+export type Sketch = z.infer<typeof sketchSchema>;
+
 export const planCommandSchema = z.union([
   wallCommandSchema,
   furnishingCommandSchema,
   z.discriminatedUnion("type", [
+    z.strictObject({ type: z.literal("sketch.add"), sketch: sketchInput }),
+    z.strictObject({
+      type: z.literal("sketch.update"),
+      id: identifier,
+      geometry: sketchGeometry,
+    }),
+    z.strictObject({ type: z.literal("sketch.remove"), id: identifier }),
     z.strictObject({ type: z.literal("door.add"), door: doorInput }),
     z.strictObject({
       type: z.literal("door.update"),
@@ -184,6 +252,7 @@ export const draftPlanSchema = z.looseObject({
   fixtures: z.array(fixtureSchema),
   utilities: z.array(utilitySchema).default([]),
   dimensions: z.array(z.unknown()),
+  sketches: z.array(sketchSchema).max(placementLimit).optional(),
   annotations: z.array(annotationSchema).max(placementLimit).optional(),
 });
 export type DraftPlanState = z.infer<typeof draftPlanSchema>;

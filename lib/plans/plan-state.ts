@@ -93,6 +93,7 @@ export function loadDraftPlan(input: unknown): DraftPlanState {
     state.fixtures,
     state.utilities,
     state.annotations ?? [],
+    state.sketches ?? [],
   ]) {
     if (new Set(placements.map(({ id }) => id)).size !== placements.length) {
       throw new Error("Placement IDs must be unique on each layer.");

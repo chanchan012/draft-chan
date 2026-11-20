@@ -11,6 +11,8 @@ import {
   wallSchema,
   windowInput,
   annotationInput,
+  sketchInput,
+  type Sketch,
   type DisplayUnit,
   type Door,
   type Fixture,
@@ -41,6 +43,7 @@ export const saveStudioSchema = z.strictObject({
   fixtures: z.array(fixtureInput).max(placementLimit).optional(),
   utilities: z.array(utilityInput).max(placementLimit).optional(),
   windows: z.array(windowInput).max(openingLimit).optional(),
+  sketches: z.array(sketchInput).max(placementLimit).optional(),
   annotations: z.array(annotationInput).max(placementLimit).optional(),
 });
 export type StudioSave = z.infer<typeof saveStudioSchema>;
@@ -59,6 +62,9 @@ export function studioSnapshot(plan: DraftPlanState, unit: DisplayUnit) {
     windows: (plan.windows ?? []).map((opening) =>
       windowInput.strip().parse(opening),
     ),
+    sketches: (plan.sketches ?? []).map((item) =>
+      sketchInput.strip().parse(item),
+    ),
     annotations: (plan.annotations ?? []).map((annotation) =>
       annotationInput.strip().parse(annotation),
     ),
@@ -67,6 +73,7 @@ export function studioSnapshot(plan: DraftPlanState, unit: DisplayUnit) {
 
 function attribute<
   T extends
+    | Sketch
     | Wall
     | Door
     | Fixture
@@ -150,6 +157,18 @@ export function applyStudioSnapshot(
         annotationInput.strip(),
       ),
     ) ?? previous.annotations;
+  const priorSketches = new Map(
+    previous.sketches?.map((item) => [item.id, item]),
+  );
+  const sketches =
+    input.sketches?.map((item) =>
+      attribute<Sketch>(
+        item,
+        priorSketches.get(item.id),
+        actor,
+        sketchInput.strip(),
+      ),
+    ) ?? previous.sketches;
   return loadDraftPlan({
     ...previous,
     walls,
@@ -158,6 +177,7 @@ export function applyStudioSnapshot(
     utilities,
     windows,
     annotations,
+    sketches,
     rooms: [],
   });
 }

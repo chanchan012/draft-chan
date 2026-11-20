@@ -356,6 +356,10 @@ it("lays out a two-bedroom plan using all MCP resources and tools over HTTP", as
       "add_dimension_annotation",
       "calculate_bom",
       "check_clearance_codes",
+      "draw_arc",
+      "draw_circle",
+      "draw_construction_line",
+      "draw_polyline",
       "draw_wall",
       "furnish_room_preset",
       "inspect_entity",
@@ -459,6 +463,32 @@ it("lays out a two-bedroom plan using all MCP resources and tools over HTTP", as
         to: { wallId: partition.wallId, edge: "negative" },
       }),
     ).toMatchObject({ distanceMm: 3380 });
+    const center = { x: 300, y: 300 };
+    await call("draw_circle", {
+      expectedRevision: revision,
+      center,
+      radiusMm: 100,
+    });
+    await call("draw_arc", {
+      expectedRevision: revision,
+      center,
+      radiusMm: 100,
+      startDeg: 270,
+      sweepDeg: 140,
+    });
+    await call("draw_construction_line", {
+      expectedRevision: revision,
+      start: center,
+      end: { x: 500, y: 500 },
+    });
+    await call("draw_polyline", {
+      expectedRevision: revision,
+      closed: true,
+      points: [center, { x: 500, y: 500 }, { x: 600, y: 300 }],
+    });
+    expect(
+      await call("query_entities", { kind: "sketch", layer: "construction" }),
+    ).toMatchObject({ total: 1, entities: [{ layer: "construction" }] });
     const door = await call("place_opening", {
       expectedRevision: revision,
       kind: "door",
@@ -620,7 +650,7 @@ it("bridges stdio to the authenticated HTTP tools without sharing the database c
         },
       }),
     );
-    expect((await client.listTools()).tools).toHaveLength(13);
+    expect((await client.listTools()).tools).toHaveLength(17);
     expect((await client.listResources()).resources).toHaveLength(3);
     expect(
       (await client.readResource({ uri: "draft://floorplan-graph" })).contents,
