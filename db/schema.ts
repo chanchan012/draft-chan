@@ -107,3 +107,11 @@ export const floorplanAgentTokens = pgTable(
     index("floorplan_agent_tokens_plan_idx").on(t.floorplanId, t.expiresAt),
   ],
 );
+
+export const floorplanOAuthGrants = pgTable("floorplan_oauth_grants", {
+  ownerId: text("owner_id").primaryKey(),
+  id: uuid("id").notNull().defaultRandom(),
+  floorplanId: uuid("floorplan_id")
+    .notNull()
+    .references(() => floorplans.id, { onDelete: "cascade" }),
+});

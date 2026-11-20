@@ -206,6 +206,7 @@ test("connects an MCP agent and sees it furnish two bedrooms in an open Studio",
   await expect(
     dialog.getByRole("textbox", { name: "MCP endpoint", exact: true }),
   ).toHaveValue(new URL("/api/mcp", page.url()).href);
+  await dialog.getByText("Manual tokens", { exact: true }).click();
   await dialog.getByLabel("Agent name").fill("Layout agent");
   await dialog.getByRole("button", { name: "Create token" }).click();
   await expect(
@@ -336,6 +337,42 @@ test("connects an MCP agent and sees it furnish two bedrooms in an open Studio",
   } finally {
     await client.close();
   }
+});
+
+test("enables and disables Clerk OAuth without revealing a manual token", async ({
+  page,
+}) => {
+  let state: "enabled" | "disabled" = "disabled";
+  await page.route(`**/api/floorplans/${id}/agent-tokens`, (route) =>
+    route.fulfill({ json: [] }),
+  );
+  await page.route(`**/api/floorplans/${id}/mcp-oauth`, (route) => {
+    if (route.request().method() === "POST") state = "enabled";
+    if (route.request().method() === "DELETE") {
+      state = "disabled";
+      return route.fulfill({ status: 204 });
+    }
+    return route.fulfill({ json: { state } });
+  });
+  await studio(page);
+  await page.getByRole("button", { name: "Connect an agent" }).click();
+  const dialog = page.getByRole("dialog", { name: "Connect an agent" });
+  await dialog.getByRole("button", { name: "Enable OAuth access" }).click();
+  await expect(dialog.getByRole("status")).toHaveText("OAuth access enabled.");
+  await expect(
+    dialog.getByRole("button", { name: "Create token" }),
+  ).toBeHidden();
+  await expect(
+    dialog.getByText("Approved clients can edit this floorplan.", {
+      exact: false,
+    }),
+  ).toBeVisible();
+  await viewportFits(page);
+  await dialog.getByRole("button", { name: "Disable OAuth access" }).click();
+  await expect(dialog.getByRole("status")).toHaveText("OAuth access disabled.");
+  await expect(
+    dialog.getByRole("button", { name: "Enable OAuth access" }),
+  ).toBeEnabled();
 });
 
 test("floats controls and collapses and resizes the side panels", async ({
