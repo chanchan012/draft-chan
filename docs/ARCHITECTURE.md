@@ -1,6 +1,6 @@
 # Architecture
 
-Proposed extensions to the geometry model, command interface and MCP contract are tracked in the [architectural CAD roadmap](CAD_ROADMAP.md).
+The [architectural CAD roadmap](CAD_ROADMAP.md) tracks proposed geometry, rendering and MCP extensions. M13 proposes a presentation scene derived from the saved graph, with entity IDs shared across views and versioned materials, camera and lighting for reproducible exports. The shipped SVG cutaway is described below.
 
 ## Foundation
 

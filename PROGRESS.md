@@ -2,7 +2,7 @@
 
 ## Planned work after M4.2
 
-The [architectural CAD roadmap](docs/CAD_ROADMAP.md) records proposed milestones M5–M12, candidate MCP tools and release checks. The next proposed subgoal is M5.1, precision queries, object snaps and measurement. The release history below records shipped work.
+The [architectural CAD roadmap](docs/CAD_ROADMAP.md) records proposed milestones M5–M17, candidate MCP tools and release checks. M13.1 is the next visual priority for lifelike furnished isometrics. M5.1 leads precision drafting. Later milestones cover move-in rehearsals, client briefs, renovation and owner handover. The release history below records shipped work.
 
 ## M1.1 · Foundation and shell
 
