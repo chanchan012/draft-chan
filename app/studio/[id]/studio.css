@@ -96,7 +96,9 @@
 .studio-workbench {
   position: relative;
   display: grid;
-  grid-template-columns: var(--studio-rail-width) auto minmax(0, 1fr) auto var(--studio-rail-width);
+  grid-template-columns: var(--studio-rail-width) auto minmax(0, 1fr) auto var(
+      --studio-rail-width
+    );
   grid-template-rows: minmax(0, 1fr);
   min-width: 0;
   min-height: 0;
@@ -140,7 +142,9 @@
   background: var(--paper);
   border: 1px solid var(--studio-rule);
   border-radius: 11px;
-  box-shadow: 0 4px 10px #28302218, 0 1px 2px #28302210;
+  box-shadow:
+    0 4px 10px #28302218,
+    0 1px 2px #28302210;
 }
 .studio-floating button {
   display: inline-flex;
@@ -834,7 +838,175 @@
   border-radius: 50%;
   background: #a46a37;
 }
-.studio-live-status[data-connection="live"] i { background: #3b7951; }
-.studio-live-status[data-connection="offline"] i { background: #687067; }
-.cad-peer { pointer-events: none; }
-.cad-peer text { fill: white; font: 650 10px Inter, sans-serif; }
+.studio-live-status[data-connection="live"] i {
+  background: #3b7951;
+}
+.studio-live-status[data-connection="offline"] i {
+  background: #687067;
+}
+.cad-peer {
+  pointer-events: none;
+}
+.cad-peer text {
+  fill: white;
+  font:
+    650 10px Inter,
+    sans-serif;
+}
+
+.studio-agent-dialog {
+  background: var(--paper);
+  color: var(--ink);
+  width: min(500px, calc(100% - 24px));
+  max-height: calc(100dvh - 24px);
+  overflow: auto;
+  overscroll-behavior: contain;
+  margin: auto;
+  padding: clamp(14px, 3vw, 24px);
+  border: 1px solid var(--studio-rule);
+  border-radius: 13px;
+  font-size: 13px;
+}
+.studio-agent-dialog::backdrop {
+  background: #28312260;
+}
+.studio-agent-heading,
+.studio-agent-list > div {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  align-items: center;
+}
+.studio-agent-heading h2 {
+  font-size: 22px;
+  font-weight: 670;
+  letter-spacing: -0.035em;
+}
+.studio-agent-dialog p {
+  margin-block: 8px;
+  color: var(--muted);
+}
+.studio-agent-field {
+  display: grid;
+  gap: 5px;
+  min-width: 0;
+  margin-block: 8px;
+  font-weight: 650;
+}
+.studio-agent-field > span,
+.studio-agent-new {
+  display: flex;
+  align-items: end;
+  gap: 6px;
+}
+.studio-agent-new > label {
+  flex: 1;
+  margin: 0;
+}
+.studio-agent-dialog input {
+  width: 100%;
+  min-width: 0;
+  height: 36px;
+  border: 1px solid var(--studio-rule);
+  border-radius: 5px;
+  padding-inline: 7px;
+  font-weight: 400;
+  font-size: 14px;
+}
+.studio-agent-dialog input[readonly] {
+  font-family: var(--mono);
+  font-size: 12px;
+}
+.studio-agent-dialog button {
+  flex: none;
+  min-height: 36px;
+  padding-inline: 9px;
+  border: 1px solid var(--studio-rule);
+  border-radius: 5px;
+  font-weight: 650;
+}
+.studio-agent-dialog .studio-agent-icon {
+  display: inline-grid;
+  place-items: center;
+  width: 36px;
+  padding: 0;
+}
+.studio-agent-new > button {
+  background: var(--studio-dark);
+  color: white;
+}
+.studio-agent-issued {
+  padding: 0 9px 5px;
+  border: 1px solid var(--studio-rule);
+  margin-block: 10px;
+  min-width: 0;
+}
+.studio-agent-dialog summary {
+  cursor: pointer;
+  font-weight: 650;
+  margin-block: 12px;
+}
+.studio-agent-list > div {
+  padding-block: 7px;
+  border-top: 1px solid var(--studio-rule);
+}
+.studio-agent-list h3 {
+  font-weight: 650;
+  margin-bottom: 5px;
+}
+.studio-agent-list small {
+  display: block;
+  color: var(--muted);
+}
+.studio-agent-list strong {
+  overflow-wrap: anywhere;
+}
+.studio-agent-dialog .studio-agent-error {
+  color: #8f3420;
+}
+
+.studio-canvas.tool-measure {
+  cursor: crosshair;
+}
+.cad-window {
+  fill: #c9dde1;
+  stroke: #476b77;
+  stroke-width: 1.25;
+}
+.cad-window.is-selected {
+  stroke: var(--accent);
+  stroke-width: 2;
+}
+.cad-iso-window {
+  stroke: #5c848f;
+  fill-opacity: 0.65;
+}
+.cad-iso-window path {
+  fill: #b2cfd5;
+}
+.cad-dimension {
+  color: #496354;
+  pointer-events: none;
+}
+.cad-dimension line {
+  stroke: currentColor;
+  stroke-width: 1.2;
+}
+.cad-dimension circle,
+.cad-dimension text {
+  fill: currentColor;
+}
+.cad-dimension text {
+  font: 11px var(--mono);
+  paint-order: stroke;
+  stroke: var(--studio-paper);
+  stroke-width: 3px;
+}
+.cad-dimension.is-selected {
+  color: var(--accent);
+}
+@media (max-width: 370px) {
+  .studio-tools button {
+    min-width: 31px;
+  }
+}

@@ -5,7 +5,7 @@ import { doorBounds, pointAlong, wallLength } from "./openings";
 import type { DraftPlanState, PlanCommand, Point } from "./model";
 
 export type Selection = {
-  kind: "wall" | "door" | "fixture" | "utility";
+  kind: "wall" | "door" | "window" | "dimension" | "fixture" | "utility";
   id: string;
 };
 type Layers = Record<UtilityLayer, boolean>;
@@ -46,6 +46,20 @@ export function selectInBox(
     if (inside(bounds(fixtureFootprint(fixture))))
       result.push({ kind: "fixture", id: fixture.id });
   }
+  for (const window of plan.windows ?? []) {
+    const wall = walls.get(window.wallId);
+    if (
+      wall &&
+      inside(
+        bounds(doorBounds(window).map((offset) => pointAlong(wall, offset))),
+      )
+    )
+      result.push({ kind: "window", id: window.id });
+  }
+  for (const dimension of plan.annotations ?? []) {
+    if (inside(bounds([dimension.start, dimension.end])))
+      result.push({ kind: "dimension", id: dimension.id });
+  }
   for (const marker of plan.utilities) {
     if (
       layers[utilityCatalog[marker.template].layer] &&
@@ -79,6 +93,23 @@ export function selectAt(
     );
   });
   if (fixture) return { kind: "fixture", id: fixture.id };
+  const dimension = plan.annotations?.find(({ start, end }) => {
+    const dx = end.x - start.x,
+      dy = end.y - start.y;
+    const t = Math.max(
+      0,
+      Math.min(
+        1,
+        ((point.x - start.x) * dx + (point.y - start.y) * dy) /
+          (dx * dx + dy * dy),
+      ),
+    );
+    return (
+      Math.hypot(point.x - start.x - dx * t, point.y - start.y - dy * t) <=
+      7 / scale
+    );
+  });
+  if (dimension) return { kind: "dimension", id: dimension.id };
   const hit = wallHit(point, plan.walls, 11 / scale);
   if (!hit) return null;
   const door = plan.openings.find((item) => {
@@ -87,8 +118,15 @@ export function selectAt(
       item.wallId === hit.wall.id && hit.offset >= start && hit.offset <= end
     );
   });
-  return door
-    ? { kind: "door", id: door.id }
+  if (door) return { kind: "door", id: door.id };
+  const window = plan.windows?.find((item) => {
+    const [start, end] = doorBounds(item);
+    return (
+      item.wallId === hit.wall.id && hit.offset >= start && hit.offset <= end
+    );
+  });
+  return window
+    ? { kind: "window", id: window.id }
     : { kind: "wall", id: hit.wall.id };
 }
 
@@ -128,6 +166,36 @@ export function moveSelection(
       const offsetMm = Math.round(door.offsetMm + along);
       return [{ type: "door.update", id: door.id, changes: { offsetMm } }];
     }),
+    ...(plan.windows ?? []).flatMap((window): PlanCommand[] => {
+      if (!keys.has("window:" + window.id) || keys.has("wall:" + window.wallId))
+        return [];
+      const wall = walls.get(window.wallId)!;
+      const along =
+        ((wall.end.x - wall.start.x) * delta.x +
+          (wall.end.y - wall.start.y) * delta.y) /
+        wallLength(wall);
+      return [
+        {
+          type: "window.update",
+          id: window.id,
+          changes: { offsetMm: Math.round(window.offsetMm + along) },
+        },
+      ];
+    }),
+    ...(plan.annotations ?? []).flatMap((dimension): PlanCommand[] =>
+      keys.has("dimension:" + dimension.id)
+        ? [
+            {
+              type: "dimension.update",
+              id: dimension.id,
+              changes: {
+                start: shifted(dimension.start),
+                end: shifted(dimension.end),
+              },
+            },
+          ]
+        : [],
+    ),
     ...plan.fixtures.flatMap((item): PlanCommand[] =>
       keys.has("fixture:" + item.id)
         ? [
@@ -164,6 +232,16 @@ export function removeSelection(
         ? [{ type: "door.remove", id: door.id }]
         : [],
     ),
+    ...(plan.windows ?? []).flatMap((window): PlanCommand[] =>
+      keys.has("window:" + window.id) && !keys.has("wall:" + window.wallId)
+        ? [{ type: "window.remove", id: window.id }]
+        : [],
+    ),
+    ...(plan.annotations ?? []).flatMap((dimension): PlanCommand[] =>
+      keys.has("dimension:" + dimension.id)
+        ? [{ type: "dimension.remove", id: dimension.id }]
+        : [],
+    ),
     ...plan.walls.flatMap((wall): PlanCommand[] =>
       keys.has("wall:" + wall.id) ? [{ type: "wall.remove", id: wall.id }] : [],
     ),
@@ -198,6 +276,18 @@ export function previewSelection(
       case "door.update":
         result.openings = result.openings.map((door) =>
           door.id === edit.id ? { ...door, ...edit.changes } : door,
+        );
+        break;
+      case "window.update":
+        result.windows = result.windows?.map((window) =>
+          window.id === edit.id ? { ...window, ...edit.changes } : window,
+        );
+        break;
+      case "dimension.update":
+        result.annotations = result.annotations?.map((dimension) =>
+          dimension.id === edit.id
+            ? { ...dimension, ...edit.changes }
+            : dimension,
         );
         break;
       case "fixture.update":

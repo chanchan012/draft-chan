@@ -8,6 +8,7 @@ import {
 import { createStore } from "zustand/vanilla";
 import {
   actorSchema,
+  annotationSchema,
   compareText,
   doorSchema,
   fixtureSchema,
@@ -17,6 +18,7 @@ import {
   planCommandSchema,
   wallLimit,
   wallSchema,
+  windowSchema,
   type DraftActor,
   type DraftPlanState,
   type Wall,
@@ -95,6 +97,49 @@ function applyEdit(
   actor: DraftActor,
 ) {
   switch (command.type) {
+    case "window.add": {
+      const windows = (draft.windows ??= []);
+      if (windows.length >= openingLimit)
+        throw new Error("This plan has reached the window limit.");
+      windows.push(
+        windowSchema.parse({
+          ...command.opening,
+          createdBy: actor,
+          updatedBy: actor,
+        }),
+      );
+      windows.sort((a, b) => compareText(a.id, b.id));
+      return;
+    }
+    case "window.remove":
+      return editPlacement(draft.windows ?? [], command.id, actor);
+    case "window.update":
+      return editPlacement(
+        draft.windows ?? [],
+        command.id,
+        actor,
+        command.changes,
+        windowSchema,
+      );
+    case "dimension.add":
+      return addPlacement(
+        (draft.annotations ??= []),
+        annotationSchema.parse({
+          ...command.annotation,
+          createdBy: actor,
+          updatedBy: actor,
+        }),
+      );
+    case "dimension.remove":
+      return editPlacement(draft.annotations ?? [], command.id, actor);
+    case "dimension.update":
+      return editPlacement(
+        draft.annotations ?? [],
+        command.id,
+        actor,
+        command.changes,
+        annotationSchema,
+      );
     case "fixture.add":
       return addPlacement(
         draft.fixtures,
@@ -191,6 +236,10 @@ function applyEdit(
       draft.openings = draft.openings.filter(
         (door) => door.wallId !== command.id,
       );
+      if (draft.windows)
+        draft.windows = draft.windows.filter(
+          (window) => window.wallId !== command.id,
+        );
     } else {
       const wall = draft.walls[index];
       const updated = wallSchema.parse({
@@ -235,9 +284,15 @@ export function createDraftPlanStore(input: unknown = initialGraph()) {
         }
         if (
           wallsChanged ||
-          commands.some(({ type }) => type.startsWith("door."))
+          commands.some(
+            ({ type }) =>
+              type.startsWith("door.") || type.startsWith("window."),
+          )
         ) {
-          validateOpenings(draft.walls, draft.openings);
+          validateOpenings(draft.walls, [
+            ...draft.openings,
+            ...(draft.windows ?? []),
+          ]);
         }
         if (wallsChanged) draft.rooms = solveWallTopology(draft.walls).rooms;
       });

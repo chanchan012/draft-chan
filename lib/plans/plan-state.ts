@@ -85,10 +85,15 @@ export function loadDraftPlan(input: unknown): DraftPlanState {
   if (new Set(state.walls.map((wall) => wall.id)).size !== state.walls.length) {
     throw new Error("A plan must have unique wall IDs.");
   }
-  validateOpenings(state.walls, state.openings);
+  validateOpenings(state.walls, [...state.openings, ...(state.windows ?? [])]);
   state.walls.sort((a, b) => compareText(a.id, b.id));
   state.openings.sort((a, b) => compareText(a.id, b.id));
-  for (const placements of [state.fixtures, state.utilities]) {
+  state.windows?.sort((a, b) => compareText(a.id, b.id));
+  for (const placements of [
+    state.fixtures,
+    state.utilities,
+    state.annotations ?? [],
+  ]) {
     if (new Set(placements.map(({ id }) => id)).size !== placements.length) {
       throw new Error("Placement IDs must be unique on each layer.");
     }

@@ -9,6 +9,7 @@ import {
 } from "../plans/geometry";
 import type { z } from "zod";
 import { loadDraftPlan } from "../plans/plan-state";
+import type { DraftActor } from "../plans/model";
 import {
   applyStudioSnapshot,
   type StudioDocument,
@@ -61,7 +62,12 @@ export const plans = {
     const { name, revision, unit } = row;
     return { id, name, revision, unit, graph: loadDraftPlan(row.graph) };
   },
-  async saveStudio(owner: string, id: string, input: StudioSave) {
+  async saveStudio(
+    owner: string,
+    id: string,
+    input: StudioSave,
+    author: DraftActor = { kind: "human", id: owner },
+  ) {
     const db = openDatabase();
     const atRevision = and(
       owned(owner, id),
@@ -74,10 +80,7 @@ export const plans = {
     if (!row) return { status: "conflict" } as const;
     let graph;
     try {
-      graph = applyStudioSnapshot(loadDraftPlan(row.graph), input, {
-        kind: "human",
-        id: owner,
-      });
+      graph = applyStudioSnapshot(loadDraftPlan(row.graph), input, author);
     } catch (error) {
       return {
         status: "invalid",

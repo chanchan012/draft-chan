@@ -10,6 +10,7 @@ export type Point = z.infer<typeof pointSchema>;
 
 const coordinate = z.int().min(-1_000_000).max(1_000_000);
 const wallPoint = z.object({ x: coordinate, y: coordinate });
+export const modelPointInput = wallPoint.strict();
 const identifier = z.string().trim().min(1).max(128);
 const wallParameters = z.object({
   start: wallPoint,
@@ -59,6 +60,35 @@ export const doorSchema = doorInput.extend({
   updatedBy: actorSchema.optional(),
 });
 export type Door = z.infer<typeof doorSchema>;
+export const windowInput = doorInput
+  .pick({ id: true, wallId: true, offsetMm: true, widthMm: true })
+  .extend({
+    sillMm: z.int().min(0).max(2350),
+    heightMm: z.int().min(100).max(2450),
+  });
+export const windowSchema = windowInput
+  .extend({
+    createdBy: actorSchema.optional(),
+    updatedBy: actorSchema.optional(),
+  })
+  .refine(
+    ({ sillMm, heightMm }) => sillMm + heightMm <= 2450,
+    "The window must fit within the wall height.",
+  );
+export type WindowOpening = z.infer<typeof windowSchema>;
+
+export const annotationInput = z.strictObject({
+  id: identifier,
+  start: modelPointInput,
+  end: modelPointInput,
+});
+export const annotationSchema = annotationInput
+  .extend({
+    createdBy: actorSchema.optional(),
+    updatedBy: actorSchema.optional(),
+  })
+  .refine(hasLength, "A dimension requires distinct endpoints.");
+export type DimensionAnnotation = z.infer<typeof annotationSchema>;
 
 const objectParameters = z.strictObject({ position: wallPoint });
 const fixtureParameters = objectParameters.extend({
@@ -111,6 +141,23 @@ export const planCommandSchema = z.union([
         .partial(),
     }),
     z.strictObject({ type: z.literal("door.remove"), id: identifier }),
+    z.strictObject({ type: z.literal("window.add"), opening: windowInput }),
+    z.strictObject({
+      type: z.literal("window.update"),
+      id: identifier,
+      changes: windowInput.omit({ id: true, wallId: true }).partial(),
+    }),
+    z.strictObject({ type: z.literal("window.remove"), id: identifier }),
+    z.strictObject({
+      type: z.literal("dimension.add"),
+      annotation: annotationInput,
+    }),
+    z.strictObject({
+      type: z.literal("dimension.update"),
+      id: identifier,
+      changes: annotationInput.omit({ id: true }).partial(),
+    }),
+    z.strictObject({ type: z.literal("dimension.remove"), id: identifier }),
   ]),
 ]);
 export type PlanCommand = z.infer<typeof planCommandSchema>;
@@ -133,9 +180,11 @@ export const draftPlanSchema = z.looseObject({
   walls: z.array(wallSchema),
   rooms: z.array(roomSchema),
   openings: z.array(doorSchema),
+  windows: z.array(windowSchema).max(openingLimit).optional(),
   fixtures: z.array(fixtureSchema),
   utilities: z.array(utilitySchema).default([]),
   dimensions: z.array(z.unknown()),
+  annotations: z.array(annotationSchema).max(placementLimit).optional(),
 });
 export type DraftPlanState = z.infer<typeof draftPlanSchema>;
 

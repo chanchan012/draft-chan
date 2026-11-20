@@ -9,6 +9,8 @@ import {
   wallInput,
   wallLimit,
   wallSchema,
+  windowInput,
+  annotationInput,
   type DisplayUnit,
   type Door,
   type Fixture,
@@ -16,6 +18,8 @@ import {
   type DraftActor,
   type DraftPlanState,
   type Wall,
+  type WindowOpening,
+  type DimensionAnnotation,
 } from "./model";
 import { loadDraftPlan } from "./plan-state";
 
@@ -36,6 +40,8 @@ export const saveStudioSchema = z.strictObject({
   openings: z.array(doorInput).max(openingLimit),
   fixtures: z.array(fixtureInput).max(placementLimit).optional(),
   utilities: z.array(utilityInput).max(placementLimit).optional(),
+  windows: z.array(windowInput).max(openingLimit).optional(),
+  annotations: z.array(annotationInput).max(placementLimit).optional(),
 });
 export type StudioSave = z.infer<typeof saveStudioSchema>;
 
@@ -50,10 +56,24 @@ export function studioSnapshot(plan: DraftPlanState, unit: DisplayUnit) {
     utilities: plan.utilities.map((utility) =>
       utilityInput.strip().parse(utility),
     ),
+    windows: (plan.windows ?? []).map((opening) =>
+      windowInput.strip().parse(opening),
+    ),
+    annotations: (plan.annotations ?? []).map((annotation) =>
+      annotationInput.strip().parse(annotation),
+    ),
   };
 }
 
-function attribute<T extends Wall | Door | Fixture | Utility>(
+function attribute<
+  T extends
+    | Wall
+    | Door
+    | Fixture
+    | Utility
+    | WindowOpening
+    | DimensionAnnotation,
+>(
   input: Omit<T, "createdBy" | "updatedBy">,
   previous: T | undefined,
   actor: DraftActor,
@@ -106,12 +126,38 @@ export function applyStudioSnapshot(
         utilityInput.strip(),
       ),
     ) ?? previous.utilities;
+  const priorWindows = new Map(
+    previous.windows?.map((window) => [window.id, window]),
+  );
+  const priorAnnotations = new Map(
+    previous.annotations?.map((annotation) => [annotation.id, annotation]),
+  );
+  const windows =
+    input.windows?.map((window) =>
+      attribute<WindowOpening>(
+        window,
+        priorWindows.get(window.id),
+        actor,
+        windowInput.strip(),
+      ),
+    ) ?? previous.windows;
+  const annotations =
+    input.annotations?.map((annotation) =>
+      attribute<DimensionAnnotation>(
+        annotation,
+        priorAnnotations.get(annotation.id),
+        actor,
+        annotationInput.strip(),
+      ),
+    ) ?? previous.annotations;
   return loadDraftPlan({
     ...previous,
     walls,
     openings,
     fixtures,
     utilities,
+    windows,
+    annotations,
     rooms: [],
   });
 }

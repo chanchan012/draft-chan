@@ -41,7 +41,14 @@ import {
   type Selection,
 } from "./drawing";
 
-export type Tool = "select" | "wall" | "door" | "fixture" | "utility" | "pan";
+export type Tool =
+  | "select"
+  | "wall"
+  | "door"
+  | "fixture"
+  | "utility"
+  | "measure"
+  | "pan";
 type SurfaceProps = {
   plan: DraftPlanState;
   tool: Tool;
@@ -62,6 +69,7 @@ type SurfaceProps = {
   onMove(items: readonly Selection[], delta: Point): void;
   onPlace(tool: "fixture" | "utility", point: Point): void;
   onWall(start: Point, end: Point): boolean;
+  onDimension(start: Point, end: Point): boolean;
   onDoor(wallId: string, offsetMm: number): void;
 };
 type Gesture = {
@@ -102,6 +110,7 @@ export function Surface({
   onMove,
   onPlace,
   onWall,
+  onDimension,
   onDoor,
 }: SurfaceProps) {
   const surface = useRef<HTMLDivElement>(null);
@@ -129,6 +138,7 @@ export function Surface({
       geometry.utilities.filter(
         (marker) => layers[utilityCatalog[marker.template].layer],
       ),
+      geometry.annotations,
     );
   const center = { x: size.width / 2, y: size.height / 2 };
   const origin = {
@@ -209,16 +219,19 @@ export function Surface({
       grid,
       9 / camera.scale,
       start ?? undefined,
-      ortho,
+      ortho && tool === "wall",
     );
   }
 
+  const drawingLine = tool === "wall" || tool === "measure";
+  const commitLine = tool === "measure" ? onDimension : onWall;
+
   function activate(point: Point, additive = multi) {
     if (iso || tool === "pan") return;
-    if (tool === "wall") {
+    if (drawingLine) {
       const end = snap(point);
       if (!anchor) setAnchor(end);
-      else if (!same(anchor, end) && onWall(anchor, end)) setAnchor(null);
+      else if (!same(anchor, end) && commitLine(anchor, end)) setAnchor(null);
       setCursor(end);
       return;
     }
@@ -338,7 +351,7 @@ export function Surface({
       else setDrag(null);
       return;
     }
-    if (!iso && tool === "wall") {
+    if (!iso && drawingLine) {
       const start =
         current &&
         !anchor &&
@@ -389,7 +402,7 @@ export function Surface({
       return;
     }
     if (
-      tool === "wall" &&
+      drawingLine &&
       !anchor &&
       Math.hypot(
         screenPoint.x - current.start.x,
@@ -398,7 +411,7 @@ export function Surface({
     ) {
       const start = snap(modelPoint(current.start, size, current.camera), null);
       const end = snap(point, start);
-      if (!same(start, end)) onWall(start, end);
+      if (!same(start, end)) commitLine(start, end);
       return;
     }
     activate(point, current.additive);
@@ -461,7 +474,10 @@ export function Surface({
     const validWalls = candidate.walls.every((wall) => wallLength(wall) > 0);
     if (validWalls) {
       try {
-        validateOpenings(candidate.walls, candidate.openings);
+        validateOpenings(candidate.walls, [
+          ...candidate.openings,
+          ...(candidate.windows ?? []),
+        ]);
         rendered = candidate;
       } catch {
         // The committed command surfaces the placement error.
@@ -470,12 +486,12 @@ export function Surface({
   }
   const marquee = drag && !current?.moving.length;
   const dragStart =
-    !anchor && tool === "wall" && current && !current.pan
+    !anchor && drawingLine && current && !current.pan
       ? snap(modelPoint(current.start, size, current.camera), null)
       : null;
   const start = anchor ?? dragStart;
   const preview =
-    start && cursor && !same(start, cursor) && tool === "wall" && !iso;
+    start && cursor && !same(start, cursor) && drawingLine && !iso;
   const step = grid * camera.scale;
   const gridPx = step * 2 ** Math.max(0, Math.ceil(Math.log2(8 / step)));
   const scaleMm = unit === "mm" ? 1000 : 36 * unitFactor(unit);
@@ -527,6 +543,7 @@ export function Surface({
               }
               layers={layers}
               scale={camera.scale}
+              unit={unit}
             />
           )}
           {!iso && <ClearanceDrawing issue={issue} scale={camera.scale} />}
@@ -537,7 +554,7 @@ export function Surface({
               y1={start.y}
               x2={cursor.x}
               y2={cursor.y}
-              strokeWidth={thicknessMm}
+              strokeWidth={tool === "measure" ? 2 / camera.scale : thicknessMm}
             />
           )}
           {!iso && cursor && (
@@ -622,6 +639,7 @@ export function Surface({
       {!plan.walls.length &&
         !plan.fixtures.length &&
         !plan.utilities.length &&
+        !plan.annotations?.length &&
         !start && (
           <div className="studio-empty">
             <strong>A blank drawing</strong>
@@ -659,6 +677,7 @@ export function Surface({
                     plan.utilities.filter(
                       (item) => layers[utilityCatalog[item.template].layer],
                     ),
+                    plan.annotations,
                   ),
                 )
               }

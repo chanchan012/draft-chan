@@ -1,11 +1,19 @@
 import { test, expect, type Page } from "@playwright/test";
 import { readFileSync } from "node:fs";
+import {
+  Client,
+  StreamableHTTPClientTransport,
+  isCallToolResult,
+} from "@modelcontextprotocol/client";
 import { buildSync } from "esbuild";
 import { initialGraph } from "../../lib/plans/plan-state";
-import type {
-  StudioDocument,
-  StudioSave,
+import {
+  applyStudioSnapshot,
+  type StudioDocument,
+  type StudioSave,
 } from "../../lib/plans/studio-document";
+import { createMcpHttp } from "../../lib/server/mcp-http";
+import { localWindow } from "../../lib/server/rate-limit";
 import type { LivePeer, PresenceInput } from "../../lib/plans/live";
 import type { Blueprint, BlueprintRequest } from "../../lib/plans/exports";
 
@@ -110,6 +118,8 @@ async function studio(
         ...current.graph,
         walls: input.walls,
         openings: input.openings,
+        windows: input.windows ?? current.graph.windows,
+        annotations: input.annotations ?? current.graph.annotations,
         fixtures: input.fixtures ?? current.graph.fixtures,
         utilities: input.utilities ?? current.graph.utilities,
       },
@@ -147,7 +157,7 @@ async function saveIfNeeded(page: Page) {
   );
 }
 
-async function frame(page: Page) {
+async function viewportFits(page: Page) {
   expect(
     await page.evaluate(() => ({
       width: document.documentElement.scrollWidth,
@@ -160,12 +170,173 @@ async function frame(page: Page) {
     clientWidth: page.viewportSize()!.width,
     clientHeight: page.viewportSize()!.height,
   });
+}
+
+async function frame(page: Page) {
+  await viewportFits(page);
   const box = (await page
     .getByRole("region", { name: "Drawing surface" })
     .boundingBox())!;
   expect(box.width).toBeGreaterThan(180);
   expect(box.height).toBeGreaterThan(180);
 }
+
+test("connects an MCP agent and sees it furnish two bedrooms in an open Studio", async ({
+  page,
+}) => {
+  const workspace = studioWorkspace();
+  const token = "draft_mcp_" + "a".repeat(43);
+  const agentId = "822fb4a7-180f-4c77-9df7-700386555872";
+  await page.route(`**/api/floorplans/${id}/agent-tokens`, async (route) => {
+    if (route.request().method() === "GET") return route.fulfill({ json: [] });
+    return route.fulfill({
+      status: 201,
+      json: {
+        id: agentId,
+        token,
+        name: route.request().postDataJSON().name,
+        expiresAt: new Date(Date.now() + 604_800_000).toISOString(),
+      },
+    });
+  });
+  await studio(page, false, workspace);
+  const connect = page.getByRole("button", { name: "Connect an agent" });
+  await connect.click();
+  const dialog = page.getByRole("dialog", { name: "Connect an agent" });
+  await expect(
+    dialog.getByRole("textbox", { name: "MCP endpoint", exact: true }),
+  ).toHaveValue(new URL("/api/mcp", page.url()).href);
+  await dialog.getByLabel("Agent name").fill("Layout agent");
+  await dialog.getByRole("button", { name: "Create token" }).click();
+  await expect(
+    dialog.getByRole("textbox", { name: "Bearer token", exact: true }),
+  ).toHaveValue(token);
+  await viewportFits(page);
+  await dialog.getByRole("button", { name: "Close agent setup" }).click();
+  await expect(dialog).toBeHidden();
+
+  const mcp = createMcpHttp(
+    localWindow(120),
+    async (provided) =>
+      provided === token ? { owner: "studio-test", planId: id, agentId } : null,
+    {
+      async get() {
+        return workspace.document;
+      },
+      async save(owner, planId, input, author = { kind: "human", id: owner }) {
+        if (planId !== id || input.revision !== workspace.document.revision)
+          return { status: "conflict" };
+        const graph = applyStudioSnapshot(
+          workspace.document.graph,
+          input,
+          author,
+        );
+        const revision = input.revision + 1;
+        workspace.document = { ...workspace.document, graph, revision };
+        return { status: "saved", revision };
+      },
+      async publish(scope, _revision, cursor) {
+        if (cursor)
+          workspace.peers.set(scope.agentId, {
+            id: scope.agentId,
+            cursor,
+            kind: "ai",
+            expiresAt: Date.now() + 25_000,
+          });
+      },
+      async exportDxf() {
+        throw new Error("Export is covered by the MCP integration suite");
+      },
+    },
+  );
+  const client = new Client({ name: "draft-playwright", version: "1" });
+  try {
+    await client.connect(
+      new StreamableHTTPClientTransport(new URL("http://localhost/api/mcp"), {
+        fetch: (input, init) =>
+          Promise.resolve(mcp.fetch(new Request(input, init))),
+        requestInit: { headers: { Authorization: "Bearer " + token } },
+      }),
+    );
+    let revision = 0;
+    async function edit(name: string, args: Record<string, unknown>) {
+      const result = await client.callTool({
+        name,
+        arguments: { ...args, expectedRevision: revision },
+      });
+      if (!isCallToolResult(result)) throw new Error("Expected a tool result");
+      expect(result.isError, JSON.stringify(result.structuredContent)).toBe(
+        false,
+      );
+      const content = result.structuredContent as Record<string, unknown>;
+      expect(content.revision).toBe(++revision);
+      return content;
+    }
+    const draw = (
+      x1: number,
+      y1: number,
+      x2: number,
+      y2: number,
+      kind = "exterior",
+    ) =>
+      edit("draw_wall", {
+        start: { x: x1, y: y1 },
+        end: { x: x2, y: y2 },
+        kind,
+        thicknessMm: 120,
+      });
+    const north = await draw(0, 0, 10000, 0);
+    await expect(page.locator("[data-wall]")).toHaveCount(1);
+    await draw(10000, 0, 10000, 7000);
+    await draw(10000, 7000, 0, 7000);
+    await draw(0, 7000, 0, 0);
+    const partition = await draw(0, 3500, 10000, 3500, "interior");
+    await draw(5000, 0, 5000, 3500, "interior");
+    for (const offsetMm of [2500, 7500]) {
+      await edit("place_opening", {
+        kind: "door",
+        wallId: partition.wallId,
+        offsetMm,
+        widthMm: 915,
+        hinge: "start",
+        swing: "right",
+      });
+    }
+    await edit("place_opening", {
+      kind: "window",
+      wallId: north.wallId,
+      offsetMm: 7200,
+      widthMm: 1200,
+      heightMm: 950,
+      sillMm: 800,
+    });
+    const {
+      contents: [audit],
+    } = await client.readResource({ uri: "draft://spatial-audit" });
+    if (!("text" in audit)) throw new Error("Expected an audit resource");
+    const bedrooms = (
+      JSON.parse(audit.text).rooms as { id: string; areaM2: number }[]
+    ).filter((room) => room.areaM2 === 17.5);
+    expect(bedrooms).toHaveLength(2);
+    for (const bedroom of bedrooms)
+      await edit("furnish_room_preset", {
+        roomId: bedroom.id,
+        preset: "bedroom",
+      });
+    await edit("add_dimension_annotation", {
+      start: { x: 0, y: 7500 },
+      end: { x: 10000, y: 7500 },
+    });
+    await expect(page.locator("[data-dimension]")).toHaveCount(1);
+    await page.getByRole("button", { name: "Fit drawing" }).click();
+    await expect(page.locator("[data-fixture]")).toHaveCount(4);
+    await expect(page.locator("[data-window]")).toHaveCount(1);
+    await expect(page.locator('[data-peer-kind="ai"]')).toBeVisible();
+    await frame(page);
+  } finally {
+    await client.close();
+  }
+});
 
 test("floats controls and collapses and resizes the side panels", async ({
   page,
@@ -313,6 +484,35 @@ test("draws an ortho wall and door, toggles isometric, and saves the graph", asy
   await expect(
     page.locator('[data-clearance="door-width"] .cad-audit-dimension'),
   ).toBeVisible();
+});
+
+test("draws a window and dimension and preserves them after reload", async ({
+  page,
+}) => {
+  const edits = await studio(page);
+  await page.getByRole("button", { name: "Wall", exact: true }).click();
+  await point(page, 0.17, 0.47);
+  await point(page, 0.83, 0.47);
+  await expect(page.locator("[data-wall]")).toHaveCount(1);
+  await page.getByRole("button", { name: "Door", exact: true }).click();
+  await page.getByRole("button", { name: "Inspector", exact: true }).click();
+  const inspector = page.getByRole("complementary", { name: "Inspector" });
+  await inspector.getByLabel("Opening type").selectOption("window");
+  await inspector.getByLabel("Sill height (mm)").fill("750");
+  await inspector.getByRole("button", { name: "Close inspector" }).click();
+  await point(page, 0.5, 0.47);
+  await expect(page.locator("[data-window]")).toHaveCount(1);
+  await page.getByRole("button", { name: "Measure", exact: true }).click();
+  await point(page, 0.25, 0.65);
+  await point(page, 0.75, 0.65);
+  await expect(page.locator("[data-dimension]")).toContainText(/\d+ mm/);
+  await saveIfNeeded(page);
+  expect(edits.at(-1)?.windows?.[0]).toMatchObject({ sillMm: 750 });
+  expect(edits.at(-1)?.annotations).toHaveLength(1);
+  await page.reload();
+  await expect(page.locator("[data-window]")).toHaveCount(1);
+  await expect(page.locator("[data-dimension]")).toHaveCount(1);
+  await frame(page);
 });
 
 test("keeps unsaved drawing after a revision conflict", async ({ page }) => {
