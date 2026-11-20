@@ -161,8 +161,10 @@ export function fitCamera(
     y: (top + bottom) / 2,
     scale: clamp(
       Math.min(
-        (viewport.width * 0.78) / Math.max(1200, right - left),
-        (viewport.height * 0.73) / Math.max(1200, bottom - top),
+        (viewport.width * (isometric ? 0.86 : 0.78)) /
+          Math.max(1200, right - left),
+        (viewport.height * (isometric ? 0.78 : 0.73)) /
+          Math.max(1200, bottom - top),
       ),
       0.00001,
       0.45,

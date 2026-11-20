@@ -333,6 +333,22 @@ test("connects an MCP agent and sees it furnish two bedrooms in an open Studio",
     await expect(page.locator("[data-fixture]")).toHaveCount(4);
     await expect(page.locator("[data-window]")).toHaveCount(1);
     await expect(page.locator('[data-peer-kind="ai"]')).toBeVisible();
+    await expect(page.locator("[data-wall-join]")).toHaveCount(4);
+    expect(
+      await page
+        .locator('[data-wall-join="0,0"]')
+        .evaluate((corner) =>
+          (corner as SVGPathElement).isPointInFill(new DOMPoint(-42, -42)),
+        ),
+    ).toBe(true);
+    await page.getByRole("button", { name: "Isometric", exact: true }).click();
+    await expect(page.locator("[data-iso-slab]")).toHaveCount(1);
+    await expect(page.locator('[data-iso-wall="rear"]').first()).toBeVisible();
+    await expect(page.locator('[data-iso-wall="front"]').first()).toBeVisible();
+    await expect(
+      page.locator('[data-iso-fixture][data-template="queenBed"]'),
+    ).toHaveCount(2);
+    await expect(page.locator("[data-iso-window]")).toHaveCount(1);
     await frame(page);
   } finally {
     await client.close();

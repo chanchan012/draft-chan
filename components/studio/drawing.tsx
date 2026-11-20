@@ -1,18 +1,17 @@
-import { useId } from "react";
+import { useId, useMemo } from "react";
 import {
   fixtureCatalog,
   utilityCatalog,
   type UtilityLayer,
 } from "@/lib/plans/catalog";
-import { fixtureFootprint, wallFootprint } from "@/lib/plans/footprints";
+import { wallFootprint } from "@/lib/plans/footprints";
 import type { ClearanceIssue } from "@/lib/plans/clearance";
-import { projectIso, unitFactor, wallHeight } from "@/lib/plans/cad";
+import { unitFactor } from "@/lib/plans/cad";
 import {
   doorBounds,
   doorSwing,
   pointAlong,
   wallLength,
-  wallRuns,
 } from "@/lib/plans/openings";
 import type {
   Door,
@@ -24,6 +23,7 @@ import type {
 } from "@/lib/plans/model";
 
 import { isSelected, type Selection } from "@/lib/plans/editor-selection";
+import { wallMesh } from "@/lib/plans/wall-mesh";
 export type { Selection } from "@/lib/plans/editor-selection";
 export type WallPreview = { start: Point; end: Point };
 const pair = ({ x, y }: Point) => `${x},${y}`;
@@ -158,7 +158,10 @@ export function PlanDrawing({
   unit: DisplayUnit;
 }) {
   const walls = new Map(plan.walls.map((wall) => [wall.id, wall]));
-  const openings = [...plan.openings, ...(plan.windows ?? [])];
+  const mesh = useMemo(
+    () => wallMesh(plan.walls, [...plan.openings, ...(plan.windows ?? [])]),
+    [plan.walls, plan.openings, plan.windows],
+  );
   return (
     <>
       {plan.rooms.map((room) => (
@@ -167,6 +170,25 @@ export function PlanDrawing({
           className="cad-room"
           d={[room.polygon, ...(room.holes ?? [])].map(ring).join(" ")}
           fillRule="evenodd"
+        />
+      ))}
+      {mesh.joints.map(({ id, walls, footprint }) => (
+        <path
+          key={id}
+          data-wall-join={id}
+          className={
+            "cad-wall cad-wall-join" +
+            (walls.some((wall) => wall.kind === "exterior")
+              ? " is-exterior"
+              : "") +
+            (walls.every((wall) =>
+              isSelected(selection, { kind: "wall", id: wall.id }),
+            )
+              ? " is-selected"
+              : "")
+          }
+          d={ring(footprint)}
+          vectorEffect="non-scaling-stroke"
         />
       ))}
       {plan.walls.map((wall) => (
@@ -181,7 +203,7 @@ export function PlanDrawing({
               : "")
           }
         >
-          {wallRuns(wall, openings).map(({ start, end }, i) => (
+          {mesh.runs.get(wall.id)!.map(({ start, end }, i) => (
             <line
               key={i}
               x1={start.x}
@@ -293,139 +315,6 @@ export function PlanDrawing({
         );
       })}
     </>
-  );
-}
-
-function Prism({
-  footprint,
-  height,
-  fixture,
-  elevation = 0,
-  window,
-}: {
-  footprint: Point[];
-  height: number;
-  fixture?: string;
-  elevation?: number;
-  window?: string;
-}) {
-  const bottom = footprint.map((p) => projectIso(p, elevation));
-  const top = footprint.map((p) => projectIso(p, elevation + height));
-  return (
-    <g
-      className={
-        "cad-prism" +
-        (fixture ? " cad-iso-fixture" : window ? " cad-iso-window" : "")
-      }
-      data-iso-fixture={fixture}
-      data-iso-window={window}
-    >
-      {bottom.map((p, i) => {
-        const j = (i + 1) % 4;
-        if (bottom[j].x <= p.x) return null;
-        return (
-          <path
-            key={i}
-            className={i % 2 ? "cad-cap" : "cad-face"}
-            vectorEffect="non-scaling-stroke"
-            d={ring([p, bottom[j], top[j], top[i]])}
-          />
-        );
-      })}
-      <path
-        className="cad-top"
-        vectorEffect="non-scaling-stroke"
-        d={ring(top)}
-      />
-    </g>
-  );
-}
-
-export function IsometricDrawing({ plan }: { plan: DraftPlanState }) {
-  const openings = [...plan.openings, ...(plan.windows ?? [])];
-  const runs: {
-    footprint: Point[];
-    height: number;
-    id: string;
-    depth: number;
-    fixture?: string;
-    elevation?: number;
-    window?: string;
-  }[] = plan.walls.flatMap((wall) =>
-    wallRuns(wall, openings).map(({ start, end }, i) => ({
-      footprint: wallFootprint(start, end, wall.thicknessMm),
-      height: wallHeight,
-      id: wall.id + ":" + i,
-      depth: (start.x + start.y + end.x + end.y) / 2,
-    })),
-  );
-  const walls = new Map(plan.walls.map((wall) => [wall.id, wall]));
-  for (const window of plan.windows ?? []) {
-    const wall = walls.get(window.wallId)!;
-    const [start, end] = doorBounds(window).map((offset) =>
-      pointAlong(wall, offset),
-    );
-    const depth = (start.x + start.y + end.x + end.y) / 2;
-    const footprint = wallFootprint(start, end, wall.thicknessMm);
-    const lintel = window.sillMm + window.heightMm;
-    if (window.sillMm)
-      runs.push({
-        id: "sill:" + window.id,
-        footprint,
-        depth,
-        height: window.sillMm,
-      });
-    if (lintel < wallHeight)
-      runs.push({
-        id: "lintel:" + window.id,
-        footprint,
-        depth,
-        elevation: lintel,
-        height: wallHeight - lintel,
-      });
-    runs.push({
-      id: "glass:" + window.id,
-      window: window.id,
-      depth,
-      footprint: wallFootprint(start, end, Math.min(14, wall.thicknessMm)),
-      elevation: window.sillMm,
-      height: window.heightMm,
-    });
-  }
-  for (const fixture of plan.fixtures) {
-    runs.push({
-      footprint: fixtureFootprint(fixture),
-      height: fixture.heightMm,
-      id: "fixture:" + fixture.id,
-      depth: fixture.position.x + fixture.position.y,
-      fixture: fixture.id,
-    });
-  }
-  runs.sort((a, b) => a.depth - b.depth);
-  return (
-    <g data-view="isometric">
-      {plan.rooms.map((room) => (
-        <path
-          key={room.id}
-          className="cad-iso-floor"
-          vectorEffect="non-scaling-stroke"
-          fillRule="evenodd"
-          d={[room.polygon, ...(room.holes ?? [])]
-            .map((boundary) => ring(boundary.map((p) => projectIso(p))))
-            .join(" ")}
-        />
-      ))}
-      {runs.map(({ id, footprint, height, fixture, elevation, window }) => (
-        <Prism
-          key={id}
-          footprint={footprint}
-          height={height}
-          fixture={fixture}
-          elevation={elevation}
-          window={window}
-        />
-      ))}
-    </g>
   );
 }
 
