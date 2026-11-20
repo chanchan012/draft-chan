@@ -1,4 +1,5 @@
 import { compareText, type Door, type Point, type Wall } from "./model";
+type Opening = Pick<Door, "id" | "wallId" | "offsetMm" | "widthMm">;
 
 export function wallLength(wall: Pick<Wall, "start" | "end">) {
   return Math.hypot(wall.end.x - wall.start.x, wall.end.y - wall.start.y);
@@ -12,7 +13,7 @@ export function pointAlong(wall: Wall, offset: number): Point {
   };
 }
 
-export function doorBounds(door: Door) {
+export function doorBounds(door: Pick<Opening, "offsetMm" | "widthMm">) {
   return [
     door.offsetMm - door.widthMm / 2,
     door.offsetMm + door.widthMm / 2,
@@ -21,7 +22,7 @@ export function doorBounds(door: Door) {
 
 export function validateOpenings(
   walls: readonly Wall[],
-  doors: readonly Door[],
+  doors: readonly Opening[],
 ) {
   const lengths = new Map(walls.map((wall) => [wall.id, wallLength(wall)]));
   const ids = new Set<string>();
@@ -35,17 +36,17 @@ export function validateOpenings(
     ids.add(door.id);
     const length = lengths.get(door.wallId);
     if (length === undefined)
-      throw new Error("Place the door on an existing wall.");
+      throw new Error("Place the opening on an existing wall.");
     const [start, end] = doorBounds(door);
     if (start < 0 || end > length)
-      throw new Error("The door must fit between the wall endpoints.");
+      throw new Error("The opening must fit between the wall endpoints.");
     if (start < (ends.get(door.wallId) ?? 0))
-      throw new Error("This door overlaps another opening.");
+      throw new Error("This opening overlaps another opening.");
     ends.set(door.wallId, end);
   }
 }
 
-export function wallRuns(wall: Wall, doors: readonly Door[]) {
+export function wallRuns(wall: Wall, doors: readonly Opening[]) {
   const gaps = doors
     .filter((door) => door.wallId === wall.id)
     .map(doorBounds)

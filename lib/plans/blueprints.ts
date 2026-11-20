@@ -8,21 +8,45 @@ import {
 } from "@tarikjabiri/dxf";
 import { utilityCatalog } from "./catalog";
 import { bounds, fixtureFootprint, wallFootprint } from "./footprints";
-import { doorSwing, wallRuns } from "./openings";
+import {
+  doorBounds,
+  doorSwing,
+  pointAlong,
+  wallLength,
+  wallRuns,
+} from "./openings";
 import type { DraftPlanState, Point } from "./model";
 import type { BlueprintFormat } from "./exports";
 
 function blueprintGeometry(plan: DraftPlanState) {
   const wallsById = new Map(plan.walls.map((wall) => [wall.id, wall]));
+  const openings = [...plan.openings, ...(plan.windows ?? [])];
   return {
     walls: plan.walls.flatMap((wall) =>
-      wallRuns(wall, plan.openings).map(({ start, end }) =>
+      wallRuns(wall, openings).map(({ start, end }) =>
         wallFootprint(start, end, wall.thicknessMm),
       ),
     ),
     doors: plan.openings.map((door) => ({
       ...doorSwing(wallsById.get(door.wallId)!, door),
       radius: door.widthMm,
+    })),
+    windows: (plan.windows ?? []).map((window) => {
+      const wall = wallsById.get(window.wallId)!;
+      const [start, end] = doorBounds(window).map((offset) =>
+        pointAlong(wall, offset),
+      );
+      return {
+        start,
+        end,
+        outline: wallFootprint(start, end, wall.thicknessMm),
+      };
+    }),
+    dimensions: (plan.annotations ?? []).map(({ start, end }) => ({
+      start,
+      end,
+      text: Math.round(wallLength({ start, end })) + " mm",
+      label: { x: (start.x + end.x) / 2, y: (start.y + end.y) / 2 - 65 },
     })),
     fixtures: plan.fixtures.map(fixtureFootprint),
     utilities: plan.utilities.map(({ position, template }) => ({
@@ -45,11 +69,20 @@ function square({ x, y }: Point, radius: number) {
   ];
 }
 
-function exportDxf({ walls, doors, fixtures, utilities }: Geometry) {
+function exportDxf({
+  walls,
+  doors,
+  windows,
+  dimensions,
+  fixtures,
+  utilities,
+}: Geometry) {
   const writer = new DxfWriter();
   writer.setUnits(Units.Millimeters);
   writer.addLayer("WALLS", Colors.White);
   writer.addLayer("DOORS", Colors.Yellow);
+  if (windows.length) writer.addLayer("WINDOWS", Colors.Cyan);
+  if (dimensions.length) writer.addLayer("DIMENSIONS", Colors.Green);
   writer.addLayer("FIXTURES", Colors.Cyan);
   writer.addLayer("ELECTRICAL", Colors.Blue);
   writer.addLayer("PLUMBING", Colors.Green);
@@ -77,6 +110,14 @@ function exportDxf({ walls, doors, fixtures, utilities }: Geometry) {
     writer.addArc(vertex(hinge), radius, start, end, options);
   }
   for (const points of fixtures) polygon(points, "FIXTURES");
+  for (const { start, end, outline } of windows) {
+    polygon(outline, "WINDOWS");
+    writer.addLine(vertex(start), vertex(end), { layerName: "WINDOWS" });
+  }
+  for (const { start, end, text, label } of dimensions) {
+    writer.addLine(vertex(start), vertex(end), { layerName: "DIMENSIONS" });
+    writer.addText(vertex(label), 60, text, { layerName: "DIMENSIONS" });
+  }
   for (const { position, glyph, layer } of utilities) {
     const layerName = layer.toUpperCase();
     if (layer === "electrical")
@@ -104,13 +145,20 @@ const polygonTag = (points: Point[]) =>
   `<polygon points="${points.map(coordinate).join(" ")}"/>`;
 
 function exportSvg(
-  { walls, doors, fixtures, utilities }: Geometry,
+  { walls, doors, windows, dimensions, fixtures, utilities }: Geometry,
   title: string,
 ) {
   const points = [
     ...walls.flat(),
     ...fixtures.flat(),
     ...doors.flatMap(({ hinge, radius }) => square(hinge, radius)),
+    ...windows.flatMap(({ outline }) => outline),
+    ...dimensions.flatMap(({ start, end, label, text }) => [
+      start,
+      end,
+      { x: label.x - text.length * 20, y: label.y - 60 },
+      { x: label.x + text.length * 20, y: label.y },
+    ]),
     ...utilities.flatMap(({ position }) => square(position, utilityRadius)),
   ];
   const { left, top, right, bottom } = bounds(
@@ -133,6 +181,19 @@ function exportSvg(
     .map(
       ({ hinge, closed, leaf, clockwise, radius }) =>
         `<path d="M ${coordinate(hinge)} L ${coordinate(leaf)} M ${coordinate(closed)} A ${radius} ${radius} 0 0 ${Number(clockwise)} ${coordinate(leaf)}"/>`,
+    )
+    .join("");
+  const windowShapes = windows
+    .map(
+      ({ start, end, outline }) =>
+        polygonTag(outline) +
+        `<path d="M ${coordinate(start)} L ${coordinate(end)}"/>`,
+    )
+    .join("");
+  const dimensionShapes = dimensions
+    .map(
+      ({ start, end, label, text }) =>
+        `<path d="M ${coordinate(start)} L ${coordinate(end)}"/><text x="${rounded(label.x)}" y="${rounded(label.y)}" text-anchor="middle" font-size="60" stroke="none" fill="#466358">${text}</text>`,
     )
     .join("");
   const utilityShapes = (kind: "electrical" | "plumbing") =>
@@ -158,6 +219,12 @@ function exportSvg(
     `<title>${escapeXml(title)}</title>`,
     layer("walls", "#253a49", "#253a49", walls.map(polygonTag).join("")),
     layer("doors", "none", "#38566c", doorShapes),
+    ...(windows.length
+      ? [layer("windows", "#cadee6", "#497082", windowShapes)]
+      : []),
+    ...(dimensions.length
+      ? [layer("dimensions", "none", "#466358", dimensionShapes)]
+      : []),
     layer("fixtures", "#e9eff3", "#38566c", fixtures.map(polygonTag).join("")),
     layer("electrical", "#edf6ff", "#2463a3", utilityShapes("electrical")),
     layer("plumbing", "#e5f5f0", "#187260", utilityShapes("plumbing")),

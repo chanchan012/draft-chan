@@ -3,7 +3,7 @@ import { compareText, type DraftPlanState } from "./model";
 import { wallLength } from "./openings";
 
 type BomRow = {
-  category: "Wall" | "Door" | "Fixture" | "Electrical" | "Plumbing";
+  category: "Wall" | "Door" | "Window" | "Fixture" | "Electrical" | "Plumbing";
   item: string;
   dimensionsMm: string;
   unit: "m" | "each";
@@ -46,6 +46,13 @@ export function calculateBom(plan: DraftPlanState): BomRow[] {
   }
   for (const door of plan.openings)
     add("Door", "Door opening", String(door.widthMm), "each");
+  for (const window of plan.windows ?? [])
+    add(
+      "Window",
+      "Window opening",
+      `${window.widthMm} x ${window.heightMm}`,
+      "each",
+    );
   for (const fixture of plan.fixtures) {
     const { widthMm, depthMm, heightMm, template } = fixture;
     add(

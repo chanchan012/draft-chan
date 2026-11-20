@@ -45,5 +45,11 @@ export function rebaseSnapshot(
     openings: mergeItems(base.openings, draft.openings, saved.openings),
     fixtures: mergeItems(base.fixtures, draft.fixtures, saved.fixtures),
     utilities: mergeItems(base.utilities, draft.utilities, saved.utilities),
+    windows: mergeItems(base.windows, draft.windows, saved.windows),
+    annotations: mergeItems(
+      base.annotations,
+      draft.annotations,
+      saved.annotations,
+    ),
   };
 }

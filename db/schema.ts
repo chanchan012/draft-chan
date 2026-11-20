@@ -91,3 +91,19 @@ export const floorplanExports = pgTable(
     ),
   ],
 );
+
+export const floorplanAgentTokens = pgTable(
+  "floorplan_agent_tokens",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    floorplanId: uuid("floorplan_id")
+      .notNull()
+      .references(() => floorplans.id, { onDelete: "cascade" }),
+    name: text("name").notNull(),
+    tokenHash: text("token_hash").notNull().unique(),
+    expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+  },
+  (t) => [
+    index("floorplan_agent_tokens_plan_idx").on(t.floorplanId, t.expiresAt),
+  ],
+);

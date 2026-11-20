@@ -1,0 +1,420 @@
+import { createServer } from "node:http";
+import { once } from "node:events";
+import {
+  Client,
+  StreamableHTTPClientTransport,
+  isCallToolResult,
+} from "@modelcontextprotocol/client";
+import { StdioClientTransport } from "@modelcontextprotocol/client/stdio";
+import { PGlite } from "@electric-sql/pglite";
+import { drizzle } from "drizzle-orm/pglite";
+import { migrate } from "drizzle-orm/pglite/migrator";
+import { beforeAll, afterAll, expect, it, vi } from "vitest";
+import { createApi, type IdentityMiddleware } from "../lib/server/api";
+import { createMcpHttp } from "../lib/server/mcp-http";
+import { localWindow } from "../lib/server/rate-limit";
+import { authenticateAgent } from "../lib/server/agent-tokens";
+import {
+  renderQueuedBlueprint,
+  getBlueprintFile,
+} from "../lib/server/blueprint-store";
+import { floorplanAgentTokens, floorplanExports } from "../db/schema";
+import { eq } from "drizzle-orm";
+import type { StudioDocument } from "../lib/plans/studio-document";
+
+const pg = new PGlite();
+const db = drizzle(pg);
+vi.mock("../db/client", () => ({ openDatabase: () => db }));
+vi.mock("../lib/server/thumbnails", async (load) => ({
+  ...(await load<typeof import("../lib/server/thumbnails")>()),
+  queueThumbnail: vi.fn(async () => {}),
+}));
+vi.mock("../lib/server/blueprint-jobs", async (load) => ({
+  ...(await load<typeof import("../lib/server/blueprint-jobs")>()),
+  queueBlueprint: vi.fn(async () => {}),
+}));
+beforeAll(() => migrate(db, { migrationsFolder: "./db/migrations" }), 30_000);
+afterAll(() => pg.close());
+
+const owner = "mcp-owner";
+function member(userId = owner) {
+  const identity: IdentityMiddleware = async (c, next) => {
+    c.set("identity", { mode: "member", userId });
+    await next();
+  };
+  return createApi(identity, localWindow(120));
+}
+const payload = (method: string, data: unknown) => ({
+  method,
+  headers: { "Content-Type": "application/json" },
+  body: JSON.stringify(data),
+});
+
+async function planWithToken() {
+  const api = member();
+  const planId = crypto.randomUUID();
+  const path = "/api/floorplans/" + planId;
+  expect(
+    (
+      await api.request(
+        "/api/floorplans",
+        payload("POST", { id: planId, name: "Apartment" }),
+      )
+    ).status,
+  ).toBe(201);
+  const issued = await api.request(
+    path + "/agent-tokens",
+    payload("POST", { name: "Layout agent" }),
+  );
+  expect(issued.status).toBe(201);
+  const credential = (await issued.json()) as { id: string; token: string };
+  return { api, planId, path, ...credential };
+}
+
+async function connect(app: ReturnType<typeof createMcpHttp>, token: string) {
+  const client = new Client({ name: "draft-test", version: "1.0.0" });
+  await client.connect(
+    new StreamableHTTPClientTransport(new URL("http://localhost/api/mcp"), {
+      fetch: (input, init) =>
+        Promise.resolve(app.fetch(new Request(input, init))),
+      requestInit: { headers: { Authorization: "Bearer " + token } },
+    }),
+  );
+  return client;
+}
+
+it("issues scoped hashed credentials, rejects unauthorized calls and expires and revokes them", async () => {
+  const session = await planWithToken();
+  const { token, id, path, api } = session;
+  const list = await api.request(path + "/agent-tokens");
+  expect(await list.json()).toMatchObject([{ id, name: "Layout agent" }]);
+  expect(
+    await (await api.request(path + "/agent-tokens")).text(),
+  ).not.toContain(token);
+  const [stored] = await db
+    .select()
+    .from(floorplanAgentTokens)
+    .where(eq(floorplanAgentTokens.id, id));
+  expect(stored.tokenHash).toMatch(/^[a-f0-9]{64}$/);
+  expect(stored.tokenHash).not.toContain(token);
+  expect(
+    (await member("other-owner").request(path + "/agent-tokens")).status,
+  ).toBe(404);
+  expect(
+    (
+      await member("other-owner").request(path + "/agent-tokens/" + id, {
+        method: "DELETE",
+      })
+    ).status,
+  ).toBe(404);
+
+  const app = createMcpHttp(localWindow());
+  expect((await app.request("/api/mcp")).status).toBe(401);
+  expect(
+    (
+      await app.request("/api/mcp", {
+        headers: { Origin: "https://unrelated.example" },
+      })
+    ).status,
+  ).toBe(403);
+  expect(
+    (
+      await app.request("/api/mcp", {
+        headers: { Authorization: "Bearer bad" },
+      })
+    ).status,
+  ).toBe(401);
+  expect(await authenticateAgent(token)).toEqual({
+    planId: session.planId,
+    owner,
+    agentId: id,
+  });
+
+  const expired = await (
+    await api.request(
+      path + "/agent-tokens",
+      payload("POST", { name: "Expired" }),
+    )
+  ).json();
+  await db
+    .update(floorplanAgentTokens)
+    .set({ expiresAt: new Date(0) })
+    .where(eq(floorplanAgentTokens.id, expired.id));
+  expect(await authenticateAgent(expired.token)).toBeNull();
+  expect(
+    (await api.request(path + "/agent-tokens/" + id, { method: "DELETE" }))
+      .status,
+  ).toBe(204);
+  expect(await authenticateAgent(token)).toBeNull();
+  expect(
+    (
+      await app.request("/api/mcp", {
+        headers: { Authorization: "Bearer " + token },
+      })
+    ).status,
+  ).toBe(401);
+});
+
+it("lays out a two-bedroom plan using all MCP resources and tools over HTTP", async () => {
+  const session = await planWithToken();
+  const client = await connect(createMcpHttp(localWindow(200)), session.token);
+  const live = await session.api.request(session.path + "/live");
+  const stream = live.body!.getReader();
+  const read = async () =>
+    JSON.parse(
+      new TextDecoder()
+        .decode((await stream.read()).value)
+        .trim()
+        .slice(6),
+    );
+  try {
+    expect(
+      (await client.listTools()).tools.map(({ name }) => name).sort(),
+    ).toEqual([
+      "add_dimension_annotation",
+      "calculate_bom",
+      "check_clearance_codes",
+      "draw_wall",
+      "furnish_room_preset",
+      "place_fixture",
+      "place_opening",
+      "split_or_join_wall",
+      "trigger_dxf_export",
+    ]);
+    expect(
+      (await client.listResources()).resources.map(({ name }) => name).sort(),
+    ).toEqual(["catalog", "floorplan-graph", "spatial-audit"]);
+    async function resource(name: string) {
+      const response = await client.readResource({ uri: "draft://" + name });
+      const [item] = response.contents;
+      if (!("text" in item)) throw new Error("Expected JSON resource");
+      return JSON.parse(item.text);
+    }
+    expect(await resource("catalog")).toMatchObject({
+      roomPresets: { bedroom: ["queenBed", "wardrobe"] },
+    });
+    const start = (await resource("floorplan-graph")) as StudioDocument;
+    expect(start).toMatchObject({ id: session.planId, revision: 0 });
+    let revision = start.revision;
+
+    async function call(name: string, args: Record<string, unknown> = {}) {
+      const response = await client.callTool({ name, arguments: args });
+      if (!isCallToolResult(response))
+        throw new Error("Expected a tool result");
+      expect(
+        response.isError,
+        JSON.stringify(response.structuredContent),
+      ).not.toBe(true);
+      const content = response.structuredContent as Record<string, unknown>;
+      if (typeof content.revision === "number") revision = content.revision;
+      return content;
+    }
+    expect(await read()).toMatchObject({ type: "snapshot", revision: 0 });
+
+    const draw = (
+      x1: number,
+      y1: number,
+      x2: number,
+      y2: number,
+      kind = "interior",
+    ) =>
+      call("draw_wall", {
+        expectedRevision: revision,
+        start: { x: x1, y: y1 },
+        end: { x: x2, y: y2 },
+        thicknessMm: 120,
+        kind,
+      });
+    const north = await draw(0, 0, 10000, 0, "exterior");
+    const events = [await read(), await read()];
+    expect(events).toEqual(
+      expect.arrayContaining([
+        { type: "revision", revision: 1 },
+        expect.objectContaining({
+          type: "presence",
+          peer: expect.objectContaining({ kind: "ai" }),
+        }),
+      ]),
+    );
+    // The test above verifies fan-out. Release this stream before publishing the remaining edits.
+    await stream.cancel();
+
+    await draw(10000, 0, 10000, 7000, "exterior");
+    await draw(10000, 7000, 0, 7000, "exterior");
+    await draw(0, 7000, 0, 0, "exterior");
+    const partition = await draw(0, 3500, 10000, 3500);
+    await draw(5000, 0, 5000, 3500);
+    const door = await call("place_opening", {
+      expectedRevision: revision,
+      kind: "door",
+      wallId: partition.wallId,
+      offsetMm: 2500,
+      widthMm: 915,
+      hinge: "start",
+      swing: "right",
+    });
+    await call("place_opening", {
+      expectedRevision: revision,
+      kind: "door",
+      wallId: partition.wallId,
+      offsetMm: 7500,
+      widthMm: 915,
+      hinge: "end",
+      swing: "right",
+    });
+    await call("place_opening", {
+      expectedRevision: revision,
+      kind: "window",
+      wallId: north.wallId,
+      offsetMm: 7200,
+      widthMm: 1200,
+      heightMm: 950,
+      sillMm: 800,
+    });
+    const split = await call("split_or_join_wall", {
+      expectedRevision: revision,
+      operation: "split",
+      wallId: north.wallId,
+      point: { x: 5000, y: 0 },
+    });
+    expect((await resource("floorplan-graph")).graph.windows[0]).toMatchObject({
+      wallId: split.newWallId,
+      offsetMm: 2200,
+    });
+    await call("split_or_join_wall", {
+      expectedRevision: revision,
+      operation: "join",
+      wallId: north.wallId,
+      otherWallId: split.newWallId,
+    });
+
+    const audit = await resource("spatial-audit");
+    expect(audit.rooms).toHaveLength(3);
+    expect(audit.adjacency).toContainEqual(
+      expect.objectContaining({
+        doorwayId: door.openingId,
+        first: expect.any(String),
+        second: expect.any(String),
+      }),
+    );
+    const bedrooms = audit.rooms.filter(
+      (room: { areaM2: number }) => room.areaM2 === 17.5,
+    );
+    expect(bedrooms).toHaveLength(2);
+    for (const room of bedrooms)
+      await call("furnish_room_preset", {
+        expectedRevision: revision,
+        roomId: room.id,
+        preset: "bedroom",
+      });
+    await call("place_fixture", {
+      expectedRevision: revision,
+      kind: "furniture",
+      template: "sofa",
+      position: { x: 4000, y: 5800 },
+    });
+    await call("add_dimension_annotation", {
+      expectedRevision: revision,
+      start: { x: 0, y: 7500 },
+      end: { x: 10000, y: 7500 },
+    });
+    const stale = await client.callTool({
+      name: "draw_wall",
+      arguments: {
+        expectedRevision: 0,
+        start: { x: 0, y: 0 },
+        end: { x: 0, y: 1 },
+        thicknessMm: 120,
+        kind: "interior",
+      },
+    });
+    expect(stale).toMatchObject({
+      isError: true,
+      structuredContent: { code: "revision_conflict" },
+    });
+    expect(await call("check_clearance_codes")).toHaveProperty("issues");
+    expect((await call("calculate_bom")).items).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ category: "Window", quantity: 1 }),
+      ]),
+    );
+    const graph = await resource("floorplan-graph");
+    expect(graph.graph.fixtures).toHaveLength(5);
+    expect(graph.graph.windows).toMatchObject([
+      { offsetMm: 7200, updatedBy: { kind: "ai", id: session.id } },
+    ]);
+    expect(graph.graph.annotations).toHaveLength(1);
+    expect(
+      graph.graph.walls.every(
+        (item: { createdBy: { kind: string } }) => item.createdBy.kind === "ai",
+      ),
+    ).toBe(true);
+
+    const queued = await call("trigger_dxf_export", {
+      expectedRevision: revision,
+    });
+    const job = queued.export as { id: string; status: string };
+    const [row] = await db
+      .select()
+      .from(floorplanExports)
+      .where(eq(floorplanExports.id, job.id));
+    await renderQueuedBlueprint({ id: job.id, attempt: row.attempt });
+    const file = await getBlueprintFile(owner, session.planId, job.id);
+    expect(file?.artifact).toContain("WINDOWS");
+    expect(file?.artifact).toContain("DIMENSIONS");
+  } finally {
+    await stream.cancel().catch(() => {});
+    await client.close();
+  }
+}, 30_000);
+
+it("bridges stdio to the authenticated HTTP tools without sharing the database connection", async () => {
+  const session = await planWithToken();
+  const app = createMcpHttp(localWindow());
+  const listener = createServer(async (req, res) => {
+    try {
+      const chunks: Buffer[] = [];
+      for await (const chunk of req) chunks.push(Buffer.from(chunk));
+      const response = await app.fetch(
+        new Request("http://localhost" + req.url, {
+          method: req.method,
+          headers: req.headers as Record<string, string>,
+          body: chunks.length ? Buffer.concat(chunks) : undefined,
+        }),
+      );
+      res.writeHead(response.status, Object.fromEntries(response.headers));
+      res.end(Buffer.from(await response.arrayBuffer()));
+    } catch {
+      res.writeHead(500).end();
+    }
+  });
+  listener.listen(0, "127.0.0.1");
+  await once(listener, "listening");
+  const address = listener.address();
+  if (!address || typeof address === "string")
+    throw new Error("Missing local port");
+  const client = new Client({ name: "stdio-test", version: "1" });
+  try {
+    await client.connect(
+      new StdioClientTransport({
+        command: process.execPath,
+        args: ["scripts/mcp-stdio.mjs"],
+        env: {
+          DRAFT_MCP_URL: `http://127.0.0.1:${address.port}/api/mcp`,
+          DRAFT_MCP_TOKEN: session.token,
+        },
+      }),
+    );
+    expect((await client.listTools()).tools).toHaveLength(9);
+    expect((await client.listResources()).resources).toHaveLength(3);
+    expect(
+      (await client.readResource({ uri: "draft://floorplan-graph" })).contents,
+    ).toMatchObject([{ text: expect.stringContaining(session.planId) }]);
+  } finally {
+    await client.close();
+    const closed = once(listener, "close");
+    listener.close();
+    listener.closeAllConnections();
+    await closed;
+  }
+}, 15_000);

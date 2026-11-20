@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Box,
   Armchair,
+  Bot,
   ChevronLeft,
   FileDown,
   Layers3,
@@ -17,6 +18,7 @@ import {
   PanelRight,
   Redo2,
   Ruler,
+  MoveHorizontal,
   Save,
   Undo2,
   X,
@@ -40,11 +42,17 @@ import {
   selectionKey,
   type Selection,
 } from "@/lib/plans/editor-selection";
-import { Inspector, type DoorSettings, type WallSettings } from "./inspector";
+import {
+  Inspector,
+  type DoorSettings,
+  type WallSettings,
+  type WindowSettings,
+} from "./inspector";
 import { Surface, type Tool } from "./surface";
 import { AuditPanel } from "./audit-panel";
 import { StudioPanel } from "./studio-panel";
 import { ExportPanel } from "./export-panel";
+import { McpSetup } from "./mcp-setup";
 import { usePlanLive } from "./use-plan-live";
 import { useStudioSync } from "./use-studio-sync";
 import {
@@ -60,6 +68,7 @@ const tools = [
   { id: "door", label: "Door", icon: DoorOpen, shortcut: "D" },
   { id: "fixture", label: "Fixture", icon: Armchair, shortcut: "F" },
   { id: "utility", label: "Utility", icon: Zap, shortcut: "U" },
+  { id: "measure", label: "Measure", icon: MoveHorizontal, shortcut: "M" },
   { id: "pan", label: "Pan", icon: Hand, shortcut: "H" },
 ] as const;
 const overlayPanels = "(max-width: 1000px)";
@@ -110,6 +119,13 @@ export function Studio({
     hinge: "start",
     swing: "left",
   });
+  const [openingType, setOpeningType] = useState<"door" | "window">("door");
+  const [windowSettings, setWindowSettings] = useState<WindowSettings>({
+    widthMm: 1200,
+    sillMm: 900,
+    heightMm: 900,
+  });
+  const [agentsOpen, setAgentsOpen] = useState(false);
   const [fixture, setFixture] = useState(() => fixtureDefaults("sofa"));
   const [utility, setUtility] = useState<UtilityKind>("outlet");
   const [layers, setLayers] = useState({ electrical: true, plumbing: true });
@@ -126,6 +142,8 @@ export function Studio({
     const visible = new Set([
       ...plan.walls.map(({ id }) => "wall:" + id),
       ...plan.openings.map(({ id }) => "door:" + id),
+      ...(plan.windows ?? []).map(({ id }) => "window:" + id),
+      ...(plan.annotations ?? []).map(({ id }) => "dimension:" + id),
       ...plan.fixtures.map(({ id }) => "fixture:" + id),
       ...plan.utilities
         .filter((item) => layers[utilityCatalog[item.template].layer])
@@ -147,6 +165,10 @@ export function Studio({
   const activeDoor =
     active?.kind === "door"
       ? plan.openings.find((d) => d.id === active.id)
+      : undefined;
+  const activeWindow =
+    active?.kind === "window"
+      ? plan.windows?.find((item) => item.id === active.id)
       : undefined;
 
   const activeFixture =
@@ -533,11 +555,32 @@ export function Studio({
             }
             onMove={(items, delta) => edit(moveSelection(plan, items, delta))}
             onWall={drawWall}
-            onDoor={(wallId, offsetMm) =>
+            onDimension={(start, end) =>
               command({
-                type: "door.add",
-                door: { id: crypto.randomUUID(), wallId, offsetMm, ...door },
+                type: "dimension.add",
+                annotation: { id: crypto.randomUUID(), start, end },
               })
+            }
+            onDoor={(wallId, offsetMm) =>
+              openingType === "window"
+                ? command({
+                    type: "window.add",
+                    opening: {
+                      id: crypto.randomUUID(),
+                      wallId,
+                      offsetMm,
+                      ...windowSettings,
+                    },
+                  })
+                : command({
+                    type: "door.add",
+                    door: {
+                      id: crypto.randomUUID(),
+                      wallId,
+                      offsetMm,
+                      ...door,
+                    },
+                  })
             }
           />
         </div>
@@ -576,6 +619,16 @@ export function Studio({
             onClick={() => toggleRightPanel("exports")}
           >
             <FileDown size={20} />
+          </button>
+          <button
+            type="button"
+            aria-haspopup="dialog"
+            aria-label="Connect an agent"
+            title="Connect an agent"
+            disabled={block === "auth" || block === "deleted"}
+            onClick={() => setAgentsOpen(true)}
+          >
+            <Bot size={20} />
           </button>
           <span
             className="studio-live-status"
@@ -640,6 +693,20 @@ export function Studio({
               door={door}
               activeWall={activeWall}
               activeDoor={activeDoor}
+              activeWindow={Boolean(activeWindow)}
+              activeDimension={active?.kind === "dimension"}
+              openingType={openingType}
+              window={activeWindow ?? windowSettings}
+              onOpeningType={setOpeningType}
+              onWindow={(changes) =>
+                activeWindow
+                  ? command({
+                      type: "window.update",
+                      id: activeWindow.id,
+                      changes,
+                    })
+                  : setWindowSettings((current) => ({ ...current, ...changes }))
+              }
               onUnit={setUnit}
               onGrid={setGridIndex}
               onWall={(changes) =>
@@ -748,6 +815,9 @@ export function Studio({
           </div>
         )}
       </main>
+      {agentsOpen && (
+        <McpSetup planId={initial.id} onClose={() => setAgentsOpen(false)} />
+      )}
     </div>
   );
 }

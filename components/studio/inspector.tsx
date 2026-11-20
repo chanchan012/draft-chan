@@ -16,6 +16,11 @@ import type { Tool } from "./surface";
 
 export type WallSettings = Pick<Wall, "thicknessMm" | "kind">;
 export type DoorSettings = Pick<Door, "widthMm" | "hinge" | "swing">;
+export type WindowSettings = {
+  widthMm: number;
+  heightMm: number;
+  sillMm: number;
+};
 
 interface InspectorProps {
   plan: DraftPlanState;
@@ -24,6 +29,10 @@ interface InspectorProps {
   gridIndex: number;
   wall: WallSettings;
   door: DoorSettings;
+  window: WindowSettings;
+  activeWindow: boolean;
+  activeDimension: boolean;
+  openingType: "door" | "window";
   activeWall?: Wall;
   activeDoor?: Door;
   placementFields?: ReactNode;
@@ -33,6 +42,8 @@ interface InspectorProps {
   onGrid(index: number): void;
   onWall(value: WallSettings): void;
   onDoor(value: DoorSettings): void;
+  onWindow(value: Partial<WindowSettings>): void;
+  onOpeningType(type: "door" | "window"): void;
   onRemove(): void;
 }
 const number = new Intl.NumberFormat("en", { maximumFractionDigits: 2 });
@@ -75,6 +86,24 @@ export function Inspector(props: InspectorProps) {
           </select>
         </label>
       </section>
+      {tool === "door" && !activeDoor && !props.activeWindow && (
+        <section className="studio-fields">
+          <label>
+            Opening type
+            <select
+              value={props.openingType}
+              onChange={(event) =>
+                props.onOpeningType(
+                  event.target.value === "window" ? "window" : "door",
+                )
+              }
+            >
+              <option value="door">Door</option>
+              <option value="window">Window</option>
+            </select>
+          </label>
+        </section>
+      )}
       {props.selectedCount > 1 ? (
         <section className="studio-fields">
           <h3>{props.selectedCount} selected</h3>
@@ -120,6 +149,38 @@ export function Inspector(props: InspectorProps) {
               <option value="exterior">Exterior</option>
             </select>
           </label>
+        </section>
+      ) : props.activeWindow ||
+        (tool === "door" && props.openingType === "window") ? (
+        <section className="studio-fields" key={"window-" + unit}>
+          <h3>{props.activeWindow ? "Selected window" : "Window tool"}</h3>
+          {!props.activeWindow && (
+            <p>Choose a point on a wall to place a window.</p>
+          )}
+          <LiveDistance
+            label="Width"
+            unit={unit}
+            value={props.window.widthMm}
+            min={100}
+            max={10000}
+            onValue={(widthMm) => props.onWindow({ widthMm })}
+          />
+          <LiveDistance
+            label="Height"
+            unit={unit}
+            value={props.window.heightMm}
+            min={100}
+            max={2450 - props.window.sillMm}
+            onValue={(heightMm) => props.onWindow({ heightMm })}
+          />
+          <LiveDistance
+            label="Sill height"
+            unit={unit}
+            value={props.window.sillMm}
+            min={0}
+            max={2450 - props.window.heightMm}
+            onValue={(sillMm) => props.onWindow({ sillMm })}
+          />
         </section>
       ) : activeDoor || tool === "door" ? (
         <section
@@ -171,10 +232,17 @@ export function Inspector(props: InspectorProps) {
             </select>
           </label>
         </section>
+      ) : tool === "measure" ? (
+        <section className="studio-fields">
+          <h3>Measure</h3>
+          <p>Choose two points or drag to place a dimension.</p>
+        </section>
       ) : null}
       {props.placementFields}
       {(activeWall ||
         activeDoor ||
+        props.activeWindow ||
+        props.activeDimension ||
         props.placementSelected ||
         props.selectedCount > 1) && (
         <button
@@ -189,9 +257,15 @@ export function Inspector(props: InspectorProps) {
               ? `Delete ${props.placementSelected}`
               : activeDoor
                 ? "Delete door"
-                : plan.openings.some((item) => item.wallId === activeWall?.id)
-                  ? "Delete wall and doors"
-                  : "Delete wall"}
+                : props.activeWindow
+                  ? "Delete window"
+                  : props.activeDimension
+                    ? "Delete dimension"
+                    : plan.openings.some(
+                          (item) => item.wallId === activeWall?.id,
+                        )
+                      ? "Delete wall and doors"
+                      : "Delete wall"}
         </button>
       )}
       <section
