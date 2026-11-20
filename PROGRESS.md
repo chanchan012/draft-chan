@@ -1,5 +1,9 @@
 # Draft progress
 
+## Planned work after M4.2
+
+The [architectural CAD roadmap](docs/CAD_ROADMAP.md) records proposed milestones M5–M12, candidate MCP tools and release checks. The next proposed subgoal is M5.1, precision queries, object snaps and measurement. The release history below records shipped work.
+
 ## M1.1 · Foundation and shell
 
 Released on 2026-11-18. The verified application merge is `0a0adcde04ab7fb14818dbdcea9e570e89d977b2`. The release documentation follows the application merge on main.

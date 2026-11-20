@@ -1,5 +1,7 @@
 # Architecture
 
+Proposed extensions to the geometry model, command interface and MCP contract are tracked in the [architectural CAD roadmap](CAD_ROADMAP.md).
+
 ## Foundation
 
 Next.js 16 App Router renders the landing and dashboard. React 19 handles the sample viewer, field guide, and Clerk authentication dialogs. Tailwind 4 and app/globals.css supply responsive layout and locally bundled fonts. The page shell uses 100dvh. Dialogs and the authentication region permit internal scrolling on short screens.
