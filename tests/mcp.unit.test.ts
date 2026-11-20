@@ -12,6 +12,11 @@ import { migrate } from "drizzle-orm/pglite/migrator";
 import { beforeAll, afterAll, expect, it, vi } from "vitest";
 import { createApi, type IdentityMiddleware } from "../lib/server/api";
 import { createMcpHttp } from "../lib/server/mcp-http";
+import {
+  clerkMcpOAuth,
+  mcpProtectedResourceMetadata,
+} from "../lib/server/mcp-oauth";
+import { resolveFloorplanOAuth } from "../lib/server/oauth-grants";
 import { localWindow } from "../lib/server/rate-limit";
 import { authenticateAgent } from "../lib/server/agent-tokens";
 import {
@@ -154,6 +159,183 @@ it("issues scoped hashed credentials, rejects unauthorized calls and expires and
     ).status,
   ).toBe(401);
 });
+
+it("validates Clerk OAuth tokens for Draft and enforces the signed-in owner's floorplan grant", async () => {
+  const audience = "http://localhost/api/mcp";
+  const metadata =
+    "http://localhost/.well-known/oauth-protected-resource/api/mcp";
+  const issuer = "https://draft-test.clerk.accounts.dev";
+  vi.stubEnv("DRAFT_MCP_OAUTH_RESOURCE_URL", audience);
+  vi.stubEnv(
+    "NEXT_PUBLIC_CLERK_PUBLISHABLE_KEY",
+    "pk_test_" + Buffer.from(new URL(issuer).hostname + "$").toString("base64"),
+  );
+  vi.stubEnv("CLERK_SECRET_KEY", "sk_test_mock_clerk_secret");
+  const oauthOwner = "user_test_draft_oauth";
+  const fetchToken = vi.fn(
+    async (input: RequestInfo | URL, init?: RequestInit) => {
+      const request = new Request(input, init);
+      expect(new URL(request.url).pathname).toBe(
+      "/oauth_applications/access_tokens/verify",
+      );
+      const { access_token } = (await request.json()) as {
+        access_token: string;
+      };
+      if (access_token === "oat_revoked")
+        return Response.json(
+          {
+            errors: [
+              { code: "oauth_token_not_found", message: "Token unavailable" },
+            ],
+          },
+          { status: 404 },
+        );
+      const now = Math.floor(Date.now() / 1000);
+      return Response.json({
+        object: "clerk_idp_oauth_access_token",
+        id: access_token,
+        type: "access_token",
+        client_id: "client_test_draft",
+        subject: access_token === "oat_other_owner" ? "user_other" : oauthOwner,
+        scopes: ["openid"],
+        created_at: now,
+        updated_at: now,
+        expiration: now + 300,
+        revoked: false,
+        expired: false,
+        revocation_reason: null,
+        aud:
+          access_token === "oat_wrong_audience"
+            ? ["https://elsewhere.example/mcp"]
+            : access_token === "oat_no_audience"
+              ? undefined
+              : [audience],
+      });
+    },
+  );
+  vi.stubGlobal("fetch", fetchToken);
+  const app = createMcpHttp(
+    localWindow(200),
+    undefined,
+    undefined,
+    clerkMcpOAuth,
+  );
+  const call = (token: string) =>
+    app.request("/api/mcp", { headers: { Authorization: "Bearer " + token } });
+  try {
+    const challenge = await app.request("/api/mcp");
+    expect(challenge.status).toBe(401);
+    expect(challenge.headers.get("WWW-Authenticate")).toContain(
+      `resource_metadata="${metadata}"`,
+    );
+    expect(
+      await mcpProtectedResourceMetadata(new Request(metadata)).json(),
+    ).toMatchObject({ resource: audience, authorization_servers: [issuer] });
+    expect(
+      mcpProtectedResourceMetadata(
+        new Request(metadata.replace("localhost", "not-draft.example")),
+      ).status,
+    ).toBe(404);
+    expect(
+      (
+        await app.request("https://not-draft.example/api/mcp", {
+          headers: { Authorization: "Bearer oat_valid" },
+        })
+      ).status,
+    ).toBe(401);
+    expect(fetchToken).not.toHaveBeenCalled();
+    for (const token of [
+      "oat_no_audience",
+      "oat_wrong_audience",
+      "oat_revoked",
+    ])
+      expect((await call(token)).status).toBe(401);
+    expect((await call("oat_valid")).status).toBe(403);
+
+    const api = member(oauthOwner);
+    const planId = crypto.randomUUID();
+    const otherId = crypto.randomUUID();
+    for (const id of [planId, otherId]) {
+      const response = await api.request(
+        "/api/floorplans",
+        payload("POST", { id, name: "OAuth test" }),
+      );
+      expect(response.status).toBe(201);
+    }
+    const path = `/api/floorplans/${planId}/mcp-oauth`;
+    const otherPath = `/api/floorplans/${otherId}/mcp-oauth`;
+    const mutate = (
+      method: "POST" | "DELETE",
+      origin = "http://localhost",
+    ) => ({ method, headers: { Origin: origin } });
+    expect(await (await api.request(path)).json()).toEqual({
+      state: "disabled",
+    });
+    expect(
+      (await member("user_other").request(path, mutate("POST"))).status,
+    ).toBe(404);
+    expect(
+      (await api.request(path, mutate("POST", "https://foreign.example")))
+        .status,
+    ).toBe(403);
+    expect((await api.request(path, mutate("POST"))).status).toBe(200);
+    expect(await (await api.request(otherPath)).json()).toEqual({
+      state: "other_plan",
+    });
+    expect((await api.request(otherPath, mutate("POST"))).status).toBe(409);
+    expect((await call("oat_other_owner")).status).toBe(403);
+    expect(
+      (await member("user_other").request(path, mutate("DELETE"))).status,
+    ).toBe(204);
+    expect((await api.request(otherPath, mutate("DELETE"))).status).toBe(204);
+
+    const client = await connect(app, "oat_valid");
+    try {
+      const {
+        contents: [graph],
+      } = await client.readResource({ uri: "draft://floorplan-graph" });
+      expect(graph).toMatchObject({ text: expect.stringContaining(planId) });
+      const result = await client.callTool({
+        name: "draw_wall",
+        arguments: {
+          expectedRevision: 0,
+          start: { x: 0, y: 0 },
+          end: { x: 1200, y: 0 },
+          kind: "interior",
+          thicknessMm: 120,
+        },
+      });
+      expect(result).toMatchObject({
+        isError: false,
+        structuredContent: { revision: 1 },
+      });
+      const firstAgent = await resolveFloorplanOAuth(
+        oauthOwner,
+        "client_test_draft",
+      );
+      expect(firstAgent?.planId).toBe(planId);
+      expect(
+        (await resolveFloorplanOAuth(oauthOwner, "client_other"))?.agentId,
+      ).not.toBe(firstAgent?.agentId);
+      const {
+        contents: [edited],
+      } = await client.readResource({ uri: "draft://floorplan-graph" });
+      expect(edited).toMatchObject({
+        text: expect.stringContaining(firstAgent!.agentId),
+      });
+    } finally {
+      await client.close();
+    }
+    expect((await api.request(path, mutate("DELETE"))).status).toBe(204);
+    expect((await call("oat_valid")).status).toBe(403);
+    expect(
+      await resolveFloorplanOAuth(oauthOwner, "client_test_draft"),
+    ).toBeNull();
+  } finally {
+    vi.unstubAllGlobals();
+    vi.unstubAllEnvs();
+  }
+}, 30_000);
 
 it("lays out a two-bedroom plan using all MCP resources and tools over HTTP", async () => {
   const session = await planWithToken();

@@ -5,6 +5,7 @@ import { Copy, X } from "lucide-react";
 
 type Agent = { id: string; name: string; expiresAt: string };
 type Issued = Agent & { token: string };
+type OAuthState = "enabled" | "disabled" | "other_plan" | "unavailable";
 const expiry = new Intl.DateTimeFormat(undefined, {
   dateStyle: "medium",
   timeStyle: "short",
@@ -19,6 +20,10 @@ export function McpSetup({
 }) {
   const dialog = useRef<HTMLDialogElement>(null);
   const base = `/api/floorplans/${planId}/agent-tokens`;
+  const oauthPath = `/api/floorplans/${planId}/mcp-oauth`;
+  const [oauth, setOauth] = useState<OAuthState>();
+  const [oauthBusy, setOauthBusy] = useState(false);
+  const [oauthError, setOauthError] = useState("");
   const [agents, setAgents] = useState<Agent[]>([]);
   const [name, setName] = useState("");
   const [issued, setIssued] = useState<Issued>();
@@ -32,6 +37,16 @@ export function McpSetup({
     dialog.current?.showModal();
     setEndpoint(window.location.origin + "/api/mcp");
     const abort = new AbortController();
+    void fetch(oauthPath, { signal: abort.signal })
+      .then(async (response) => {
+        if (!response.ok) throw new Error();
+        const result = (await response.json()) as { state: OAuthState };
+        setOauth(result.state);
+      })
+      .catch(() => {
+        if (!abort.signal.aborted)
+          setOauthError("Could not load OAuth access.");
+      });
     void fetch(base, { signal: abort.signal })
       .then(async (response) => {
         if (!response.ok) throw new Error("Could not load agent tokens.");
@@ -44,7 +59,32 @@ export function McpSetup({
         if (!abort.signal.aborted) setBusy(false);
       });
     return () => abort.abort();
-  }, [base]);
+  }, [base, oauthPath]);
+
+  async function updateOAuth(enable: boolean) {
+    setOauthBusy(true);
+    setOauthError("");
+    try {
+      const response = await fetch(oauthPath, {
+        method: enable ? "POST" : "DELETE",
+      });
+      if (response.status === 409) setOauth("other_plan");
+      if (!response.ok) {
+        const payload = await response.json();
+        throw new Error(payload.error ?? "Could not update OAuth access.");
+      }
+      setOauth(enable ? "enabled" : "disabled");
+      setStatus(enable ? "OAuth access enabled." : "OAuth access disabled.");
+    } catch (error) {
+      setOauthError(
+        error instanceof Error
+          ? error.message
+          : "Could not update OAuth access.",
+      );
+    } finally {
+      setOauthBusy(false);
+    }
+  }
 
   async function create() {
     if (busy || !name.trim()) return;
@@ -124,9 +164,6 @@ export function McpSetup({
           <X size={17} />
         </button>
       </div>
-      <p>
-        Agent tokens grant access to this floorplan and expire after seven days.
-      </p>
       <div className="studio-agent-field">
         <label htmlFor="draft-agent-endpoint">MCP endpoint</label>
         <span>
@@ -141,103 +178,156 @@ export function McpSetup({
           </button>
         </span>
       </div>
-      <form
-        className="studio-agent-new"
-        onSubmit={(event) => {
-          event.preventDefault();
-          void create();
-        }}
+      <section
+        className="studio-agent-oauth"
+        aria-labelledby="draft-agent-oauth"
       >
-        <label className="studio-agent-field">
-          Agent name
-          <input
-            maxLength={48}
-            required
-            placeholder="Layout assistant"
-            value={name}
-            onChange={(event) => setName(event.target.value)}
-          />
-        </label>
-        <button type="submit" disabled={busy || !name.trim()}>
-          Create token
-        </button>
-      </form>
-      {issued && (
-        <fieldset className="studio-agent-issued">
-          <legend>New token</legend>
-          <p>Copy this token now. It appears once.</p>
-          <div className="studio-agent-field">
-            <label htmlFor="draft-agent-token">Bearer token</label>
-            <span>
-              <input id="draft-agent-token" value={issued.token} readOnly />
-              <button
-                type="button"
-                aria-label="Copy bearer token"
-                className="studio-agent-icon"
-                onClick={() => void copy(issued.token, "Token")}
-              >
-                <Copy size={16} />
-              </button>
-            </span>
-          </div>
-        </fieldset>
-      )}
+        <h3 id="draft-agent-oauth">Sign in with Clerk</h3>
+        {oauth === "unavailable" ? (
+          <p>Clerk OAuth is available at the registered Draft address.</p>
+        ) : oauth === "other_plan" ? (
+          <p>
+            OAuth is enabled for another floorplan. Disable it there to enable
+            access here.
+          </p>
+        ) : oauth === "enabled" ? (
+          <>
+            <p>
+              Add the MCP endpoint in your client and sign in with Clerk.
+              Approved clients can edit this floorplan.
+            </p>
+            <button
+              type="button"
+              disabled={oauthBusy}
+              onClick={() => void updateOAuth(false)}
+            >
+              Disable OAuth access
+            </button>
+          </>
+        ) : oauth === "disabled" ? (
+          <>
+            <p>
+              Allow approved OAuth clients to edit this floorplan. Your account
+              can enable one floorplan at a time.
+            </p>
+            <button
+              type="button"
+              disabled={oauthBusy}
+              onClick={() => void updateOAuth(true)}
+            >
+              Enable OAuth access
+            </button>
+          </>
+        ) : !oauthError ? (
+          <p>Checking OAuth access…</p>
+        ) : null}
+        {oauthError && (
+          <p className="studio-agent-error" role="alert">
+            {oauthError}
+          </p>
+        )}
+      </section>
       <details>
-        <summary>Client setup</summary>
+        <summary>Manual tokens</summary>
         <p>
-          For HTTP, use the URL above and send the token as an Authorization
-          header using Bearer authentication.
+          Manual tokens let older clients access this floorplan for seven days.
         </p>
-        <p>
-          For stdio, run <code>node scripts/mcp-stdio.mjs</code> from your Draft
-          checkout. Set <code>DRAFT_MCP_URL</code> and{" "}
-          <code>DRAFT_MCP_TOKEN</code> in the client’s environment.
-        </p>
-      </details>
-      <div className="studio-agent-list">
-        <h3>Active tokens</h3>
-        {agents.length === 0 && <p>{busy ? "Loading…" : "No active tokens"}</p>}
-        {agents.map((agent) => (
-          <div key={agent.id}>
-            <span>
-              <strong>{agent.name}</strong>
-              <small>Expires {expiry.format(new Date(agent.expiresAt))}</small>
-            </span>
-            {confirm === agent.id ? (
+        <form
+          className="studio-agent-new"
+          onSubmit={(event) => {
+            event.preventDefault();
+            void create();
+          }}
+        >
+          <label className="studio-agent-field">
+            Agent name
+            <input
+              maxLength={48}
+              required
+              placeholder="Layout assistant"
+              value={name}
+              onChange={(event) => setName(event.target.value)}
+            />
+          </label>
+          <button type="submit" disabled={busy || !name.trim()}>
+            Create token
+          </button>
+        </form>
+        {issued && (
+          <fieldset className="studio-agent-issued">
+            <legend>New token</legend>
+            <p>Copy this token now. It appears once.</p>
+            <div className="studio-agent-field">
+              <label htmlFor="draft-agent-token">Bearer token</label>
               <span>
+                <input id="draft-agent-token" value={issued.token} readOnly />
                 <button
                   type="button"
-                  disabled={busy}
-                  onClick={() => setConfirm(undefined)}
+                  aria-label="Copy bearer token"
+                  className="studio-agent-icon"
+                  onClick={() => void copy(issued.token, "Token")}
                 >
-                  Cancel
-                </button>
-                <button
-                  type="button"
-                  disabled={busy}
-                  onClick={() => void revoke(agent.id)}
-                >
-                  Confirm revoke
+                  <Copy size={16} />
                 </button>
               </span>
-            ) : (
-              <button
-                type="button"
-                disabled={busy}
-                onClick={() => setConfirm(agent.id)}
-                aria-label={`Revoke ${agent.name}`}
-              >
-                Revoke
-              </button>
-            )}
-          </div>
-        ))}
-      </div>
-      {error && (
-        <p className="studio-agent-error" role="alert">
-          {error}
+            </div>
+          </fieldset>
+        )}
+        <p>
+          For HTTP, send the token to this endpoint as a Bearer credential. For
+          stdio, run <code>node scripts/mcp-stdio.mjs</code> from your Draft
+          checkout with <code>DRAFT_MCP_URL</code> and{" "}
+          <code>DRAFT_MCP_TOKEN</code> set.
         </p>
-      )}
+        <div className="studio-agent-list">
+          <h3>Active tokens</h3>
+          {agents.length === 0 && (
+            <p>{busy ? "Loading…" : "No active tokens"}</p>
+          )}
+          {agents.map((agent) => (
+            <div key={agent.id}>
+              <span>
+                <strong>{agent.name}</strong>
+                <small>
+                  Expires {expiry.format(new Date(agent.expiresAt))}
+                </small>
+              </span>
+              {confirm === agent.id ? (
+                <span>
+                  <button
+                    type="button"
+                    disabled={busy}
+                    onClick={() => setConfirm(undefined)}
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="button"
+                    disabled={busy}
+                    onClick={() => void revoke(agent.id)}
+                  >
+                    Confirm revoke
+                  </button>
+                </span>
+              ) : (
+                <button
+                  type="button"
+                  disabled={busy}
+                  onClick={() => setConfirm(agent.id)}
+                  aria-label={`Revoke ${agent.name}`}
+                >
+                  Revoke
+                </button>
+              )}
+            </div>
+          ))}
+        </div>
+        {error && (
+          <p className="studio-agent-error" role="alert">
+            {error}
+          </p>
+        )}
+      </details>
       {status && <p role="status">{status}</p>}
     </dialog>
   );

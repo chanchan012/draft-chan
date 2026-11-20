@@ -3,6 +3,7 @@ import { createMcpHandler } from "@modelcontextprotocol/server";
 import { Hono } from "hono";
 import { authenticateAgent, type AgentScope } from "./agent-tokens";
 import { createDraftMcp, type DraftMcpBackend } from "./draft-mcp";
+import type { McpOAuth } from "./mcp-oauth";
 import type { Limit } from "./rate-limit";
 
 declare module "hono" {
@@ -16,6 +17,7 @@ export function createMcpHttp(
   limit: Limit,
   authenticate = authenticateAgent,
   backend?: DraftMcpBackend,
+  oauth?: McpOAuth,
 ) {
   const api = new Hono();
   api.use("/api/mcp", async (c, next) => {
@@ -36,18 +38,49 @@ export function createMcpHttp(
         );
         return c.json({ error: "Too many requests" }, 429);
       }
-      const bearer = /^Bearer ([A-Za-z0-9_-]+)$/i.exec(
+      const bearer = /^Bearer ([A-Za-z0-9._~+/=-]{1,8192})$/i.exec(
         c.req.header("Authorization") ?? "",
       )?.[1];
-      const agent = bearer ? await authenticate(bearer) : null;
-      if (agent) c.set("draftAgent", agent);
-      else {
-        c.header("WWW-Authenticate", 'Bearer realm="Draft MCP"');
+      const config = oauth?.config(c.req.url);
+      let agent;
+      if (bearer) {
+        agent =
+          config && oauth && !bearer.startsWith("draft_mcp_")
+            ? await oauth.authorize(
+                new Request(c.req.url, {
+                  headers: { Authorization: `Bearer ${bearer}` },
+                }),
+                config,
+              )
+            : await authenticate(bearer);
+      }
+      if (agent === "plan_not_enabled")
         return c.json(
-          { error: "A valid floorplan agent token is required." },
+          {
+            error:
+              "Open a floorplan in Draft Studio and enable OAuth access in Connect an agent.",
+          },
+          403,
+        );
+      if (!agent) {
+        const metadata = config
+          ? `, resource_metadata="${config.metadata}"`
+          : "";
+        const invalid = config && bearer ? ', error="invalid_token"' : "";
+        c.header(
+          "WWW-Authenticate",
+          `Bearer realm="Draft MCP"${metadata}${invalid}`,
+        );
+        return c.json(
+          {
+            error: config
+              ? "Sign in with Clerk to connect to Draft."
+              : "A valid floorplan agent token is required.",
+          },
           401,
         );
       }
+      c.set("draftAgent", agent);
     } catch {
       return c.json({ error: "Draft MCP is temporarily unavailable." }, 503);
     }

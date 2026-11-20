@@ -931,9 +931,18 @@
   width: 36px;
   padding: 0;
 }
-.studio-agent-new > button {
+.studio-agent-new > button,
+.studio-agent-oauth > button {
   background: var(--studio-dark);
   color: white;
+}
+.studio-agent-oauth {
+  border-block: 1px solid var(--studio-rule);
+  margin-top: 14px;
+  padding-block: 12px;
+}
+.studio-agent-oauth h3 {
+  font-weight: 650;
 }
 .studio-agent-issued {
   padding: 0 9px 5px;

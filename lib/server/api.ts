@@ -1,5 +1,6 @@
 import { planRoutes } from "./plan-routes";
 import { agentRoutes } from "./agent-routes";
+import { oauthGrantRoutes } from "./oauth-grant-routes";
 import { Hono, type MiddlewareHandler } from "hono";
 import { z } from "zod";
 import type { Limit } from "./rate-limit";
@@ -51,6 +52,7 @@ export function createApi(
   });
   return app
     .route("/floorplans", agentRoutes())
+    .route("/floorplans", oauthGrantRoutes())
     .route("/floorplans", planRoutes(undefined, undefined, bus))
     .get("/session", (c) => c.json(identitySchema.parse(c.get("identity"))))
     .get("/account", (c) => {
