@@ -169,15 +169,46 @@ npm start
 
 With the optimized server running, use `PLAYWRIGHT_BASE_URL=http://127.0.0.1:3000 npm run test:e2e`. All 58 Vitest tests and 70 Playwright checks passed. Signed-in two-tab browser tests use fixtures, the Hono tests exercise owner-scoped Neon behavior through PGlite, and the separate Redis 8 test exercised the lease script and REST SDK through a loopback gateway. The Production smoke checks covered HTTP 401 for unsigned SSE and cursor requests and confirmed the sign-in return URL.
 
-## Start M4.2
+## M4.2 release checkpoint
+
+The feature head is `91612291c00da0361d530e5ee071c2287a32f218` on `feature/4.2-mcp`. The application merge is `cbcaa7ac04614bbb190cae35b9a950fa35de42c8`. Vercel Production `dpl_DAz233a8yZG7GF17Y7VqRezofxhy` and Preview `dpl_BnfHzMwb8B5L5ksb24TNip8Utmeb` reached READY. [Dashboard](https://draft-chan.vercel.app/dashboard) · [Feature preview](https://draft-chan-9aktdeqgj-chanchans-projects-aada625f.vercel.app)
+
+The shared Neon database `draft` has migration `0003_wandering_terror.sql` recorded with timestamp `1795139777243` and hash `de0af554047c89d0ac61583dfa1aa892692bfc82ce8b60f30201efbb3a7a351b`. For a fresh installation, apply the checked-in migrations with `npm run db:migrate` and the schema owner’s direct `DATABASE_URL`, then grant the runtime role access to the new table.
+
+```sql
+GRANT SELECT, INSERT, DELETE ON TABLE public.floorplan_agent_tokens TO draft_app;
+```
+
+Open a floorplan in Studio and choose **Connect an agent** from the right rail. Create and copy the seven-day token. HTTP clients use `https://draft-chan.vercel.app/api/mcp` with `Authorization: Bearer <token>`. For a stdio client that uses an `mcpServers` configuration, first run `npm ci` in the checkout, then add Draft with the actual absolute path and client environment values.
+
+```json
+{
+  "mcpServers": {
+    "draft": {
+      "command": "node",
+      "args": ["/absolute/path/to/draft/scripts/mcp-stdio.mjs"],
+      "env": {
+        "DRAFT_MCP_URL": "https://draft-chan.vercel.app/api/mcp",
+        "DRAFT_MCP_TOKEN": "<token from Studio>"
+      }
+    }
+  }
+}
+```
+
+Read `draft://floorplan-graph` for the current revision before editing. Open the same floorplan in Studio to see the saved edits and agent cursor. Revoke the token from the same dialog when finished. Production and Preview use the same Clerk development instance and shared Neon database. No new Vercel environment variables are required.
 
 ```sh
 git switch main
 git pull --ff-only
-git switch -c feature/4.2-mcp
 npm ci
 npm run typecheck
+npm test -- tests/mcp.unit.test.ts
 npm test
+npm run build
+npm start
 ```
 
-Brief the HTTP and stdio MCP transports, owner authorization, and the required resources and tools. Reuse the graph geometry and export queue, and keep tool edits revision-checked with server-verified author attribution. Publish committed revisions on the owner-scoped channel and use `publishPlanPresence` for trusted AI cursors. Verify a two-bedroom layout and furnishings from the MCP client with the Studio observing the changes.
+With the optimized server running, use `PLAYWRIGHT_BASE_URL=http://127.0.0.1:3000 npm run test:e2e`. All 61 Vitest tests and 80 Playwright checks passed. The live Studio browser scenario uses a real MCP client and Hono handler with a fixture workspace. The integration suite uses PGlite and exercises actual token storage, revision-checked saves, presence fan-out, DXF rendering, and a stdio subprocess. Production returned HTTP 401 for missing and nonexistent agent tokens and unsigned token management, and preserved Studio’s redirect destination. Vercel Preview retains its authentication gate. Signed-in production agent writes remain unverified.
+
+M4.2 completes the requested milestone sequence. The commands above reproduce the current release checks before any follow-up work.

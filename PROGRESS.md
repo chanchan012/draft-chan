@@ -173,6 +173,19 @@ Released 2026-11-19. Feature commit `8da112dd6a4d3ee5aefa03353281e36f798a65a0` o
 
 [Dashboard](https://draft-chan.vercel.app/dashboard) · [Application merge](https://github.com/chanchan012/draft-chan/commit/224f7f114329d38c355eca938d3e5a6efb087c91) · [Feature preview](https://draft-chan-4lfvrur7f-chanchans-projects-aada625f.vercel.app)
 
-## Next subgoal
+## M4.2 · MCP server and Studio agent setup
 
-M4.2 adds the authenticated HTTP MCP server, stdio CLI, resources, tools, and Studio setup modal.
+Released 2026-11-20. Feature commit `91612291c00da0361d530e5ee071c2287a32f218` on `feature/4.2-mcp` was merged as `cbcaa7ac04614bbb190cae35b9a950fa35de42c8`.
+
+| Phase | Result |
+| --- | --- |
+| Brief | Connect authenticated AI clients to a single floorplan through HTTP and stdio. Verify a two-bedroom layout in an open Studio. |
+| Build | Added three MCP resources, nine tools, and the Studio dialog for issuing and revoking agent tokens. Agent edits share Studio’s revision and presence path. Windows and dimension annotations persist in graph version 1 and render in blueprints. |
+| Test | Strict TypeScript, 61 Vitest tests, and 80 Playwright checks passed. The MCP integration suite exercised HTTP, stdio, token lifecycle, revision conflicts, AI attribution, and DXF rendering. The browser suite verified the live two-bedroom workflow and manual window and dimension persistence at five viewport sizes. |
+| Merge | The tested feature tree was merged and pushed to GitHub main. |
+| Deploy | The Next build passed. Neon migration 0003 was applied to `draft`. Vercel Preview `dpl_BnfHzMwb8B5L5ksb24TNip8Utmeb` and Production `dpl_DAz233a8yZG7GF17Y7VqRezofxhy` reached READY. Production rejected missing and invalid MCP tokens, protected token management, and preserved Studio’s sign-in destination. |
+| Document | The architecture and handoff record the transport, client setup, database grant, deployment IDs, and test boundaries. |
+
+M4.2 is the last subgoal in the requested roadmap. The signed-in browser and agent workflows were verified using fixtures and isolated Postgres integration tests. The production smoke used unsigned requests and a nonexistent agent token.
+
+[Dashboard](https://draft-chan.vercel.app/dashboard) · [Application merge](https://github.com/chanchan012/draft-chan/commit/cbcaa7ac04614bbb190cae35b9a950fa35de42c8) · [Feature preview](https://draft-chan-9aktdeqgj-chanchans-projects-aada625f.vercel.app)

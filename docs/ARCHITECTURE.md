@@ -101,3 +101,25 @@ Graph writes, renames, and deletes publish after the Neon write. Postgres owns t
 `POST /api/floorplans/:id/presence` accepts a tab UUID and a model-space cursor or null. It takes the human actor from Clerk and verifies ownership. A trusted server caller can publish an AI cursor through `publishPlanPresence` in `lib/server/live-bus.ts` after verifying access to the plan. Public requests use 60 RPC requests per minute per ingress bucket and a separate 300-request bucket for cursor updates.
 
 Studio autosaves after 1.2 seconds of editing inactivity through the revision-checked graph PATCH. It serializes saves and remote reads, retries transient failures with backoff, and applies newer revisions to clean tabs automatically. A dirty tab compares the current draft, its last saved snapshot, and the new saved snapshot. Changes to different objects merge if the combined geometry validates. Different edits to the same object or invalid combined geometry pause saving and preserve the draft. Merged local geometry becomes one undo step on the new baseline. Exports still target the displayed saved revision. The release uses graph version 1 and Drizzle migrations through 0002.
+
+## M4.2 agent authentication and transports
+
+In a signed-in Studio, open **Connect an agent** to issue a credential. `GET`, `POST`, and `DELETE` under `/api/floorplans/:id/agent-tokens` use Clerk and verify the floorplan owner. The server generates a 256-bit bearer token and reveals it on creation. Neon stores its SHA-256 hash, display name, floorplan ID, token UUID, and seven-day expiration. The UUID is the trusted AI actor ID. Revocation removes the row and invalidates subsequent requests. Deleting a plan removes its tokens through the foreign key. Migration `0003_wandering_terror.sql` adds the table, unique hash constraint, and floorplan/expiry index. The Vercel runtime role `draft_app` has SELECT, INSERT, and DELETE on the table.
+
+`/api/mcp` uses the MCP v2 server SDK with the Hono adapter and stateless Streamable HTTP. It resolves each bearer token to a plan and owner before creating a server for the request. The endpoint rejects foreign origins and has a separate 120-request sliding-window bucket per minute and ingress client address. `scripts/mcp-stdio.mjs` runs a local MCP server and relays resources and tools to the same authenticated HTTP endpoint. Its client requires `DRAFT_MCP_URL` and `DRAFT_MCP_TOKEN`. The deployed application uses its existing environment variables and Clerk development instance.
+
+### MCP resources and tools
+
+| Resource | Response |
+| --- | --- |
+| `draft://floorplan-graph` | Saved floorplan, revision, and geometry in model millimeters |
+| `draft://spatial-audit` | Room polygons and square meters, modeled doorway widths, and room adjacency |
+| `draft://catalog` | Furniture, electrical and plumbing templates, and room presets |
+
+The six graph editing tools are `draw_wall`, `split_or_join_wall`, `place_opening`, `place_fixture`, `furnish_room_preset`, and `add_dimension_annotation`. Each validates Zod input, takes `expectedRevision`, and returns the updated revision and affected IDs. Wall splits and joins remap hosted openings. A room preset writes all its fixtures together. `revision_conflict` means the client should read `floorplan-graph` again before retrying. On a committed edit, the same owner-scoped channel used by Studio publishes the revision and an AI cursor lease. Browser autosave and graph reconciliation see agent edits through that channel.
+
+`check_clearance_codes` runs Draft’s modeled doorway, walkway, door-swing, and collision screening. `calculate_bom` returns the current materials and fixture counts. `trigger_dxf_export` takes the saved revision and uses the existing durable Inngest export pipeline. Repeating the request for the same revision returns its status. The returned download path uses the existing signed-in owner route.
+
+### Windows and dimension annotations
+
+Graph version 1 adds optional `windows` and `annotations` collections. Existing graphs and older snapshot writers can omit either collection. Window parameters use a host wall ID, center offset, width, sill, and height in millimeters. Windows and doors share host-wall validation. Dimension annotations use two distinct model points and display their distance in the selected unit. Studio’s Door tool offers the Window mode in the inspector. Measure draws dimension annotations. Both collections participate in revision reconciliation, history, and SVG and DXF blueprints. Windows also render in the isometric view and appear in BOM counts.
