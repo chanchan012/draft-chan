@@ -1,8 +1,8 @@
 # Architectural CAD and agent roadmap
 
-Draft supports floorplans, hosted openings, furnishing, an isometric cutaway, clearance screening, quantities, blueprint exports and the precision tools shipped in M5. Its authenticated MCP server exposes 54 tools and three resources. M9–M17 describe planned additions. The product focus is architectural drafting from measured survey through an issued drawing set.
+Draft supports floorplans, hosted openings, furnishing, an isometric cutaway, clearance screening, quantities, blueprint exports and the precision tools shipped in M5. Its authenticated MCP server exposes 59 tools and three resources on main. M10–M17 describe planned additions. The product focus is architectural drafting from measured survey through an issued drawing set.
 
-M5.1 and M5.2 shipped precision measurements, object snaps, exact entry and 2D sketch primitives. M6.1 and M6.2 shipped Studio editing commands and agent transactions. M7 is shipped with driving wall dimensions, layers and reusable blocks. M8 shipped multi-storey plans, wall assemblies, slabs, stairs, floor openings, roofs, sections and elevations. M9.1 shipped annotations and scaled paper space. M9.2 is the next drafting subgoal. M13.1 is the next visual milestone. The sequence below identifies dependencies and suggested release order.
+M5.1 and M5.2 shipped precision measurements, object snaps, exact entry and 2D sketch primitives. M6.1 and M6.2 shipped Studio editing commands and agent transactions. M7 is shipped with driving wall dimensions, layers and reusable blocks. M8 shipped multi-storey plans, wall assemblies, slabs, stairs, floor openings, roofs, sections and elevations. M9 implements drawing annotations, paper space, construction schedules and vector PDF issues. M10.1 is the next drafting subgoal. M13.1 is the next visual milestone. The sequence below identifies dependencies and suggested release order.
 
 ## Milestones
 
@@ -42,12 +42,12 @@ Shipped MCP tools include `create_storey`, `update_storey`, `set_wall_type`, `qu
 
 **Acceptance.** In a two-storey fixture, moving a stair updates its section and floor opening. Changing a wall assembly updates the interior width and net area while preserving the selected wall reference line. Existing single-storey plans reopen with one default storey.
 
-### M9 · Construction documents and quantities
+### M9 · Construction documents and quantities (implemented)
 
 - **9.1 (shipped)** Add associative dimension chains, leaders, tags, hatches, line weights, paper/model space, named views and scaled sheet viewports.
-- **9.2** Add title blocks, sheet numbers, door/window/finish schedules, vector PDF sets and issue revisions linked to the source model.
+- **9.2 (implemented)** Add title blocks, sheet numbers, door/window/finish schedules, vector PDF sets and issue revisions linked to the source model.
 
-Proposed MCP tools include `tag_entities`, `dimension_chain`, `create_sheet`, `place_viewport`, `generate_schedule`, `publish_sheet_set`, `get_job_status`.
+Implemented MCP tools include `tag_entities`, `dimension_chain`, `create_sheet`, `place_viewport`, `generate_schedule`, `publish_sheet_set`, `get_job_status` and `list_sheet_issues`.
 
 **Acceptance.** Publish a dimensioned A3 sheet at 1:50. A 5 m line measures 100 mm in the PDF. Door tags match schedule rows. Editing the live model leaves the previously issued set reproducible from its saved revision.
 

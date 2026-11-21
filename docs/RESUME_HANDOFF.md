@@ -1,10 +1,23 @@
 # Resume handoff
 
+## M9.2 implementation checkpoint
+
+Feature `c818e606f4d2022a7bf316bc7b215f15c35100a2`. Application merge `084e5c556709591e41773a29f028a160b5368ed3`. Vercel declined the M9.2 production request with HTTP 402 (api-deployments-free-per-day, Retry-After 86400 seconds). No preview or production deployment was registered for M9.2. The live site still serves M8. Retry the preview for feat/m9-2-issued-sheet-sets and production from main after the Vercel quota resets. Neon database draft has verified migration 0006 at journal timestamp 1795248628468 with SHA-256 054e52b2ea01a1ecd15ecda03a0964fbdd791d048ee00a61aeadb8700b304814. No new environment variables. The MCP endpoint contains 59 tools and three resources at this commit.
+
+Verify the saved issue workflow using these commands from the repository root.
+
+```sh
+npm run typecheck
+npm test -- tests/sheet-pdf.unit.test.ts tests/export-rpc.unit.test.ts tests/mcp.unit.test.ts
+npm run test:e2e -- --grep 'lays out an A3|publishes and downloads'
+npm run build
+```
+
+The release passed 92 Vitest tests and 135 browser checks across the broad and focused runs. In Studio, open Sheets, use a named viewport with a scale denominator, assign finishes under Schedules and publish a saved revision under Issues. Reopen the issue history to retrieve its PDF after editing. Use actual size when printing a sheet at its stated scale. The PDF worker continues to use the existing Inngest function and recovery schedule.
+
 ## M9.1 release checkpoint
 
 Application merge `9736d2ee21bfcd1e0dab1075714a64935877ebf7`. Preview `dpl_CW7bE7qm2zPXdufhE9r7Cfa1Yv3v` reached Ready. Production is pending because Vercel returned HTTP 402 with its daily deployment limit. Run `npm test -- tests/drawing-documents.unit.test.ts tests/mcp.unit.test.ts`, `npm run test:e2e -- --grep 'lays out an A3'` and `npm run build`. Tests passed for 88 Vitest cases and 130 browser checks. Graph v1 stores optional `documentItems` and named layer print weights. Neon remains at 0005. MCP exposes 54 tools and three resources.
-
-M9.2 starts with `lib/plans/sheet-drawing.ts` and the revision-bound job flow in `lib/server/blueprint-store.ts`. Add title blocks, schedules, issue tracking and vector PDF publication from a saved source revision.
 
 ## M8 release checkpoint
 
@@ -23,7 +36,7 @@ The release passed all 85 Vitest tests and 125 Playwright checks. Playwright use
 
 ## Next proposed subgoal
 
-M9.2 adds title blocks, schedule tables and vector PDF issue sets to the shipped paper-space workspace.
+M10.1 covers staged DXF import, units and layer reporting, and calibrated image and PDF underlays. Read the [CAD roadmap](CAD_ROADMAP.md) and inspect `lib/plans/blueprints.ts` and the model-space precision inputs before implementing interchange.
 
 The visual track starts at M13.1 in the [CAD roadmap](CAD_ROADMAP.md). Inspect the current renderer with `rg --files components/studio lib/plans | rg "isometric|wall-mesh"`. Use the MCP-furnished apartment in `tests/e2e/studio.spec.ts` as the first reference scene.
 

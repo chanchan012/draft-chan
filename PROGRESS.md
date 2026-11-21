@@ -2,7 +2,7 @@
 
 ## CAD roadmap
 
-The [architectural CAD roadmap](docs/CAD_ROADMAP.md) tracks shipped M5–M8 and planned M9–M17, with candidate MCP tools and release checks. M9.1 is shipped. M9.2 is next in the drafting track. M13.1 is the next visual milestone. Later milestones cover move-in rehearsals, client briefs, renovation and owner handover. The release history below records shipped work.
+The [architectural CAD roadmap](docs/CAD_ROADMAP.md) tracks the completed M5–M9 implementation and planned M10–M17, with candidate MCP tools and release checks. M10.1 is next in the drafting track. M13.1 is the next visual milestone. Later milestones cover move-in rehearsals, client briefs, renovation and owner handover. The release history below records shipped work.
 
 ## M5.1 · Precision drafting
 
@@ -63,6 +63,12 @@ Vercel preview `dpl_GX3JHUXH6yTVpLF8Cj4ZXZ5PTDpr` and production `dpl_BAuBvqHaxn
 Application merge `9736d2ee21bfcd1e0dab1075714a64935877ebf7`. Studio’s Sheets panel authors dimension chains, leaders, entity tags and polygon hatches. Named views reference storey plans, sections or elevations. Paper-space viewports accept exact paper millimeters and scale denominators. Named layer weights apply to the paper drawing. Studio and MCP use the same model, save validation and undo commands.
 
 TypeScript, the Next.js build, 88 Vitest tests and 130 Playwright checks passed. In the five-viewport browser matrix, a 5000 mm wall occupied 100 mm of the A3 sheet at 1:50 and its viewport restored after reload. MCP exposes 54 tools and three resources. Graph v1 adds optional `documentItems` and `drawingLayers[].lineWeightMm`. Vercel preview `dpl_CW7bE7qm2zPXdufhE9r7Cfa1Yv3v` reached Ready. Production is pending because Vercel returned HTTP 402 with its daily deployment limit. Neon stays at migration 0005.
+
+## M9.2 · Construction schedules and PDF issue sets
+
+Application merge `084e5c556709591e41773a29f028a160b5368ed3`. Studio’s Sheets panel edits title block details, assigns room finishes and shows door, window and finish schedules. Inngest publishes a vector PDF set from the chosen saved revision. Owners can see previous issues, retry failed jobs and download the original PDF after further model edits. Draft exposes 59 MCP tools and three resources. Graph v1 adds `finish` records. Neon database draft has verified migration 0006 at journal timestamp 1795248628468 with SHA-256 054e52b2ea01a1ecd15ecda03a0964fbdd791d048ee00a61aeadb8700b304814.
+
+TypeScript, the Next.js production build, 92 Vitest tests and 135 Playwright cases passed. The broad browser run passed 130 cases, and all five PDF issue cases passed after correcting their test fixture to use the API's canonical graph ordering. The PDF checks measured a 5 m wall at 100 mm on A3 at 1:50, matched opening tags to schedule rows and compared the issued file after an edit. Poppler independently opened and rendered the four-page sample. Vercel declined the M9.2 production request with HTTP 402 (api-deployments-free-per-day, Retry-After 86400 seconds). No preview or production deployment was registered for M9.2. The live site still serves M8. Retry the preview for feat/m9-2-issued-sheet-sets and production from main after the Vercel quota resets.
 
 ## M1.1 · Foundation and shell
 

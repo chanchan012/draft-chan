@@ -205,6 +205,16 @@ The eight M8.2 MCP tools are `create_slab`, `create_floor_opening`, `place_stair
 
 Graph v1 stores optional `documentItems` with stable IDs for dimension chains, leaders, tags, hatches, named views, sheets and viewports. Chain dimensions and leaders resolve wall endpoints, opening centers, fixtures or user-entered fixed model coordinates when drawn. If referenced geometry is deleted, the annotations remain editable and Studio and MCP report their unresolved anchors. Hatches clip diagonal or crosshatch lines to a simple polygon.
 
-A named view stores a source storey or building view plus a model-space center. A viewport occupies a rectangle in paper millimeters and converts model coordinates by its explicit scale denominator. Paper styles resolve optional named layer weights in millimeters. The same paper primitives describe clipping, paths and text for Studio and the forthcoming PDF renderer. The existing revision graph persists paper layout and model geometry together.
+A named view stores a source storey or building view plus a model-space center. A viewport occupies a rectangle in paper millimeters and converts model coordinates by its explicit scale denominator. Paper styles resolve optional named layer weights in millimeters. The same paper primitives describe clipping, paths and text for Studio and the PDF renderer. The existing revision graph persists paper layout and model geometry together.
 
 The MCP tools are `dimension_chain`, `add_leader`, `tag_entities`, `add_hatch`, `save_named_view`, `create_sheet`, `place_viewport`, `remove_document_items` and `query_drawing_documents`.
+
+## M9.2 Sheet schedules and issues
+
+A sheet stores its number, title, paper size, orientation and optional project and drafter names. Studio and PDF render the same paper geometry and title block. A PDF viewport clips its vector paths and labels at its explicit paper rectangle. PDF coordinates convert at 72 points per inch. The publisher reserves the last 24 mm of each sheet for its title block. The surface preview uses the same layout. PDF text uses standard Helvetica and substitutes unsupported glyphs with a question mark.
+
+Door and window schedules reuse authored tags and dimensions from the graph. Untagged openings are listed as such. A finish record anchors a floor, wall and ceiling specification to a point in an enclosed room on a storey. Finish schedules resolve that point against the saved room geometry and report net area. PDF publication requires a viewport per sheet and valid annotation and finish references.
+
+One PDF job per floorplan and source revision uses the existing `floorplan_exports` table, Inngest worker, recovery schedule and owner-scoped download route. Migration 0006 adds the `pdf` enum value. The issue request captures an owned current or archived revision and queues it once. Successful render stores the binary PDF encoded as base64 in the existing artifact field. The immutable artifact is served as an attachment and remains available alongside new issues. The revision archive also retains the source graph. The Inngest step returns a completion flag and keeps the PDF in Neon.
+
+MCP adds `set_room_finish`, `generate_schedule`, `publish_sheet_set`, `get_job_status` and `list_sheet_issues`. Agent scopes restrict schedule and job reads to the connected floorplan. Downloads require the existing app sign-in.
