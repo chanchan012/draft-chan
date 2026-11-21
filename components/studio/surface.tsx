@@ -1,5 +1,6 @@
 "use client";
 
+import { PlanMarks } from "./sheet-drawing";
 import { Crosshair, Focus, Minus, Plus } from "lucide-react";
 import {
   useEffect,
@@ -808,6 +809,13 @@ export function Surface({
             />
           )}
           {!iso && <BuildingPlanDrawing plan={plan} storeyId={storeyId} />}
+          {!iso && (
+            <PlanMarks
+              plan={plan}
+              storeyId={storeyId}
+              cameraScale={camera.scale}
+            />
+          )}
           {!iso && <ClearanceDrawing issue={issue} scale={camera.scale} />}
           {!iso && localOrigin && (
             <path

@@ -8,6 +8,7 @@ import {
   ChevronLeft,
   Link2,
   FileDown,
+  FileStack,
   Layers3,
   Component,
   Building2,
@@ -34,6 +35,8 @@ import { summarizeChanges } from "@/lib/plans/change-summary";
 import { ConstraintsPanel } from "./constraints-panel";
 import { BlocksPanel, NamedLayersPanel } from "./organization-panel";
 import { BuildingViewDrawing } from "./building-drawing";
+import { SheetsPanel } from "./sheets-panel";
+import { SheetDrawing } from "./sheet-drawing";
 import { BuildingPanel } from "./building-panel";
 import {
   groundStorey,
@@ -52,7 +55,7 @@ import {
 import { checkClearances } from "@/lib/plans/clearance";
 import { createDraftPlanStore } from "@/lib/plans/command-store";
 import { authModalHref } from "@/lib/auth-navigation";
-import type { DraftActor, PlanCommand, Point } from "@/lib/plans/model";
+import type { DraftActor, PlanCommand, Point, Sheet } from "@/lib/plans/model";
 import type { StudioDocument } from "@/lib/plans/studio-document";
 import {
   isSelected,
@@ -115,6 +118,10 @@ export function Studio({
     redo,
     executeBatch,
   } = useStore(store);
+  const [sheetId, setSheetId] = useState<string>();
+  const sheet = building.documentItems?.find(
+    (item): item is Sheet => item.kind === "sheet" && item.id === sheetId,
+  );
   const [buildingViewId, setBuildingViewId] = useState<string>();
   const buildingView = building.buildingViews?.find(
     (view) => view.id === buildingViewId,
@@ -154,7 +161,7 @@ export function Studio({
   const [iso, setIso] = useState(false);
   const [rightPanel, setRightPanel] = useState<RightPanel | null>(null);
   const [leftPanel, setLeftPanel] = useState<
-    "layers" | "blocks" | "building" | null
+    "layers" | "blocks" | "building" | "sheets" | null
   >(null);
   const [zoomSlot, setZoomSlot] = useState<HTMLDivElement | null>(null);
   const [wall, setWall] = useState<WallSettings>({
@@ -208,6 +215,7 @@ export function Studio({
   const inspectorControl = useRef<HTMLButtonElement>(null);
   const exportsControl = useRef<HTMLButtonElement>(null);
   const buildingControl = useRef<HTMLButtonElement>(null);
+  const sheetsControl = useRef<HTMLButtonElement>(null);
   const blockControl = useRef<HTMLButtonElement>(null);
   const layerControl = useRef<HTMLButtonElement>(null);
 
@@ -244,6 +252,7 @@ export function Studio({
 
   const switchTool = useCallback((next: Tool) => {
     setTool(next);
+    setSheetId(undefined);
     setBuildingViewId(undefined);
     if (next !== "select") setMulti(false);
     setRightPanel((panel) => (panel === "clearance" ? "inspector" : panel));
@@ -519,27 +528,60 @@ export function Studio({
           >
             <Building2 size={20} />
           </button>
+          <button
+            ref={sheetsControl}
+            aria-controls="studio-layers"
+            aria-expanded={leftPanel === "sheets"}
+            aria-label="Sheets"
+            title="Sheets"
+            onClick={() => {
+              if (window.matchMedia(overlayPanels).matches) closeRightPanel();
+              setLeftPanel(leftPanel === "sheets" ? null : "sheets");
+            }}
+          >
+            <FileStack size={20} />
+          </button>
         </div>
         <StudioPanel
           side="left"
           id="studio-layers"
           label={
-            leftPanel === "building"
-              ? "Building"
-              : leftPanel === "blocks"
-                ? "Blocks"
-                : "Layers"
+            leftPanel === "sheets"
+              ? "Sheets"
+              : leftPanel === "building"
+                ? "Building"
+                : leftPanel === "blocks"
+                  ? "Blocks"
+                  : "Layers"
           }
           open={Boolean(leftPanel)}
           onClose={() => {
             setLeftPanel(null);
-            (leftPanel === "blocks"
-              ? blockControl
-              : layerControl
-            ).current?.focus();
+            const controls = {
+              layers: layerControl,
+              blocks: blockControl,
+              building: buildingControl,
+              sheets: sheetsControl,
+            };
+            if (leftPanel) controls[leftPanel].current?.focus();
           }}
         >
-          {leftPanel === "building" ? (
+          {leftPanel === "sheets" ? (
+            <SheetsPanel
+              building={building}
+              plan={plan}
+              level={level}
+              selection={[...selection]}
+              sheet={sheet}
+              showSheet={(id) => {
+                setSheetId(id);
+                setBuildingViewId(undefined);
+                setIso(false);
+                live.moveCursor(null);
+              }}
+              onCommand={(input) => executeBatch([input], actor)}
+            />
+          ) : leftPanel === "building" ? (
             <BuildingPanel
               building={building}
               storey={level}
@@ -548,11 +590,13 @@ export function Studio({
                 .map((item) => item.id)}
               onStorey={(id) => {
                 setActiveStorey(id);
+                setSheetId(undefined);
                 setBuildingViewId(undefined);
                 setSelection([]);
                 setFinding(undefined);
               }}
               onView={(id) => {
+                setSheetId(undefined);
                 setBuildingViewId(id);
                 live.moveCursor(null);
                 setIso(false);
@@ -594,9 +638,10 @@ export function Studio({
             aria-label="View"
           >
             <button
-              aria-pressed={!iso && !buildingView}
+              aria-pressed={!iso && !buildingView && !sheet}
               onClick={() => {
                 setIso(false);
+                setSheetId(undefined);
                 setBuildingViewId(undefined);
               }}
             >
@@ -606,6 +651,7 @@ export function Studio({
               aria-pressed={iso}
               onClick={() => {
                 setIso(true);
+                setSheetId(undefined);
                 setBuildingViewId(undefined);
                 setSelection([]);
               }}
@@ -616,13 +662,15 @@ export function Studio({
               className="studio-ortho"
               aria-pressed={ortho}
               onClick={() => setOrtho(!ortho)}
-              disabled={iso || Boolean(buildingView)}
+              disabled={iso || Boolean(buildingView) || Boolean(sheet)}
             >
               Ortho
             </button>
           </div>
 
-          {buildingView ? (
+          {sheet ? (
+            <SheetDrawing plan={building} sheet={sheet} />
+          ) : buildingView ? (
             <BuildingViewDrawing building={building} view={buildingView} />
           ) : (
             <>

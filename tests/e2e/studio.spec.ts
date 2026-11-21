@@ -127,6 +127,7 @@ async function studio(
         buildingElements:
           input.buildingElements ?? current.graph.buildingElements,
         buildingViews: input.buildingViews ?? current.graph.buildingViews,
+        documentItems: input.documentItems ?? current.graph.documentItems,
         wallTypes: input.wallTypes ?? current.graph.wallTypes,
         drawingLayers: input.drawingLayers ?? current.graph.drawingLayers,
         blocks: input.blocks ?? current.graph.blocks,
@@ -888,6 +889,57 @@ test("moves a linked stair and sees the section and floor opening update", async
   );
   await saveIfNeeded(page);
   await frame(page);
+});
+
+test("lays out an A3 drawing at 1:50 and restores its saved viewport", async ({
+  page,
+}) => {
+  const workspace = studioWorkspace();
+  workspace.document.graph = initialGraph({ width: 5000, depth: 3000 });
+  await studio(page, false, workspace);
+  const openSheets = () =>
+    page.getByRole("button", { name: "Sheets", exact: true }).first().click();
+  const panel = page.getByRole("complementary", { name: "Sheets" });
+  await openSheets();
+  await panel
+    .getByRole("button", { name: "Create sheet", exact: true })
+    .click();
+  await panel
+    .getByRole("button", { name: "Create a named view", exact: true })
+    .click();
+  await panel
+    .getByRole("button", { name: "Save named view", exact: true })
+    .click();
+  await panel.getByRole("button", { name: "Sheets", exact: true }).click();
+  await panel
+    .getByRole("button", { name: "Place viewport", exact: true })
+    .click();
+  await panel
+    .getByRole("button", { name: "Close sheets", exact: true })
+    .click();
+  const drawing = page.getByRole("img", { name: "A101 Floor plan" });
+  await expect(drawing).toHaveAttribute("viewBox", "0 0 420 297");
+  await expect(drawing.getByText("Ground floor · 1:50")).toBeVisible();
+  const d = await drawing
+    .locator('[data-source="starter-wall-1"]')
+    .getAttribute("d");
+  const x = d!.match(/^[ML] ([\d.]+) [\d.]+ L ([\d.]+)/);
+  expect(x).not.toBeNull();
+  expect(Math.abs(Number(x![1]) - Number(x![2]))).toBe(100);
+  await saveIfNeeded(page);
+  await page.reload();
+  await openSheets();
+  await panel
+    .getByRole("combobox", { name: "Sheet", exact: true })
+    .selectOption({ label: "A101 · Floor plan" });
+  await panel
+    .getByRole("button", { name: "Close sheets", exact: true })
+    .click();
+  await expect(drawing.getByText("Ground floor · 1:50")).toBeVisible();
+  await viewportFits(page);
+  const box = (await drawing.boundingBox())!;
+  expect(box.width).toBeGreaterThan(180);
+  expect(box.height).toBeGreaterThan(140);
 });
 
 test("keeps unsaved drawing after a revision conflict", async ({ page }) => {

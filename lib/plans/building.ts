@@ -44,7 +44,7 @@ function segmentsTouch(a: Point, b: Point, c: Point, d: Point) {
   );
 }
 
-function validateRing(ring: readonly Point[], name: string) {
+export function validateRing(ring: readonly Point[], name: string) {
   if (
     new Set(ring.map(({ x, y }) => x + "," + y)).size !== ring.length ||
     polygonAreaMm2(ring) < 1

@@ -64,6 +64,11 @@ export function rebaseSnapshot(
       draft.buildingViews,
       saved.buildingViews,
     ),
+    documentItems: mergeItems(
+      base.documentItems,
+      draft.documentItems,
+      saved.documentItems,
+    ),
     wallTypes: mergeItems(base.wallTypes, draft.wallTypes, saved.wallTypes),
     drawingLayers: mergeItems(
       base.drawingLayers,

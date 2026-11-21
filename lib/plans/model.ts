@@ -279,6 +279,7 @@ export const drawingLayerInput = z.strictObject({
   locked: z.boolean(),
   color: z.string().regex(/^#[0-9a-fA-F]{6}$/),
   lineStyle: z.enum(["solid", "dashed", "dotted"]),
+  lineWeightMm: z.number().min(0.05).max(2).optional(),
   members: z.array(drawingEntityInput).max(5000),
 });
 export type DrawingEntity = z.infer<typeof drawingEntityInput>;
@@ -429,7 +430,109 @@ export type Stair = Extract<BuildingElement, { kind: "stair" }>;
 export type Roof = Extract<BuildingElement, { kind: "roof" }>;
 export type BuildingView = z.infer<typeof buildingViewInput>;
 
+export const documentAnchorInput = z.discriminatedUnion("kind", [
+  z.strictObject({ kind: z.literal("point"), point: modelPointInput }),
+  z.strictObject({
+    kind: z.literal("wall"),
+    id: identifier,
+    end: z.enum(["start", "end"]),
+  }),
+  z.strictObject({
+    kind: z.enum(["door", "window", "fixture"]),
+    id: identifier,
+  }),
+]);
+export type DocumentAnchor = z.infer<typeof documentAnchorInput>;
+
+const note = z.string().trim().min(1).max(120);
+const tagTarget = z.strictObject({
+  kind: z.enum(["door", "window", "fixture"]),
+  id: identifier,
+});
+const sheetSource = z.discriminatedUnion("kind", [
+  z.strictObject({ kind: z.literal("plan"), storeyId: identifier }),
+  z.strictObject({ kind: z.literal("building"), viewId: identifier }),
+]);
+const paperNumber = z.number().min(0).max(600);
+
+export const documentItems = [
+  z.strictObject({
+    kind: z.literal("chain"),
+    id: identifier,
+    storeyId: identifier,
+    anchors: z.array(documentAnchorInput).min(2).max(24),
+    axis: z.enum(["horizontal", "vertical"]),
+    offsetMm: coordinate,
+  }),
+  z.strictObject({
+    kind: z.literal("leader"),
+    id: identifier,
+    storeyId: identifier,
+    anchor: documentAnchorInput,
+    labelAt: modelPointInput,
+    text: note,
+  }),
+  z.strictObject({
+    kind: z.literal("tag"),
+    id: identifier,
+    storeyId: identifier,
+    target: tagTarget,
+    labelAt: modelPointInput,
+    text: z.string().trim().min(1).max(24),
+  }),
+  z.strictObject({
+    kind: z.literal("hatch"),
+    id: identifier,
+    storeyId: identifier,
+    polygon: z.array(modelPointInput).min(3).max(64),
+    pattern: z.enum(["diagonal", "cross"]),
+    spacingMm: z.int().min(25).max(5000),
+  }),
+  z.strictObject({
+    kind: z.literal("view"),
+    id: identifier,
+    name: note,
+    source: sheetSource,
+    center: modelPointInput,
+  }),
+  z.strictObject({
+    kind: z.literal("sheet"),
+    id: identifier,
+    number: z.string().trim().min(1).max(16),
+    name: note,
+    size: z.enum(["A4", "A3", "A2"]),
+    orientation: z.enum(["landscape", "portrait"]),
+    project: note.optional(),
+    drawnBy: z.string().trim().min(1).max(48).optional(),
+  }),
+  z.strictObject({
+    kind: z.literal("viewport"),
+    id: identifier,
+    sheetId: identifier,
+    viewId: identifier,
+    scale: z.int().min(1).max(5000),
+    x: paperNumber,
+    y: paperNumber,
+    width: paperNumber.min(10),
+    height: paperNumber.min(10),
+  }),
+] as const;
+export const documentItemInput = z.discriminatedUnion("kind", documentItems);
+export const documentItemLimit = 640;
+export type DocumentItem = z.infer<typeof documentItemInput>;
+export type Sheet = Extract<DocumentItem, { kind: "sheet" }>;
+export type SheetViewport = Extract<DocumentItem, { kind: "viewport" }>;
+export type NamedDrawingView = Extract<DocumentItem, { kind: "view" }>;
+export type DrawingMark = Extract<DocumentItem, { storeyId: string }>;
+
 export const planCommandSchema = z.union([
+  z.discriminatedUnion("type", [
+    z.strictObject({
+      type: z.literal("document.write"),
+      item: documentItemInput,
+    }),
+    z.strictObject({ type: z.literal("document.remove"), id: identifier }),
+  ]),
   z.discriminatedUnion("type", [
     z.strictObject({
       type: z.literal("layer.write"),
@@ -550,6 +653,7 @@ export const draftPlanSchema = z.looseObject({
   fixtures: z.array(fixtureSchema),
   utilities: z.array(utilitySchema).default([]),
   dimensions: z.array(z.unknown()),
+  documentItems: z.array(documentItemInput).max(documentItemLimit).optional(),
   buildingElements: z.array(buildingElementInput).max(256).optional(),
   buildingViews: z.array(buildingViewInput).max(80).optional(),
   storeys: z.array(storeyInput).max(32).optional(),

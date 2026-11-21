@@ -40,6 +40,9 @@ import {
   annotationInput,
   constraintInput,
   buildingElements,
+  documentItems,
+  type DocumentItem,
+  type Sheet,
   buildingViews,
   type BuildingElement,
   type BuildingView,
@@ -57,6 +60,7 @@ import {
   type PlanCommand,
   type Point,
 } from "../plans/model";
+import { documentMarks, paperDrawing } from "../plans/sheet-drawing";
 import { deriveBuildingView } from "../plans/building-views";
 import { openingsForSlab } from "../plans/building";
 import { querySpaces } from "../plans/spaces";
@@ -346,6 +350,133 @@ export function createDraftMcp(scope: AgentScope, backend = draftMcpBackend) {
     "catalog",
     "Furniture, electrical, plumbing, and room presets.",
     async () => catalog,
+  );
+
+  function writeDocument(
+    doc: StudioDocument,
+    items: DocumentItem[],
+  ): AgentEdit {
+    const itemIds = items.map(({ id }) => id);
+    if (new Set(itemIds).size !== itemIds.length)
+      throw new Error("Use distinct item IDs.");
+    return {
+      plan: commands(
+        doc,
+        items.map((item) => ({ type: "document.write", item })),
+      ),
+      result: { itemIds },
+    };
+  }
+  edit(
+    "dimension_chain",
+    "Create or update a storey dimension chain with wall endpoints, opening or fixture centers, or fixed millimeter points. The offset places the chain outside its anchors.",
+    z.strictObject({
+      ...revision,
+      chain: documentItems[0].omit({ kind: true }),
+    }),
+    (doc, { chain }) => writeDocument(doc, [{ kind: "chain", ...chain }]),
+  );
+  edit(
+    "add_leader",
+    "Create or update a leader label tied to a storey geometry anchor.",
+    z.strictObject({
+      ...revision,
+      leader: documentItems[1].omit({ kind: true }),
+    }),
+    (doc, { leader }) => writeDocument(doc, [{ kind: "leader", ...leader }]),
+  );
+  edit(
+    "tag_entities",
+    "Associate unique tags with native doors, windows or fixtures. Writes all tags in one revision.",
+    z.strictObject({
+      ...revision,
+      tags: z
+        .array(documentItems[2].omit({ kind: true }))
+        .min(1)
+        .max(64),
+    }),
+    (doc, { tags }) =>
+      writeDocument(
+        doc,
+        tags.map((tag) => ({ kind: "tag", ...tag })),
+      ),
+  );
+  edit(
+    "add_hatch",
+    "Create or update a diagonal or crosshatch clipped to a simple model-space polygon.",
+    z.strictObject({
+      ...revision,
+      hatch: documentItems[3].omit({ kind: true }),
+    }),
+    (doc, { hatch }) => writeDocument(doc, [{ kind: "hatch", ...hatch }]),
+  );
+  edit(
+    "save_named_view",
+    "Save a storey plan, section or elevation view with a center in drawing millimeters. Vertical views use negative elevation on the Y axis.",
+    z.strictObject({
+      ...revision,
+      view: documentItems[4].omit({ kind: true }),
+    }),
+    (doc, { view }) => writeDocument(doc, [{ kind: "view", ...view }]),
+  );
+  edit(
+    "create_sheet",
+    "Create or update a numbered A2, A3 or A4 drawing sheet with an explicit orientation.",
+    z.strictObject({
+      ...revision,
+      sheet: documentItems[5].omit({ kind: true }),
+    }),
+    (doc, { sheet }) => writeDocument(doc, [{ kind: "sheet", ...sheet }]),
+  );
+  edit(
+    "place_viewport",
+    "Place or update a named view on a sheet. Use paper millimeters from top left and a scale denominator such as 50 for 1:50.",
+    z.strictObject({
+      ...revision,
+      viewport: documentItems[6].omit({ kind: true }),
+    }),
+    (doc, { viewport }) =>
+      writeDocument(doc, [{ kind: "viewport", ...viewport }]),
+  );
+  edit(
+    "remove_document_items",
+    "Remove annotation, viewport, named view or sheet IDs together. Include dependent viewports when deleting their sheet or view.",
+    z.strictObject({ ...revision, ids: z.array(objectId).min(1).max(64) }),
+    (doc, { ids }) => ({
+      plan: commands(
+        doc,
+        [...new Set(ids)].map((id) => ({ type: "document.remove", id })),
+      ),
+      result: { ids },
+    }),
+  );
+  tool(
+    "query_drawing_documents",
+    "List drawing items and unresolved anchors, or read a sheet's clipped viewport definitions and vector coordinates in paper millimeters.",
+    z.strictObject({ sheetId: objectId.optional() }),
+    true,
+    async ({ sheetId }) => {
+      const doc = await current();
+      const items = doc.graph.documentItems ?? [];
+      const details = { planId, revision: doc.revision };
+      if (!sheetId)
+        return {
+          ...details,
+          items,
+          unresolved: planStoreys(doc.graph).flatMap(
+            ({ id }) => documentMarks(doc.graph, id, 50).unresolved,
+          ),
+        };
+      const sheet = items.find(
+        (item): item is Sheet => item.kind === "sheet" && item.id === sheetId,
+      );
+      if (!sheet)
+        throw new ToolFailure(
+          "entity_unavailable",
+          "The sheet is unavailable.",
+        );
+      return { ...details, ...paperDrawing(doc.graph, sheet) };
+    },
   );
 
   edit(

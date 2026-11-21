@@ -1,6 +1,8 @@
 import { z } from "zod";
 import {
   displayUnits,
+  documentItemInput,
+  documentItemLimit,
   constraintInput,
   buildingElementInput,
   buildingViewInput,
@@ -32,6 +34,7 @@ import {
   type WindowOpening,
   type DimensionAnnotation,
 } from "./model";
+import { validateDocuments } from "./drawing-documents";
 import { hasOrganization, reconcileOrganization } from "./organization";
 import { resolveWallTypes } from "./storeys";
 import { loadDraftPlan } from "./plan-state";
@@ -57,6 +60,7 @@ export const saveStudioSchema = z.strictObject({
   windows: z.array(windowInput).max(openingLimit).optional(),
   buildingElements: z.array(buildingElementInput).max(256).optional(),
   buildingViews: z.array(buildingViewInput).max(80).optional(),
+  documentItems: z.array(documentItemInput).max(documentItemLimit).optional(),
   storeys: z.array(storeyInput).max(32).optional(),
   wallTypes: z.array(wallTypeInput).max(128).optional(),
   drawingLayers: z.array(drawingLayerInput).max(64).optional(),
@@ -88,6 +92,9 @@ export function studioSnapshot(plan: DraftPlanState, unit: DisplayUnit) {
     ),
     buildingViews: (plan.buildingViews ?? []).map((item) =>
       buildingViewInput.parse(item),
+    ),
+    documentItems: (plan.documentItems ?? []).map((item) =>
+      documentItemInput.parse(item),
     ),
     wallTypes: (plan.wallTypes ?? []).map((item) => wallTypeInput.parse(item)),
     drawingLayers: (plan.drawingLayers ?? []).map((item) =>
@@ -218,12 +225,14 @@ export function applyStudioSnapshot(
     storeys: input.storeys ?? previous.storeys,
     buildingElements: input.buildingElements ?? previous.buildingElements,
     buildingViews: input.buildingViews ?? previous.buildingViews,
+    documentItems: input.documentItems ?? previous.documentItems,
     wallTypes: input.wallTypes ?? previous.wallTypes,
     drawingLayers: input.drawingLayers ?? previous.drawingLayers,
     blocks: input.blocks ?? previous.blocks,
     blockInstances: input.blockInstances ?? previous.blockInstances,
     rooms: [],
   };
+  validateDocuments(next, previous);
   if (
     !hasOrganization(previous) &&
     !hasOrganization(next) &&
