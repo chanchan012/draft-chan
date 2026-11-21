@@ -63,6 +63,14 @@ import {
   type StudioDocument,
 } from "../plans/studio-document";
 import type { AgentScope } from "./agent-tokens";
+import {
+  createPreview,
+  newBatchId,
+  operationsSchema,
+  prepareBatch,
+  readPreview,
+} from "./agent-transactions";
+import { revisionStore, type BatchReceipt } from "./revision-store";
 import { requestBlueprint } from "./blueprint-store";
 import { queueBlueprint } from "./blueprint-jobs";
 import { liveBus, planChannel, publishPlanPresence } from "./live-bus";
@@ -93,6 +101,7 @@ type AgentEdit = { plan: DraftPlanState; cursor?: Point; result?: object };
 
 export interface DraftMcpBackend {
   get: typeof plans.getStudio;
+  transactions?: typeof revisionStore;
   save: typeof plans.saveStudio;
   publish(scope: AgentScope, revision: number, cursor?: Point): Promise<void>;
   exportDxf(scope: AgentScope, revision: number): Promise<object>;
@@ -100,6 +109,7 @@ export interface DraftMcpBackend {
 
 export const draftMcpBackend: DraftMcpBackend = {
   get: plans.getStudio,
+  transactions: revisionStore,
   save: plans.saveStudio,
   async publish(scope, revision, cursor) {
     const { owner, planId, agentId } = scope;
@@ -160,7 +170,7 @@ export function createDraftMcp(scope: AgentScope, backend = draftMcpBackend) {
     { name: "draft-studio", version: "0.1.0" },
     {
       instructions:
-        "Use floorplan-graph to get the current revision and object IDs. Geometry uses millimeters. Every write requires the saved revision. Read the graph again after a revision conflict.",
+        "Use floorplan-graph to get the current revision and object IDs. Geometry uses millimeters. Write tools require a saved revision or a matching preview token. Read the graph again after a revision conflict.",
     },
   );
   const actor: DraftActor = { kind: "ai", id: scope.agentId };
@@ -238,6 +248,7 @@ export function createDraftMcp(scope: AgentScope, backend = draftMcpBackend) {
         annotations: {
           readOnlyHint,
           destructiveHint: !readOnlyHint,
+          ...(name === "apply_changes" ? { idempotentHint: true } : {}),
           openWorldHint: false,
         },
       },
@@ -449,6 +460,158 @@ export function createDraftMcp(scope: AgentScope, backend = draftMcpBackend) {
     cadEditOptions.array.extend(revision),
     (doc, { expectedRevision: _, ...input }) =>
       editCad(doc, { operation: "array", ...input }),
+  );
+
+  function transactions() {
+    if (!backend.transactions)
+      throw new ToolFailure(
+        "transactions_unavailable",
+        "This Draft backend does not support persistent transactions.",
+      );
+    return backend.transactions;
+  }
+  function validatedBatch(
+    doc: StudioDocument,
+    id: string,
+    operations: CadEdit[],
+  ) {
+    try {
+      return prepareBatch(doc, actor, id, operations);
+    } catch (error) {
+      throw new ToolFailure(
+        "invalid_geometry",
+        error instanceof Error ? error.message : "Invalid geometry.",
+      );
+    }
+  }
+
+  tool(
+    "preview_changes",
+    "Simulate ordered CAD operations on a saved revision. Reports before/after geometry, affected openings and a token valid for 15 minutes. Save with apply_changes using the same operations.",
+    z.strictObject({
+      ...revision,
+      operations: operationsSchema,
+    }),
+    true,
+    async (input) => {
+      transactions();
+      const doc = await current();
+      if (doc.revision !== input.expectedRevision)
+        throw new ToolFailure(
+          "revision_conflict",
+          "Read the latest floorplan revision and preview again.",
+        );
+      const id = newBatchId();
+      const { summary, outcome } = validatedBatch(doc, id, input.operations);
+      const { token, stamp } = createPreview(
+        scope,
+        id,
+        doc.revision,
+        input.operations,
+        outcome,
+      );
+      return {
+        planId,
+        revision: doc.revision,
+        previewToken: token,
+        expiresAt: stamp.expiresAt,
+        ...summary,
+      };
+    },
+  );
+
+  tool(
+    "apply_changes",
+    "Commit all operations from an unexpired preview together. Resend the same previewToken and operations to retrieve the original receipt after a successful commit.",
+    z.strictObject({
+      previewToken: z.string().min(1).max(1024),
+      operations: operationsSchema,
+    }),
+    false,
+    async ({ previewToken, operations }) => {
+      const repo = transactions();
+      const stamp = readPreview(scope, previewToken, operations);
+      if (!stamp)
+        throw new ToolFailure(
+          "invalid_preview",
+          "Use the token and exact operations from a preview for this floorplan and agent.",
+        );
+      const receipt = await repo.getReceipt(scope, stamp.id);
+      if (receipt) return receipt;
+      if (stamp.expiresAt <= Date.now())
+        throw new ToolFailure("preview_expired", "Create a fresh preview.");
+      const doc = await current();
+      if (doc.revision === stamp.revision) {
+        const { graph, summary, outcome } = validatedBatch(
+          doc,
+          stamp.id,
+          operations,
+        );
+        if (outcome !== stamp.outcome)
+          throw new ToolFailure(
+            "invalid_preview",
+            "The preview differs from the current geometry result. Preview again.",
+          );
+        const next: BatchReceipt = {
+          planId,
+          batchId: stamp.id,
+          baseRevision: doc.revision,
+          revision: doc.revision + 1,
+          summary,
+        };
+        if (await repo.commit(scope, doc, graph, next)) {
+          await backend.publish(scope, next.revision).catch(() => {});
+          // Read the stored receipt so initial and repeated response payloads match.
+          return (await repo.getReceipt(scope, stamp.id)) ?? next;
+        }
+      }
+      // A concurrent retry may have committed after the first lookup.
+      const concurrent = await repo.getReceipt(scope, stamp.id);
+      if (concurrent) return concurrent;
+      throw new ToolFailure(
+        "revision_conflict",
+        "The plan changed after preview. Read the latest floorplan and preview again.",
+      );
+    },
+  );
+
+  tool(
+    "diff_revisions",
+    "Compare authored geometry and plan metadata at two saved revisions. Compare captured revisions starting with the state at rollout. Use nextOffset to page changes.",
+    z.strictObject({
+      fromRevision: exportRevision,
+      toRevision: exportRevision,
+      offset: z.int().min(0).max(20_000).default(0),
+      limit: z.int().min(1).max(100).default(25),
+    }),
+    true,
+    async ({ fromRevision, toRevision, offset, limit }) => {
+      const versions = await transactions().revisions(
+        scope,
+        fromRevision,
+        toRevision,
+      );
+      const from = versions.find((item) => item.revision === fromRevision);
+      const to = versions.find((item) => item.revision === toRevision);
+      if (!from || !to)
+        throw new ToolFailure(
+          "revision_unavailable",
+          "One or both saved revisions are unavailable for this floorplan.",
+        );
+      const summary = summarizeChanges(from.graph, to.graph);
+      const total = summary.changes.length;
+      return {
+        planId,
+        fromRevision,
+        toRevision,
+        before: { name: from.name, unit: from.unit },
+        after: { name: to.name, unit: to.unit },
+        ...summary,
+        changes: summary.changes.slice(offset, offset + limit),
+        total,
+        nextOffset: offset + limit < total ? offset + limit : null,
+      };
+    },
   );
 
   function addSketch(doc: StudioDocument, geometry: SketchGeometry): AgentEdit {

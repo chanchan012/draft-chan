@@ -23,7 +23,12 @@ import {
   renderQueuedBlueprint,
   getBlueprintFile,
 } from "../lib/server/blueprint-store";
-import { floorplanAgentTokens, floorplanExports } from "../db/schema";
+import {
+  floorplanAgentTokens,
+  floorplanExports,
+  floorplanEditBatches,
+  floorplanRevisions,
+} from "../db/schema";
 import { eq } from "drizzle-orm";
 import type { StudioDocument } from "../lib/plans/studio-document";
 
@@ -354,9 +359,11 @@ it("lays out a two-bedroom plan using all MCP resources and tools over HTTP", as
       (await client.listTools()).tools.map(({ name }) => name).sort(),
     ).toEqual([
       "add_dimension_annotation",
+      "apply_changes",
       "array_entities",
       "calculate_bom",
       "check_clearance_codes",
+      "diff_revisions",
       "draw_arc",
       "draw_circle",
       "draw_construction_line",
@@ -369,6 +376,7 @@ it("lays out a two-bedroom plan using all MCP resources and tools over HTTP", as
       "offset_geometry",
       "place_fixture",
       "place_opening",
+      "preview_changes",
       "query_entities",
       "resolve_snap",
       "split_or_join_wall",
@@ -618,6 +626,211 @@ it("lays out a two-bedroom plan using all MCP resources and tools over HTTP", as
   }
 }, 30_000);
 
+it("previews corridor geometry, commits a concurrent retry once, and compares saved revisions", async () => {
+  vi.stubEnv("CLERK_SECRET_KEY", "sk_test_draft_preview_test");
+  const session = await planWithToken();
+  const other = await planWithToken();
+  const app = createMcpHttp(localWindow(120));
+  const client = await connect(app, session.token);
+  const retryClient = await connect(app, session.token);
+  const otherClient = await connect(app, other.token);
+  async function call(
+    name: string,
+    args: Record<string, unknown>,
+    clientInstance = client,
+  ) {
+    const result = await clientInstance.callTool({ name, arguments: args });
+    if (!isCallToolResult(result)) throw new Error("Expected MCP call result");
+    return result;
+  }
+  const wall = { kind: "wall", id: "hall" };
+  const operations = [
+    { operation: "offset", entity: wall, distanceMm: 300, copy: false },
+    {
+      operation: "transform",
+      entities: [wall],
+      transform: { mode: "move", delta: { x: 100, y: 0 } },
+    },
+  ];
+  try {
+    const base = await session.api.request(
+      session.path + "/graph",
+      payload("PATCH", {
+        revision: 0,
+        unit: "mm",
+        walls: [
+          {
+            id: "hall",
+            start: { x: 0, y: 0 },
+            end: { x: 4000, y: 0 },
+            kind: "interior",
+            thicknessMm: 120,
+          },
+          {
+            id: "boundary",
+            start: { x: 1100, y: -100 },
+            end: { x: 1100, y: 1000 },
+            kind: "interior",
+            thicknessMm: 120,
+          },
+        ],
+        openings: [
+          {
+            id: "entry",
+            wallId: "hall",
+            offsetMm: 1000,
+            widthMm: 900,
+            swing: "right",
+            hinge: "start",
+          },
+        ],
+      }),
+    );
+    expect(base.status).toBe(200);
+    const invalid = await call("preview_changes", {
+      expectedRevision: 1,
+      operations: [
+        operations[0],
+        {
+          operation: "trim_extend",
+          entity: wall,
+          boundary: { kind: "wall", id: "boundary" },
+          mode: "trim",
+          endpoint: "start",
+        },
+      ],
+    });
+    expect(invalid).toMatchObject({
+      isError: true,
+      structuredContent: {
+        code: "invalid_geometry",
+        message: expect.stringContaining("opening entry"),
+      },
+    });
+    const preview = await call("preview_changes", {
+      expectedRevision: 1,
+      operations,
+    });
+    expect(preview).toMatchObject({
+      isError: false,
+      structuredContent: {
+        revision: 1,
+        affectedOpenings: [{ id: "entry", wallId: "hall" }],
+        changes: [
+          {
+            kind: "wall",
+            id: "hall",
+            before: { start: { x: 0, y: 0 } },
+            after: { start: { x: 100, y: 300 } },
+          },
+        ],
+      },
+    });
+    expect(
+      (
+        await db
+          .select()
+          .from(floorplanEditBatches)
+          .where(eq(floorplanEditBatches.floorplanId, session.planId))
+      ).length,
+    ).toBe(0);
+    const args = {
+      previewToken: (preview.structuredContent as { previewToken: string })
+        .previewToken,
+      operations,
+    };
+    expect(await call("apply_changes", args, otherClient)).toMatchObject({
+      isError: true,
+      structuredContent: { code: "invalid_preview" },
+    });
+    expect(
+      await call("apply_changes", {
+        ...args,
+        operations: operations.slice(0, 1),
+      }),
+    ).toMatchObject({
+      isError: true,
+      structuredContent: { code: "invalid_preview" },
+    });
+    const alternate = await call("preview_changes", {
+      expectedRevision: 1,
+      operations,
+    });
+    const [first, duplicate] = await Promise.all([
+      call("apply_changes", args),
+      call("apply_changes", args, retryClient),
+    ]);
+    expect(first).toMatchObject({
+      isError: false,
+      structuredContent: { revision: 2, baseRevision: 1 },
+    });
+    expect(duplicate.structuredContent).toEqual(first.structuredContent);
+    expect(
+      await call("apply_changes", {
+        ...args,
+        previewToken: (alternate.structuredContent as { previewToken: string })
+          .previewToken,
+      }),
+    ).toMatchObject({
+      isError: true,
+      structuredContent: { code: "revision_conflict" },
+    });
+    expect(
+      (
+        await db
+          .select()
+          .from(floorplanEditBatches)
+          .where(eq(floorplanEditBatches.floorplanId, session.planId))
+      ).length,
+    ).toBe(1);
+    expect(
+      (
+        await db
+          .select()
+          .from(floorplanRevisions)
+          .where(eq(floorplanRevisions.floorplanId, session.planId))
+      )
+        .map((x) => x.revision)
+        .sort(),
+    ).toEqual([0, 1]);
+    const saved = (await (
+      await session.api.request(session.path + "/graph")
+    ).json()) as StudioDocument;
+    expect(saved.revision).toBe(2);
+    expect(saved.agentBatch).toMatchObject({
+      agentId: session.id,
+      id: (first.structuredContent as { batchId: string }).batchId,
+    });
+    expect(saved.graph.openings).toMatchObject([
+      { id: "entry", offsetMm: 1000, wallId: "hall" },
+    ]);
+    expect(
+      await call("diff_revisions", { fromRevision: 1, toRevision: 2 }),
+    ).toMatchObject({
+      isError: false,
+      structuredContent: {
+        total: 1,
+        affectedOpenings: [{ id: "entry" }],
+        changes: [
+          {
+            kind: "wall",
+            id: "hall",
+            action: "updated",
+            after: { start: { x: 100, y: 300 } },
+          },
+        ],
+      },
+    });
+  } finally {
+    await Promise.all([
+      client.close(),
+      retryClient.close(),
+      otherClient.close(),
+    ]);
+    vi.unstubAllEnvs();
+  }
+}, 30_000);
+
 it("bridges stdio to the authenticated HTTP tools without sharing the database connection", async () => {
   const session = await planWithToken();
   const app = createMcpHttp(localWindow());
@@ -655,7 +868,7 @@ it("bridges stdio to the authenticated HTTP tools without sharing the database c
         },
       }),
     );
-    expect((await client.listTools()).tools).toHaveLength(22);
+    expect((await client.listTools()).tools).toHaveLength(25);
     expect((await client.listResources()).resources).toHaveLength(3);
     expect(
       (await client.readResource({ uri: "draft://floorplan-graph" })).contents,

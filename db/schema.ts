@@ -2,6 +2,7 @@ import { sql } from "drizzle-orm";
 import {
   pgTable,
   pgEnum,
+  primaryKey,
   uuid,
   text,
   jsonb,
@@ -115,3 +116,33 @@ export const floorplanOAuthGrants = pgTable("floorplan_oauth_grants", {
     .notNull()
     .references(() => floorplans.id, { onDelete: "cascade" }),
 });
+
+export const floorplanRevisions = pgTable(
+  "floorplan_revisions",
+  {
+    floorplanId: uuid("floorplan_id")
+      .notNull()
+      .references(() => floorplans.id, { onDelete: "cascade" }),
+    revision: integer("revision").notNull(),
+    name: text("name").notNull(),
+    unit: displayUnit("unit").notNull(),
+    graph: jsonb("graph").notNull(),
+  },
+  (t) => [primaryKey({ columns: [t.floorplanId, t.revision] })],
+);
+
+export const floorplanEditBatches = pgTable(
+  "floorplan_edit_batches",
+  {
+    id: uuid("id").primaryKey(),
+    floorplanId: uuid("floorplan_id")
+      .notNull()
+      .references(() => floorplans.id, { onDelete: "cascade" }),
+    agentId: text("agent_id").notNull(),
+    revision: integer("revision").notNull(),
+    receipt: jsonb("receipt").notNull(),
+  },
+  (t) => [
+    unique("floorplan_edit_batch_revision").on(t.floorplanId, t.revision),
+  ],
+);
