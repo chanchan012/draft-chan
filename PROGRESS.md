@@ -2,7 +2,7 @@
 
 ## CAD roadmap
 
-The [architectural CAD roadmap](docs/CAD_ROADMAP.md) tracks shipped M5–M7 and planned M8–M17, with candidate MCP tools and release checks. M8.1 is next in the drafting track. M13.1 is the next visual milestone. Later milestones cover move-in rehearsals, client briefs, renovation and owner handover. The release history below records shipped work.
+The [architectural CAD roadmap](docs/CAD_ROADMAP.md) tracks shipped M5–M8 and planned M9–M17, with candidate MCP tools and release checks. M9.1 is next in the drafting track. M13.1 is the next visual milestone. Later milestones cover move-in rehearsals, client briefs, renovation and owner handover. The release history below records shipped work.
 
 ## M5.1 · Precision drafting
 
@@ -48,7 +48,15 @@ Strict TypeScript, the Next production build, 79 Vitest tests and 115 Playwright
 
 Application merge `4ee5539b8592f129f620abf34b04e85495914a9e` adds the Studio Building panel and an explicit storey model with an implicit Ground floor for older plans. Room topology, wall constraints, clearances, snaps and live cursors are scoped by storey. Wall assemblies specify material thicknesses and an authored centre or face reference. Net room polygons use finished wall solids. Gross storey areas follow the enclosed outside faces. Multi-storey SVG and DXF exports label side-by-side plans.
 
-Strict TypeScript, the Next build and 82 Vitest tests passed. The initial browser matrix passed 117 cases. After correcting rebase snapshot field order, all ten targeted storey-switching and remote-undo checks passed across five viewports. Draft exposes 37 MCP tools. Graph v1 adds optional storeys, assemblies and object placements. Database migrations remain through 0005. Vercel production dpl_AG9LJxQoAAWD8St9kBgU1MWkh86L reached Ready. Feature preview dpl_BuBSvvsPRuvdN2Q6uey3HzQZEzi6 is building.
+Strict TypeScript, the Next build and 82 Vitest tests passed. The initial browser matrix passed 117 cases. After correcting rebase snapshot field order, all ten targeted storey-switching and remote-undo checks passed across five viewports. Draft exposes 37 MCP tools. Graph v1 adds optional storeys, assemblies and object placements. Database migrations remain through 0005. Vercel production dpl_AG9LJxQoAAWD8St9kBgU1MWkh86L reached Ready. Feature preview dpl_BuBSvvsPRuvdN2Q6uey3HzQZEzi6 reached Ready.
+
+## M8.2 · Building structure and linked views
+
+Application merge `85385402a2c6a343cce25661f0ecf673507e8cb0` adds polygonal slabs, floor openings, straight stairs, and flat, shed and gable roofs. Storey plans, cut sections and orthographic elevations derive from the same model. A move to a stair linked to its destination slab updates the slab opening, room area and any affected views. Studio exposes these edits under Building → Structure and Building → Views. SVG and DXF plan exports include structural outlines.
+
+Strict TypeScript, the Next.js production build, 85 Vitest tests and 125 Playwright checks passed. The browser run covered five viewports. Its two-storey fixture verifies that moving a stair updates the section and the opening in the upper storey. The authenticated MCP tests verify that workflow and expose 45 tools and three resources in total. The graph stays at v1 with optional `buildingElements` and `buildingViews` fields. Neon migrations remain through 0005 and existing environment variables suffice.
+
+Vercel preview `dpl_GX3JHUXH6yTVpLF8Cj4ZXZ5PTDpr` and production `dpl_BAuBvqHaxnysMeuF2XY45jWE38Pe` reached Ready. Production checks returned HTTP 200 for the landing page, HTTP 307 for signed-out Studio and HTTP 401 with OAuth discovery for signed-out MCP.
 
 ## M1.1 · Foundation and shell
 

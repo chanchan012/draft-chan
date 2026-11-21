@@ -1,8 +1,8 @@
 # Architectural CAD and agent roadmap
 
-Draft supports floorplans, hosted openings, furnishing, an isometric cutaway, clearance screening, quantities, blueprint exports and the precision tools shipped in M5. Its authenticated MCP server exposes 33 tools and three resources. M8–M17 describe planned additions. The product focus is architectural drafting from measured survey through an issued drawing set.
+Draft supports floorplans, hosted openings, furnishing, an isometric cutaway, clearance screening, quantities, blueprint exports and the precision tools shipped in M5. Its authenticated MCP server exposes 45 tools and three resources. M9–M17 describe planned additions. The product focus is architectural drafting from measured survey through an issued drawing set.
 
-M5.1 and M5.2 shipped precision measurements, object snaps, exact entry and 2D sketch primitives. M6.1 and M6.2 shipped Studio editing commands and agent transactions. M7 is shipped with driving wall dimensions, layers and reusable blocks. M8.1 is the next drafting subgoal. M13.1 is the next visual milestone. The sequence below identifies dependencies and suggested release order.
+M5.1 and M5.2 shipped precision measurements, object snaps, exact entry and 2D sketch primitives. M6.1 and M6.2 shipped Studio editing commands and agent transactions. M7 is shipped with driving wall dimensions, layers and reusable blocks. M8 shipped multi-storey plans, wall assemblies, slabs, stairs, floor openings, roofs, sections and elevations. M9.1 is the next drafting subgoal. M13.1 is the next visual milestone. The sequence below identifies dependencies and suggested release order.
 
 ## Milestones
 
@@ -33,12 +33,12 @@ Available MCP tools include `add_constraint`, `set_driving_dimension`, `explain_
 
 **Acceptance.** Change a room width and keep its corners square and its door hosted. Return the conflicting constraint IDs for an impossible width. Editing a door-type definition updates its instances and preserves instance overrides. Locked layers reject human and agent edits equally.
 
-### M8 · Multi-storey building model
+### M8 · Multi-storey building model (shipped)
 
 - **8.1** Introduce storeys, elevations, wall types and layer thicknesses, room boundaries and net/gross areas.
 - **8.2** Add slabs, stairs and floor openings, roof profiles, linked plans, sections and elevations. Derive each view from the same model.
 
-Proposed MCP tools include `create_storey`, `set_wall_type`, `query_spaces`, `create_slab`, `place_stair`, `create_roof`, `create_section`, `create_elevation`.
+Shipped MCP tools include `create_storey`, `update_storey`, `set_wall_type`, `query_spaces`, `create_slab`, `create_floor_opening`, `place_stair`, `create_roof`, `create_section`, `create_elevation`, `query_building_view`, `remove_building_item`.
 
 **Acceptance.** In a two-storey fixture, moving a stair updates its section and floor opening. Changing a wall assembly updates the interior width and net area while preserving the selected wall reference line. Existing single-storey plans reopen with one default storey.
 

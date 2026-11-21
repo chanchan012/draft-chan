@@ -1,16 +1,25 @@
 # Resume handoff
 
+## M8 release checkpoint
+
+M8.1 application merge `4ee5539b8592f129f620abf34b04e85495914a9e` shipped storeys, wall assemblies and net/gross areas. M8.2 application merge `85385402a2c6a343cce25661f0ecf673507e8cb0` shipped slabs, stairs, floor openings, roof profiles, sections and elevations. Vercel preview `dpl_GX3JHUXH6yTVpLF8Cj4ZXZ5PTDpr` and production `dpl_BAuBvqHaxnysMeuF2XY45jWE38Pe` reached Ready. The MCP server exposes 45 tools and three resources. The optional v1 `buildingElements` and `buildingViews` fields use existing JSON storage. Neon migrations remain through 0005 and there are no new environment variables.
+
+Start with `lib/plans/storeys.ts`, `lib/plans/spaces.ts`, `lib/plans/building.ts`, `lib/plans/building-views.ts` and `components/studio/building-panel.tsx`. Verify from the repository root with these commands.
+
+```sh
+npm run typecheck
+npm test -- tests/storeys.unit.test.ts tests/building.unit.test.ts tests/mcp.unit.test.ts
+npm run test:e2e -- --grep 'adds an upper storey|moves a linked stair|undoes one adjacent'
+npm run build
+```
+
+The release passed all 85 Vitest tests and 125 Playwright checks. Playwright uses its configured local dev server unless `PLAYWRIGHT_BASE_URL` is set. The stair regression moves a linked stair, checks the section and upper opening, and saves the edited graph. The M6.2 preview/apply contract and migration ledger details are recorded below under M6.2 Agent transactions.
+
 ## Next proposed subgoal
 
-M8.1 is implemented in `lib/plans/storeys.ts`, `lib/plans/spaces.ts` and `components/studio/building-panel.tsx`. Run `npm test -- tests/storeys.unit.test.ts tests/mcp.unit.test.ts` and `npm run test:e2e -- --grep "adds an upper storey|undoes one adjacent"`. The graph stays at v1, database migrations end at 0005, and MCP exposes 37 tools at this checkpoint. M8.2 adds structure and derived building views.
+M9.1 starts construction documents with associative notes and dimensions, line styles, paper space and scaled sheet viewports. Read the [CAD roadmap](CAD_ROADMAP.md) and inspect `lib/plans/building-views.ts`, `lib/plans/blueprints.ts` and `components/studio/building-drawing.tsx`. Reuse model-space geometry to verify that a 5000 mm reference line occupies 100 mm at 1:50 on a sheet.
 
-M7.1 and M7.2 are complete. M8.1 is next in the drafting track. Review the [CAD roadmap](CAD_ROADMAP.md) and inspect `lib/plans/model.ts`, `lib/plans/constraints.ts` and `lib/plans/organization.ts` before changing the wall or room graph.
-
-M7.2 application merge `652602cb61072f2cea51f68131f4b294f64c1b24` exposes 33 MCP tools and three resources. Run `npm test -- tests/constraints.unit.test.ts tests/organization.unit.test.ts tests/mcp.unit.test.ts` and `npm run test:e2e -- --grep "solves a driving distance|updates a door block"` with a Studio test server. Graph v1 adds optional constraints, layers, definitions and instances. Neon migrations remain through 0005 and the existing environment variables are sufficient.
-
-The M6.2 preview/apply contract and migration ledger details are recorded below under M6.2 Agent transactions.
-
-The visual track starts at M13.1 in the [architectural CAD roadmap](CAD_ROADMAP.md). Inspect the current renderer with `rg --files components/studio lib/plans | rg "isometric|wall-mesh"`. Use the existing MCP-furnished apartment in `tests/e2e/studio.spec.ts` as the first reference scene.
+The visual track starts at M13.1 in the [CAD roadmap](CAD_ROADMAP.md). Inspect the current renderer with `rg --files components/studio lib/plans | rg "isometric|wall-mesh"`. Use the MCP-furnished apartment in `tests/e2e/studio.spec.ts` as the first reference scene.
 
 ## Reproduce the foundation
 
