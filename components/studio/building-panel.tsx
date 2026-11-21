@@ -2,6 +2,7 @@
 
 import { useMemo, useState, type FormEvent } from "react";
 import { planStoreys, assemblyThickness } from "@/lib/plans/storeys";
+import { BuildingViewsPanel, StructurePanel } from "./building-structure-panel";
 import { querySpaces } from "@/lib/plans/spaces";
 import {
   storeyInput,
@@ -18,6 +19,7 @@ type Props = {
   storey: Storey;
   wallIds: string[];
   onStorey(id: string): void;
+  onView(id: string): void;
   onEdit(commands: PlanCommand[]): void;
 };
 const number = (data: FormData, key: string) => Number(data.get(key));
@@ -141,9 +143,12 @@ export function BuildingPanel({
   storey,
   wallIds,
   onStorey,
+  onView,
   onEdit,
 }: Props) {
-  const [tab, setTab] = useState<"storeys" | "assemblies">("storeys");
+  const [tab, setTab] = useState<
+    "storeys" | "assemblies" | "structure" | "views"
+  >("storeys");
   const [error, setError] = useState("");
   const [adding, setAdding] = useState(false);
   const [typeId, setTypeId] = useState("");
@@ -214,8 +219,41 @@ export function BuildingPanel({
         >
           Wall assemblies
         </button>
+        <button
+          type="button"
+          aria-pressed={tab === "structure"}
+          onClick={() => {
+            setTab("structure");
+            setError("");
+          }}
+        >
+          Structure
+        </button>
+        <button
+          type="button"
+          aria-pressed={tab === "views"}
+          onClick={() => {
+            setTab("views");
+            setError("");
+          }}
+        >
+          Views
+        </button>
       </div>
-      {tab === "storeys" ? (
+      {tab === "structure" ? (
+        <StructurePanel
+          building={building}
+          storey={storey}
+          onCommand={(command) => onEdit([command])}
+        />
+      ) : tab === "views" ? (
+        <BuildingViewsPanel
+          building={building}
+          storey={storey}
+          onCommand={(command) => onEdit([command])}
+          onView={onView}
+        />
+      ) : tab === "storeys" ? (
         <>
           <label className="studio-org-label">
             Active storey

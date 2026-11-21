@@ -2,6 +2,8 @@ import polygonClipping, {
   type MultiPolygon,
   type Polygon,
 } from "polygon-clipping";
+import { storeyVoids } from "./building";
+import { clipPolygon, drawingPolygons } from "./clipping";
 import { dot, subtract } from "./footprints";
 import type { DraftPlanState, Point } from "./model";
 import { polygonAreaMm2 } from "./polygon";
@@ -9,20 +11,15 @@ import { planStoreys, storeyPlan } from "./storeys";
 import { wallOutline } from "./wall-mesh";
 import { solveWallTopology } from "./wall-topology";
 
-export const clipPolygon = (rings: readonly (readonly Point[])[]): Polygon =>
-  rings.map((ring) => ring.map(({ x, y }) => [x, y]));
-export function drawingPolygons(polygons: MultiPolygon) {
-  return polygons.map((rings) =>
-    rings.map((ring) => ring.slice(0, -1).map(([x, y]) => ({ x, y }))),
-  );
-}
-
 export function querySpaces(plan: DraftPlanState, id?: string) {
   return planStoreys(plan)
     .filter((level) => !id || level.id === id)
     .sort((a, b) => a.elevationMm - b.elevationMm)
     .map((level) => {
       const drawing = storeyPlan(plan, level.id);
+      const voids = storeyVoids(plan, level.id).map((item) =>
+        clipPolygon([item.footprint]),
+      );
       const { rooms, walls } = drawing;
       const wallsById = new Map(walls.map((wall) => [wall.id, wall]));
       const footprints = wallOutline(walls).map((ring) => clipPolygon([ring]));
@@ -46,17 +43,21 @@ export function querySpaces(plan: DraftPlanState, id?: string) {
       const outlines = rooms.map((room) =>
         clipPolygon([room.polygon, ...(room.holes ?? [])]),
       );
-      const gross = outlines.length
-        ? drawingPolygons(
-            polygonClipping.union([
-              ...outlines,
-              ...wallOutline(boundaryWalls).map((ring) => clipPolygon([ring])),
-            ]),
-          )
+      const perimeterPolygons = outlines.length
+        ? polygonClipping.union([
+            ...outlines,
+            ...wallOutline(boundaryWalls).map((ring) => clipPolygon([ring])),
+          ])
         : [];
+      const gross = drawingPolygons(
+        voids.length && perimeterPolygons.length
+          ? polygonClipping.difference(perimeterPolygons, ...voids)
+          : perimeterPolygons,
+      );
+      const obstacles = [...solid, ...voids];
       const spaces = rooms.map((room, i) => {
-        const clipped = solid.length
-          ? polygonClipping.difference(outlines[i], solid)
+        const clipped = obstacles.length
+          ? polygonClipping.difference(outlines[i], ...obstacles)
           : [outlines[i].map((ring) => [...ring, ring[0]])];
         const net = drawingPolygons(clipped);
         return {

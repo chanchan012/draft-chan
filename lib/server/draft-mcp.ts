@@ -39,6 +39,10 @@ import {
   utilityInput,
   annotationInput,
   constraintInput,
+  buildingElements,
+  buildingViews,
+  type BuildingElement,
+  type BuildingView,
   storeyInput,
   storeyIdInput,
   wallTypeInput,
@@ -53,6 +57,8 @@ import {
   type PlanCommand,
   type Point,
 } from "../plans/model";
+import { deriveBuildingView } from "../plans/building-views";
+import { openingsForSlab } from "../plans/building";
 import { querySpaces } from "../plans/spaces";
 import { planStoreys, storeyPlan, storeyById } from "../plans/storeys";
 import { pointAlong } from "../plans/openings";
@@ -419,6 +425,134 @@ export function createDraftMcp(scope: AgentScope, backend = draftMcpBackend) {
         planId,
         revision: doc.revision,
         storeys: querySpaces(doc.graph, storeyId),
+      };
+    },
+  );
+
+  function writeBuilding(
+    doc: StudioDocument,
+    item: BuildingElement,
+  ): AgentEdit {
+    const plan = commands(doc, [{ type: "building.write", item }]);
+    const slabId =
+      item.kind === "slab"
+        ? item.id
+        : item.kind === "stair"
+          ? item.openingSlabId
+          : item.kind === "opening"
+            ? item.slabId
+            : undefined;
+    return {
+      plan,
+      result: {
+        elementId: item.id,
+        ...(slabId ? { slabId, openings: openingsForSlab(plan, slabId) } : {}),
+      },
+    };
+  }
+  function writeView(doc: StudioDocument, view: BuildingView): AgentEdit {
+    const plan = commands(doc, [{ type: "building.view", view }]);
+    return { plan, result: { viewId: view.id } };
+  }
+  edit(
+    "create_slab",
+    "Create or replace a slab by ID. Supply a simple footprint in millimeters and a storey. Offset is measured from that storey's elevation to the slab top.",
+    z.strictObject({
+      ...revision,
+      slab: buildingElements[0].omit({ kind: true }),
+    }),
+    (doc, { slab }) => writeBuilding(doc, { kind: "slab", ...slab }),
+  );
+  edit(
+    "create_floor_opening",
+    "Create or replace a polygonal opening inside a slab.",
+    z.strictObject({
+      ...revision,
+      opening: buildingElements[1].omit({ kind: true }),
+    }),
+    (doc, { opening }) => writeBuilding(doc, { kind: "opening", ...opening }),
+  );
+  edit(
+    "place_stair",
+    "Place or move a straight stair by ID. A supplied openingSlabId cuts the stair footprint into the destination slab and updates on moves.",
+    z.strictObject({
+      ...revision,
+      stair: buildingElements[2].omit({ kind: true }),
+    }),
+    (doc, { stair }) => writeBuilding(doc, { kind: "stair", ...stair }),
+  );
+  edit(
+    "create_roof",
+    "Create or replace a flat, shed or gable roof profile in model millimeters and degrees. The direction is clockwise from +X in plan.",
+    z.strictObject({
+      ...revision,
+      roof: buildingElements[3].omit({ kind: true }),
+    }),
+    (doc, { roof }) => writeBuilding(doc, { kind: "roof", ...roof }),
+  );
+  edit(
+    "create_section",
+    "Save or replace a finite section cut from start to end in plan. Each derived section spans the building's storeys.",
+    z.strictObject({
+      ...revision,
+      section: buildingViews[0].omit({ kind: true }),
+    }),
+    (doc, { section }) => writeView(doc, { kind: "section", ...section }),
+  );
+  edit(
+    "create_elevation",
+    "Save or replace an orthographic elevation from the given side of the building.",
+    z.strictObject({
+      ...revision,
+      elevation: buildingViews[1].omit({ kind: true }),
+    }),
+    (doc, { elevation }) => writeView(doc, { kind: "elevation", ...elevation }),
+  );
+  edit(
+    "remove_building_item",
+    "Remove a structural element or view by ID. Slabs referenced by openings or stairs must be detached first.",
+    z.strictObject({
+      ...revision,
+      id: objectId,
+      collection: z.enum(["elements", "views"]),
+    }),
+    (doc, { id, collection }) => ({
+      plan: commands(doc, [{ type: "building.remove", id, collection }]),
+      result: { id },
+    }),
+  );
+  tool(
+    "query_building_view",
+    "Get a derived section or elevation with model-space polygons. Omit viewId to list saved views and current slab openings.",
+    z.strictObject({
+      viewId: objectId.optional(),
+    }),
+    true,
+    async ({ viewId }) => {
+      const doc = await current();
+      const views = doc.graph.buildingViews ?? [];
+      if (viewId) {
+        const view = views.find((item) => item.id === viewId);
+        if (!view)
+          throw new ToolFailure(
+            "entity_unavailable",
+            "The building view is unavailable.",
+          );
+        return {
+          planId,
+          revision: doc.revision,
+          ...deriveBuildingView(doc.graph, view),
+        };
+      }
+      return {
+        planId,
+        revision: doc.revision,
+        views,
+        slabs: (doc.graph.buildingElements ?? []).flatMap((item) =>
+          item.kind === "slab"
+            ? [{ ...item, openings: openingsForSlab(doc.graph, item.id) }]
+            : [],
+        ),
       };
     },
   );

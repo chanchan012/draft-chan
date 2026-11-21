@@ -10,12 +10,20 @@ import {
   type KeyboardEvent,
   type PointerEvent,
 } from "react";
+import { BuildingPlanDrawing } from "./building-drawing";
+import {
+  buildingElementFootprint,
+  elementsOnStorey,
+  roofProfile,
+} from "@/lib/plans/building";
+import { storeyById } from "@/lib/plans/storeys";
 import { visibleDrawing } from "@/lib/plans/organization";
 import { createPortal } from "react-dom";
 import {
   fitCamera,
   modelPoint,
   pinchCamera,
+  projectIso,
   snapPoint,
   unitFactor,
   wallHit,
@@ -77,6 +85,7 @@ type SurfaceProps = {
   unit: DisplayUnit;
   thicknessMm: number;
   wallHeightMm?: number;
+  storeyId?: string;
   selection: readonly Selection[];
   multi: boolean;
   layers: Record<UtilityLayer, boolean>;
@@ -120,6 +129,7 @@ export function Surface({
   unit,
   thicknessMm,
   wallHeightMm,
+  storeyId = "ground",
   selection,
   multi,
   layers,
@@ -166,6 +176,24 @@ export function Surface({
   const [precisionError, setPrecisionError] = useState("");
   const setCamera = iso ? setIsoCamera : setPlanCamera;
   const geometry = iso ? plan : initial.current;
+  const structurePoints = useMemo(() => {
+    const base = storeyById(plan, storeyId).elevationMm;
+    return elementsOnStorey(plan, storeyId).flatMap((item) => {
+      const footprint = buildingElementFootprint(item);
+      if (!iso) return footprint;
+      const roof = item.kind === "roof" ? roofProfile(plan, item) : undefined;
+      const z =
+        item.kind === "stair" && item.fromStoreyId === storeyId
+          ? storeyById(plan, item.toStoreyId).elevationMm - base
+          : item.kind === "slab"
+            ? item.offsetMm - item.thicknessMm
+            : 0;
+      return [...footprint, ...(roof?.ridgePoints ?? [])].flatMap((point) => [
+        projectIso(point),
+        projectIso(point, roof ? roof.height(point) - base : z),
+      ]);
+    });
+  }, [iso, plan, storeyId]);
   const camera =
     (iso ? isoCamera : planCamera) ??
     fitCamera(
@@ -179,6 +207,7 @@ export function Surface({
       geometry.annotations,
       geometry.sketches,
       wallHeightMm,
+      structurePoints,
     );
   const center = { x: size.width / 2, y: size.height / 2 };
   const origin = {
@@ -762,7 +791,11 @@ export function Surface({
           transform={`translate(${origin.x} ${origin.y}) scale(${camera.scale})`}
         >
           {iso ? (
-            <IsometricDrawing plan={plan} heightMm={wallHeightMm} />
+            <IsometricDrawing
+              plan={plan}
+              heightMm={wallHeightMm}
+              storeyId={storeyId}
+            />
           ) : (
             <PlanDrawing
               plan={rendered}
@@ -774,6 +807,7 @@ export function Surface({
               unit={unit}
             />
           )}
+          {!iso && <BuildingPlanDrawing plan={plan} storeyId={storeyId} />}
           {!iso && <ClearanceDrawing issue={issue} scale={camera.scale} />}
           {!iso && localOrigin && (
             <path
@@ -880,6 +914,7 @@ export function Surface({
         !plan.utilities.length &&
         !plan.annotations?.length &&
         !plan.sketches?.length &&
+        !structurePoints.length &&
         tool !== "sketch" &&
         !start && (
           <div className="studio-empty">
@@ -1086,6 +1121,7 @@ export function Surface({
                     plan.annotations,
                     plan.sketches,
                     wallHeightMm,
+                    structurePoints,
                   ),
                 )
               }

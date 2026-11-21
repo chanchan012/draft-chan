@@ -27,14 +27,63 @@ import {
   sketchPath,
   sketchPoints,
 } from "./sketch";
+import {
+  elementsOnStorey,
+  roofProfile,
+  slabPolygons,
+  stairFootprint,
+  stairSteps,
+  storeyVoids,
+} from "./building";
 import { planStoreys, storeyPlan } from "./storeys";
 import type { DraftPlanState, Point } from "./model";
 import type { BlueprintFormat } from "./exports";
 
-function blueprintGeometry(plan: DraftPlanState) {
+type StructuralOutline = {
+  layer: "SLABS" | "STAIRS" | "FLOOR_OPENINGS" | "ROOFS";
+  rings: Point[][];
+  lines: [Point, Point][];
+};
+function structuralOutlines(
+  plan: DraftPlanState,
+  storeyId: string,
+): StructuralOutline[] {
+  const outlines: StructuralOutline[] = [];
+  for (const item of elementsOnStorey(plan, storeyId)) {
+    if (item.kind === "slab")
+      for (const rings of slabPolygons(plan, item))
+        outlines.push({ layer: "SLABS", rings, lines: [] });
+    else if (item.kind === "stair" && item.fromStoreyId === storeyId)
+      outlines.push({
+        layer: "STAIRS",
+        rings: [stairFootprint(item)],
+        lines: stairSteps(plan, item)
+          .slice(1)
+          .map(({ footprint }) => [footprint[0], footprint[3]]),
+      });
+    else if (item.kind === "roof") {
+      const ridge = roofProfile(plan, item).ridgePoints;
+      outlines.push({
+        layer: "ROOFS",
+        rings: [item.footprint],
+        lines: ridge.length === 2 ? [[ridge[0], ridge[1]]] : [],
+      });
+    }
+  }
+  for (const hole of storeyVoids(plan, storeyId))
+    outlines.push({
+      layer: "FLOOR_OPENINGS",
+      rings: [hole.footprint],
+      lines: [],
+    });
+  return outlines;
+}
+
+function blueprintGeometry(plan: DraftPlanState, storeyId = "ground") {
   const wallsById = new Map(plan.walls.map((wall) => [wall.id, wall]));
   const openings = [...plan.openings, ...(plan.windows ?? [])];
   return {
+    structure: structuralOutlines(plan, storeyId),
     labels: [] as { name: string; position: Point }[],
     sketches: (plan.sketches ?? []).map(({ geometry }) => geometry),
     walls: plan.walls.flatMap((wall) =>
@@ -100,6 +149,7 @@ function exportDxf({
   utilities,
   sketches,
   labels,
+  structure,
 }: Geometry) {
   const writer = new DxfWriter();
   writer.setUnits(Units.Millimeters);
@@ -186,6 +236,13 @@ function exportDxf({
       { layerName },
     );
   }
+  for (const name of new Set(structure.map((item) => item.layer)))
+    writer.addLayer(name, Colors.Cyan);
+  for (const item of structure) {
+    for (const ring of item.rings) polygon(ring, item.layer);
+    for (const [a, b] of item.lines)
+      writer.addLine(vertex(a), vertex(b), { layerName: item.layer });
+  }
   if (labels.length) {
     writer.addLayer("STOREYS", Colors.White);
     for (const label of labels)
@@ -220,11 +277,16 @@ function exportSvg(
     utilities,
     sketches,
     labels,
+    structure,
   }: Geometry,
   title: string,
 ) {
   const points = [
     ...walls.flat(),
+    ...structure.flatMap((item) => [
+      ...item.rings.flat(),
+      ...item.lines.flat(),
+    ]),
     ...labels.flatMap(({ name, position }) => [
       position,
       { x: position.x + name.length * 82, y: position.y - 140 },
@@ -301,6 +363,16 @@ function exportSvg(
       (label) =>
         `<text x="${rounded(label.position.x)}" y="${rounded(label.position.y)}" font-size="125" fill="#253a49">${escapeXml(label.name)}</text>`,
     ),
+    ...structure.map((item) => {
+      const d =
+        item.rings
+          .map((ring) => "M " + ring.map(coordinate).join(" L ") + " Z")
+          .join(" ") +
+        item.lines
+          .map(([a, b]) => " M " + coordinate(a) + " L " + coordinate(b))
+          .join("");
+      return `<path data-layer="${item.layer}" d="${d}" fill="${item.layer === "SLABS" ? "#edf0eb" : "none"}" fill-rule="evenodd" stroke="#627b77" stroke-width="8"/>`;
+    }),
     layer("walls", "#253a49", "#253a49", walls.map(polygonTag).join("")),
     layer("doors", "none", "#38566c", doorShapes),
     ...(windows.length
@@ -336,13 +408,17 @@ function multiStoreyGeometry(plan: DraftPlanState): Geometry {
     (a, b) => a.elevationMm - b.elevationMm,
   );
   if (storeys.length === 1) return blueprintGeometry(plan);
-  const result = blueprintGeometry(storeyPlan(plan, ""));
+  const result = blueprintGeometry(storeyPlan(plan, ""), "");
   let right = 0;
   for (const level of storeys) {
     const drawing = storeyPlan(plan, level.id);
-    const source = blueprintGeometry(drawing);
+    const source = blueprintGeometry(drawing, level.id);
     const points = [
       ...source.walls.flat(),
+      ...source.structure.flatMap((item) => [
+        ...item.rings.flat(),
+        ...item.lines.flat(),
+      ]),
       ...source.fixtures.flat(),
       ...source.sketches.flatMap(sketchPoints),
       ...source.doors.flatMap((item) => [item.hinge, item.closed, item.leaf]),
@@ -359,6 +435,15 @@ function multiStoreyGeometry(plan: DraftPlanState): Geometry {
       name: level.name,
       position: { x: right, y: box.top - 250 },
     });
+    result.structure.push(
+      ...source.structure.map((item) => ({
+        ...item,
+        rings: item.rings.map((ring) => ring.map(shift)),
+        lines: item.lines.map(
+          ([a, b]) => [shift(a), shift(b)] as [Point, Point],
+        ),
+      })),
+    );
     result.walls.push(...source.walls.map((ring) => ring.map(shift)));
     result.fixtures.push(...source.fixtures.map((ring) => ring.map(shift)));
     result.sketches.push(

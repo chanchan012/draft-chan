@@ -33,6 +33,7 @@ import { cadEditCommands } from "@/lib/plans/cad-edit";
 import { summarizeChanges } from "@/lib/plans/change-summary";
 import { ConstraintsPanel } from "./constraints-panel";
 import { BlocksPanel, NamedLayersPanel } from "./organization-panel";
+import { BuildingViewDrawing } from "./building-drawing";
 import { BuildingPanel } from "./building-panel";
 import {
   groundStorey,
@@ -114,6 +115,10 @@ export function Studio({
     redo,
     executeBatch,
   } = useStore(store);
+  const [buildingViewId, setBuildingViewId] = useState<string>();
+  const buildingView = building.buildingViews?.find(
+    (view) => view.id === buildingViewId,
+  );
   const [activeStorey, setActiveStorey] = useState(groundStorey.id);
   const level =
     planStoreys(building).find((item) => item.id === activeStorey) ??
@@ -239,6 +244,7 @@ export function Studio({
 
   const switchTool = useCallback((next: Tool) => {
     setTool(next);
+    setBuildingViewId(undefined);
     if (next !== "select") setMulti(false);
     setRightPanel((panel) => (panel === "clearance" ? "inspector" : panel));
     setFinding(undefined);
@@ -542,8 +548,15 @@ export function Studio({
                 .map((item) => item.id)}
               onStorey={(id) => {
                 setActiveStorey(id);
+                setBuildingViewId(undefined);
                 setSelection([]);
                 setFinding(undefined);
+              }}
+              onView={(id) => {
+                setBuildingViewId(id);
+                live.moveCursor(null);
+                setIso(false);
+                setSelection([]);
               }}
               onEdit={(inputs) => {
                 executeBatch(inputs, actor);
@@ -580,13 +593,20 @@ export function Studio({
             role="group"
             aria-label="View"
           >
-            <button aria-pressed={!iso} onClick={() => setIso(false)}>
+            <button
+              aria-pressed={!iso && !buildingView}
+              onClick={() => {
+                setIso(false);
+                setBuildingViewId(undefined);
+              }}
+            >
               2D plan
             </button>
             <button
               aria-pressed={iso}
               onClick={() => {
                 setIso(true);
+                setBuildingViewId(undefined);
                 setSelection([]);
               }}
             >
@@ -596,126 +616,135 @@ export function Studio({
               className="studio-ortho"
               aria-pressed={ortho}
               onClick={() => setOrtho(!ortho)}
-              disabled={iso}
+              disabled={iso || Boolean(buildingView)}
             >
               Ortho
             </button>
           </div>
 
-          <div
-            className="studio-floating studio-tools"
-            role="group"
-            aria-label="Drawing tools"
-          >
-            {tools.map(({ id, label, icon: Icon, shortcut }) => (
-              <button
-                key={id}
-                aria-label={label}
-                aria-pressed={tool === id && (!iso || id === "pan")}
-                onClick={() => switchTool(id)}
-                aria-keyshortcuts={shortcut}
-                title={`${label} (${shortcut})`}
+          {buildingView ? (
+            <BuildingViewDrawing building={building} view={buildingView} />
+          ) : (
+            <>
+              <div
+                className="studio-floating studio-tools"
+                role="group"
+                aria-label="Drawing tools"
               >
-                <Icon size={19} />
-              </button>
-            ))}
-          </div>
+                {tools.map(({ id, label, icon: Icon, shortcut }) => (
+                  <button
+                    key={id}
+                    aria-label={label}
+                    aria-pressed={tool === id && (!iso || id === "pan")}
+                    onClick={() => switchTool(id)}
+                    aria-keyshortcuts={shortcut}
+                    title={`${label} (${shortcut})`}
+                  >
+                    <Icon size={19} />
+                  </button>
+                ))}
+              </div>
 
-          <div
-            className="studio-floating studio-selection-actions"
-            role="group"
-            aria-label="Selection tools"
-          >
-            <button
-              aria-label="Multi-select"
-              title="Multi-select (or Shift-click)"
-              aria-pressed={tool === "select" && multi && !iso}
-              onClick={() => {
-                if (iso || tool !== "select") switchTool("select");
-                setMulti(tool !== "select" || iso || !multi);
-              }}
-            >
-              <ListChecks size={18} />
-            </button>
-            <button
-              aria-label="Delete selection"
-              title="Delete selection (Backspace or Delete)"
-              disabled={!selection.length || iso}
-              onClick={remove}
-            >
-              <Trash2 size={17} />
-            </button>
-            <span className="studio-selection-count" aria-live="polite">
-              {selection.length ? selection.length + " selected" : ""}
-            </span>
-          </div>
+              <div
+                className="studio-floating studio-selection-actions"
+                role="group"
+                aria-label="Selection tools"
+              >
+                <button
+                  aria-label="Multi-select"
+                  title="Multi-select (or Shift-click)"
+                  aria-pressed={tool === "select" && multi && !iso}
+                  onClick={() => {
+                    if (iso || tool !== "select") switchTool("select");
+                    setMulti(tool !== "select" || iso || !multi);
+                  }}
+                >
+                  <ListChecks size={18} />
+                </button>
+                <button
+                  aria-label="Delete selection"
+                  title="Delete selection (Backspace or Delete)"
+                  disabled={!selection.length || iso}
+                  onClick={remove}
+                >
+                  <Trash2 size={17} />
+                </button>
+                <span className="studio-selection-count" aria-live="polite">
+                  {selection.length ? selection.length + " selected" : ""}
+                </span>
+              </div>
 
-          <Surface
-            key={level.id}
-            plan={plan}
-            wallHeightMm={level.wallHeightMm}
-            tool={tool}
-            iso={iso}
-            ortho={ortho}
-            grid={gridSteps[unit][gridIndex] * unitFactor(unit)}
-            unit={unit}
-            thicknessMm={wall.thicknessMm}
-            selection={selection}
-            multi={multi}
-            layers={layers}
-            issue={issue}
-            zoomSlot={zoomSlot}
-            peers={live.peers.filter(
-              (peer) => (peer.storeyId ?? groundStorey.id) === level.id,
-            )}
-            onPresence={live.moveCursor}
-            onPlace={place}
-            onSelect={choose}
-            onToggle={(item) =>
-              setSelection(
-                isSelected(selection, item)
-                  ? selection.filter(
-                      (entry) => selectionKey(entry) !== selectionKey(item),
-                    )
-                  : [...selection, item],
-              )
-            }
-            onMove={(items, delta) => edit(moveSelection(plan, items, delta))}
-            onWall={drawWall}
-            onSketch={(geometry) =>
-              command({
-                type: "sketch.add",
-                sketch: { id: crypto.randomUUID(), geometry },
-              })
-            }
-            onDimension={(start, end) =>
-              command({
-                type: "dimension.add",
-                annotation: { id: crypto.randomUUID(), start, end },
-              })
-            }
-            onDoor={(wallId, offsetMm) =>
-              openingType === "window"
-                ? command({
-                    type: "window.add",
-                    opening: {
-                      id: crypto.randomUUID(),
-                      wallId,
-                      offsetMm,
-                      ...windowSettings,
-                    },
+              <Surface
+                key={level.id}
+                plan={plan}
+                storeyId={level.id}
+                wallHeightMm={level.wallHeightMm}
+                tool={tool}
+                iso={iso}
+                ortho={ortho}
+                grid={gridSteps[unit][gridIndex] * unitFactor(unit)}
+                unit={unit}
+                thicknessMm={wall.thicknessMm}
+                selection={selection}
+                multi={multi}
+                layers={layers}
+                issue={issue}
+                zoomSlot={zoomSlot}
+                peers={live.peers.filter(
+                  (peer) => (peer.storeyId ?? groundStorey.id) === level.id,
+                )}
+                onPresence={live.moveCursor}
+                onPlace={place}
+                onSelect={choose}
+                onToggle={(item) =>
+                  setSelection(
+                    isSelected(selection, item)
+                      ? selection.filter(
+                          (entry) => selectionKey(entry) !== selectionKey(item),
+                        )
+                      : [...selection, item],
+                  )
+                }
+                onMove={(items, delta) =>
+                  edit(moveSelection(plan, items, delta))
+                }
+                onWall={drawWall}
+                onSketch={(geometry) =>
+                  command({
+                    type: "sketch.add",
+                    sketch: { id: crypto.randomUUID(), geometry },
                   })
-                : command({
-                    type: "door.add",
-                    door: {
-                      id: crypto.randomUUID(),
-                      wallId,
-                      offsetMm,
-                      ...door,
-                    },
+                }
+                onDimension={(start, end) =>
+                  command({
+                    type: "dimension.add",
+                    annotation: { id: crypto.randomUUID(), start, end },
                   })
-            }
-          />
+                }
+                onDoor={(wallId, offsetMm) =>
+                  openingType === "window"
+                    ? command({
+                        type: "window.add",
+                        opening: {
+                          id: crypto.randomUUID(),
+                          wallId,
+                          offsetMm,
+                          ...windowSettings,
+                        },
+                      })
+                    : command({
+                        type: "door.add",
+                        door: {
+                          id: crypto.randomUUID(),
+                          wallId,
+                          offsetMm,
+                          ...door,
+                        },
+                      })
+                }
+              />
+            </>
+          )}
         </div>
 
         <div
