@@ -569,6 +569,9 @@ export function Studio({
           {leftPanel === "sheets" ? (
             <SheetsPanel
               building={building}
+              planId={initial.id}
+              revision={checkpoint.revision}
+              dirty={dirty}
               plan={plan}
               level={level}
               selection={[...selection]}
@@ -669,7 +672,14 @@ export function Studio({
           </div>
 
           {sheet ? (
-            <SheetDrawing plan={building} sheet={sheet} />
+            <SheetDrawing
+              plan={building}
+              sheet={sheet}
+              project={checkpoint.name}
+              revisionLabel={
+                dirty ? "Draft" : "Source revision " + checkpoint.revision
+              }
+            />
           ) : buildingView ? (
             <BuildingViewDrawing building={building} view={buildingView} />
           ) : (

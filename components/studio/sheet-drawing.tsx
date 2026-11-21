@@ -1,4 +1,5 @@
 import { useId, useMemo } from "react";
+import { paperTitleBlock } from "@/lib/plans/sheet-title";
 import type { DraftPlanState, Sheet } from "@/lib/plans/model";
 import {
   documentMarks,
@@ -68,15 +69,20 @@ export function PlanMarks({
 export function SheetDrawing({
   plan,
   sheet,
+  project,
+  revisionLabel,
 }: {
   plan: DraftPlanState;
   sheet: Sheet;
+  project: string;
+  revisionLabel: string;
 }) {
   const prefix = useId();
   const { width, height, panels } = useMemo(
     () => paperDrawing(plan, sheet),
     [plan, sheet],
   );
+  const titleBlock = paperTitleBlock(sheet, project, revisionLabel);
   return (
     <div className="studio-paper-stage">
       <svg
@@ -120,6 +126,21 @@ export function SheetDrawing({
             </g>
           );
         })}
+        <clipPath id={prefix + "-title"}>
+          <rect x={6} y={height - 24} width={width - 49} height={18} />
+        </clipPath>
+        <g clipPath={`url(#${prefix}-title)`}>
+          <Primitives
+            items={titleBlock.filter(
+              (item) => item.kind === "text" && item.align !== "end",
+            )}
+          />
+        </g>
+        <Primitives
+          items={titleBlock.filter(
+            (item) => item.kind !== "text" || item.align === "end",
+          )}
+        />
       </svg>
     </div>
   );

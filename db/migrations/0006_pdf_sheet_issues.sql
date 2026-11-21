@@ -1,0 +1,1 @@
+ALTER TYPE "public"."blueprint_format" ADD VALUE 'pdf';

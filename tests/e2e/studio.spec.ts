@@ -6,6 +6,7 @@ import {
   isCallToolResult,
 } from "@modelcontextprotocol/client";
 import { buildSync } from "esbuild";
+import { sheetFixture } from "../sheet-fixture";
 import { initialGraph } from "../../lib/plans/plan-state";
 import {
   applyStudioSnapshot,
@@ -940,6 +941,63 @@ test("lays out an A3 drawing at 1:50 and restores its saved viewport", async ({
   const box = (await drawing.boundingBox())!;
   expect(box.width).toBeGreaterThan(180);
   expect(box.height).toBeGreaterThan(140);
+});
+
+test("publishes and downloads the saved PDF issue from Sheets", async ({
+  page,
+}) => {
+  const workspace = studioWorkspace();
+  workspace.document.graph = sheetFixture();
+  workspace.document.revision = 4;
+  const issue: Blueprint = {
+    id: crypto.randomUUID(),
+    format: "pdf",
+    revision: 4,
+    status: "pending",
+  };
+  let requested = false;
+  await page.route(`**/api/floorplans/${id}/issues`, (route) =>
+    route.fulfill({ json: requested ? [{ ...issue, status: "ready" }] : [] }),
+  );
+  await page.route(`**/api/floorplans/${id}/exports`, (route) => {
+    expect(route.request().postDataJSON()).toEqual({
+      format: "pdf",
+      revision: 4,
+    });
+    requested = true;
+    return route.fulfill({ status: 202, json: issue });
+  });
+  await page.route(
+    `**/api/floorplans/${id}/exports/${issue.id}/download`,
+    (route) =>
+      route.fulfill({
+        contentType: "application/pdf",
+        headers: {
+          "Content-Disposition":
+            'attachment; filename="oak-house-r4-issued.pdf"',
+        },
+        body: "%PDF-1.7",
+      }),
+  );
+  await studio(page, false, workspace);
+  await page
+    .getByRole("group", { name: "Left sidebar" })
+    .getByRole("button", { name: "Sheets" })
+    .click();
+  const panel = page.getByRole("complementary", { name: "Sheets" });
+  await panel.getByRole("button", { name: "Schedules", exact: true }).click();
+  await panel.getByText("Door schedule", { exact: false }).click();
+  await expect(panel.getByText("D-01", { exact: true })).toBeVisible();
+  await panel.getByRole("button", { name: "Issues", exact: true }).click();
+  await expect(panel.getByText("No issued sets")).toBeVisible();
+  await panel.getByRole("button", { name: "Publish PDF set" }).click();
+  await expect(panel.getByText("Revision 4", { exact: true })).toBeVisible();
+  const [download] = await Promise.all([
+    page.waitForEvent("download"),
+    panel.getByRole("link", { name: "Download PDF" }).click(),
+  ]);
+  expect(download.suggestedFilename()).toBe("oak-house-r4-issued.pdf");
+  await viewportFits(page);
 });
 
 test("keeps unsaved drawing after a revision conflict", async ({ page }) => {

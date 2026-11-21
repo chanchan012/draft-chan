@@ -185,3 +185,57 @@ describe("revision-bound exports", () => {
     expect(await file.text()).toMatch(/\bEOF\s*$/);
   });
 });
+
+it("keeps a published sheet set available and unchanged after a model edit", async () => {
+  const api = client("issue-owner");
+  const outsider = client("different-owner");
+  const id = crypto.randomUUID();
+  await api("POST", "", { id, name: "Oak House" });
+  expect(
+    (await api("POST", id + "/exports", { revision: 0, format: "pdf" })).status,
+  ).toBe(400);
+  const { studioSnapshot } = await import("../lib/plans/studio-document");
+  const { sheetFixture } = await import("./sheet-fixture");
+  const plan = sheetFixture();
+  const saved = await api("PATCH", id + "/graph", {
+    revision: 0,
+    ...studioSnapshot(plan, "mm"),
+  });
+  expect(await saved.json()).toEqual({ revision: 1 });
+  const body = { format: "pdf", revision: 1 };
+  const [a, b] = await Promise.all([
+    api("POST", id + "/exports", body),
+    api("POST", id + "/exports", body),
+  ]);
+  expect(a.status).toBe(202);
+  expect(b.status).toBe(202);
+  const pending = await a.json();
+  expect(await b.json()).toEqual(pending);
+  expect(pending).toMatchObject({ ...body, status: "pending" });
+  expect(
+    (await api("PATCH", id, { revision: 1, name: "Oak House renovated" }))
+      .status,
+  ).toBe(200);
+
+  expect(await renderQueuedBlueprint({ id: pending.id, attempt: 1 })).toEqual({
+    written: true,
+  });
+  const url = id + "/exports/" + pending.id + "/download";
+  const download = await api("GET", url);
+  expect(download.headers.get("content-type")).toBe("application/pdf");
+  expect(download.headers.get("content-disposition")).toContain(
+    "oak-house-r1-issued.pdf",
+  );
+  const original = Buffer.from(await download.arrayBuffer());
+  expect(original.subarray(0, 5).toString()).toBe("%PDF-");
+  const issues = await api("GET", id + "/issues");
+  expect(await issues.json()).toEqual([{ ...pending, status: "ready" }]);
+  const reused = await api("POST", id + "/exports", body);
+  expect(reused.status).toBe(200);
+  expect(await reused.json()).toEqual({ ...pending, status: "ready" });
+  expect(Buffer.from(await (await api("GET", url)).arrayBuffer())).toEqual(
+    original,
+  );
+  expect((await outsider("GET", url)).status).toBe(404);
+  expect((await outsider("GET", id + "/issues")).status).toBe(404);
+});

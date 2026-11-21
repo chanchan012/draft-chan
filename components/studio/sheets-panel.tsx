@@ -1,6 +1,9 @@
+import { SheetIssues } from "./sheet-issues";
+import { SheetSchedules } from "./sheet-schedules";
 import { useState, type FormEvent, type ReactNode } from "react";
 import {
   anchorPoint,
+  isDrawingMark,
   markAnchors,
   paperSize,
 } from "@/lib/plans/drawing-documents";
@@ -93,6 +96,9 @@ const markNames: Record<MarkKind, string> = {
 
 export function SheetsPanel({
   building,
+  planId,
+  revision,
+  dirty,
   plan,
   level,
   selection,
@@ -101,6 +107,9 @@ export function SheetsPanel({
   onCommand,
 }: {
   building: DraftPlanState;
+  planId: string;
+  revision: number;
+  dirty: boolean;
   plan: DraftPlanState;
   level: Storey;
   selection: Selection[];
@@ -108,7 +117,9 @@ export function SheetsPanel({
   showSheet(id?: string): void;
   onCommand(command: PlanCommand): void;
 }) {
-  const [tab, setTab] = useState<"sheets" | "views" | "marks">("sheets");
+  const [tab, setTab] = useState<
+    "sheets" | "views" | "marks" | "schedules" | "issues"
+  >("sheets");
   const [chosenSheet, setChosenSheet] = useState("");
   const [chosenView, setChosenView] = useState("");
   const [chosenViewport, setChosenViewport] = useState("");
@@ -127,7 +138,7 @@ export function SheetsPanel({
   const viewport = viewports.find(({ id }) => id === chosenViewport);
   const marks = items.filter(
     (item): item is DrawingMark =>
-      "storeyId" in item && item.storeyId === level.id,
+      isDrawingMark(item) && item.storeyId === level.id,
   );
   const mark = marks.find((item) => item.id === chosenMark);
   const kind = mark?.kind ?? markKind;
@@ -230,26 +241,44 @@ export function SheetsPanel({
         role="group"
         aria-label="Document editing"
       >
-        {(["sheets", "views", "marks"] as const).map((name) => (
-          <button
-            key={name}
-            type="button"
-            aria-pressed={tab === name}
-            onClick={() => {
-              setTab(name);
-              setError("");
-            }}
-          >
-            {name === "marks"
-              ? "Annotations"
-              : name[0].toUpperCase() + name.slice(1)}
-          </button>
-        ))}
+        {(["sheets", "views", "marks", "schedules", "issues"] as const).map(
+          (name) => (
+            <button
+              key={name}
+              type="button"
+              aria-pressed={tab === name}
+              onClick={() => {
+                setTab(name);
+                setError("");
+              }}
+            >
+              {name === "marks"
+                ? "Annotations"
+                : name[0].toUpperCase() + name.slice(1)}
+            </button>
+          ),
+        )}
       </div>
       {error && (
         <p className="sheets-error" role="alert">
           {error}
         </p>
+      )}
+      {tab === "schedules" && (
+        <SheetSchedules
+          building={building}
+          plan={plan}
+          storeyId={level.id}
+          dispatch={dispatch}
+        />
+      )}
+      {tab === "issues" && (
+        <SheetIssues
+          plan={building}
+          planId={planId}
+          revision={revision}
+          dirty={dirty}
+        />
       )}
       {tab === "sheets" && (
         <>
@@ -286,8 +315,8 @@ export function SheetsPanel({
                     data,
                     "orientation",
                   ) as Sheet["orientation"],
-                  project: editingSheet?.project,
-                  drawnBy: editingSheet?.drawnBy,
+                  project: text(data, "project") || undefined,
+                  drawnBy: text(data, "drawnBy") || undefined,
                 })
               ) {
                 setChosenSheet(id);
@@ -314,6 +343,22 @@ export function SheetsPanel({
                   required
                   maxLength={120}
                   defaultValue={editingSheet?.name ?? "Floor plan"}
+                />
+              </label>
+              <label>
+                Project name
+                <input
+                  name="project"
+                  maxLength={120}
+                  defaultValue={editingSheet?.project}
+                />
+              </label>
+              <label>
+                Drawn by
+                <input
+                  name="drawnBy"
+                  maxLength={48}
+                  defaultValue={editingSheet?.drawnBy}
                 />
               </label>
               <label>

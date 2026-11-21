@@ -3,6 +3,7 @@ import { pointAlong } from "./openings";
 import { planStoreys, storeyOf } from "./storeys";
 import type {
   DocumentAnchor,
+  DocumentItem,
   DraftPlanState,
   DrawingMark,
   Point,
@@ -46,6 +47,9 @@ export function anchorPoint(
     }
   }
 }
+
+export const isDrawingMark = (item: DocumentItem): item is DrawingMark =>
+  "storeyId" in item && item.kind !== "finish";
 
 export function markAnchors(mark: DrawingMark): DocumentAnchor[] {
   switch (mark.kind) {
@@ -110,6 +114,10 @@ export function validateDocuments(
           throw new Error("The viewport must fit on the sheet.");
         break;
       }
+      case "finish":
+        if (!storeys.has(item.storeyId))
+          throw new Error("The finish needs an existing storey.");
+        break;
       default: {
         if (!storeys.has(item.storeyId))
           throw new Error("The annotation needs an existing storey.");
