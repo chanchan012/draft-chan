@@ -358,6 +358,7 @@ it("lays out a two-bedroom plan using all MCP resources and tools over HTTP", as
     expect(
       (await client.listTools()).tools.map(({ name }) => name).sort(),
     ).toEqual([
+      "add_constraint",
       "add_dimension_annotation",
       "apply_changes",
       "array_entities",
@@ -370,6 +371,7 @@ it("lays out a two-bedroom plan using all MCP resources and tools over HTTP", as
       "draw_polyline",
       "draw_wall",
       "edit_corner",
+      "explain_constraints",
       "furnish_room_preset",
       "inspect_entity",
       "measure_geometry",
@@ -378,7 +380,9 @@ it("lays out a two-bedroom plan using all MCP resources and tools over HTTP", as
       "place_opening",
       "preview_changes",
       "query_entities",
+      "remove_constraint",
       "resolve_snap",
+      "set_driving_dimension",
       "split_or_join_wall",
       "transform_entities",
       "trigger_dxf_export",
@@ -831,6 +835,66 @@ it("previews corridor geometry, commits a concurrent retry once, and compares sa
   }
 }, 30_000);
 
+it("drives wall distances and returns structured conflict IDs over MCP", async () => {
+  const session = await planWithToken();
+  const client = await connect(createMcpHttp(localWindow(50)), session.token);
+  const call = (name: string, args: Record<string, unknown>) =>
+    client.callTool({ name, arguments: args });
+  try {
+    await call("draw_wall", {
+      expectedRevision: 0,
+      start: { x: 0, y: 0 },
+      end: { x: 4000, y: 0 },
+      thicknessMm: 100,
+      kind: "interior",
+    });
+    const response = await call("query_entities", { kind: "wall" });
+    if (!isCallToolResult(response)) throw new Error("Expected the new wall");
+    const wallId = (
+      response.structuredContent as { entities: { id: string }[] }
+    ).entities[0].id;
+    const constraint = {
+      kind: "fixed_distance",
+      id: "width",
+      distanceMm: 4000,
+      first: { wallId, endpoint: "start" },
+      second: { wallId, endpoint: "end" },
+    };
+    expect(
+      await call("add_constraint", { expectedRevision: 1, constraint }),
+    ).toMatchObject({ isError: false, structuredContent: { revision: 2 } });
+    expect(
+      await call("set_driving_dimension", {
+        expectedRevision: 2,
+        constraintId: "width",
+        distanceMm: 4800,
+      }),
+    ).toMatchObject({ isError: false, structuredContent: { revision: 3 } });
+    expect(
+      await call("add_constraint", {
+        expectedRevision: 3,
+        constraint: { ...constraint, id: "other-width", distanceMm: 100 },
+      }),
+    ).toMatchObject({
+      isError: true,
+      structuredContent: {
+        code: "constraint_conflict",
+        constraintIds: ["other-width", "width"],
+      },
+    });
+    expect(await call("explain_constraints", {})).toMatchObject({
+      isError: false,
+      structuredContent: {
+        revision: 3,
+        degreesOfFreedom: 3,
+        constraintCount: 1,
+        conflictingConstraintIds: [],
+      },
+    });
+  } finally {
+    await client.close();
+  }
+});
 it("bridges stdio to the authenticated HTTP tools without sharing the database connection", async () => {
   const session = await planWithToken();
   const app = createMcpHttp(localWindow());
@@ -868,7 +932,7 @@ it("bridges stdio to the authenticated HTTP tools without sharing the database c
         },
       }),
     );
-    expect((await client.listTools()).tools).toHaveLength(25);
+    expect((await client.listTools()).tools).toHaveLength(29);
     expect((await client.listResources()).resources).toHaveLength(3);
     expect(
       (await client.readResource({ uri: "draft://floorplan-graph" })).contents,

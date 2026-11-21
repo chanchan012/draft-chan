@@ -9,6 +9,7 @@ const collections = [
   ["utility", "utilities"],
   ["dimension", "annotations"],
   ["sketch", "sketches"],
+  ["constraint", "constraints"],
 ] as const;
 
 export function summarizeChanges(

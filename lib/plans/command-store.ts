@@ -11,6 +11,7 @@ import {
   annotationSchema,
   sketchSchema,
   compareText,
+  constraintLimit,
   doorSchema,
   fixtureSchema,
   placementLimit,
@@ -25,6 +26,11 @@ import {
   type Wall,
   type PlanCommand,
 } from "./model";
+import {
+  ConstraintConflict,
+  solveConstraints,
+  validateConstraints,
+} from "./constraints";
 import { initialGraph, loadDraftPlan } from "./plan-state";
 import { validateOpenings } from "./openings";
 import { solveWallTopology } from "./wall-topology";
@@ -99,6 +105,21 @@ function applyEdit(
   actor: DraftActor,
 ) {
   switch (command.type) {
+    case "constraint.add": {
+      const constraints = (draft.constraints ??= []);
+      if (constraints.length >= constraintLimit)
+        throw new Error("The plan has reached the constraint limit.");
+      return addPlacement(constraints, command.constraint);
+    }
+    case "constraint.drive": {
+      const constraint = draft.constraints?.find(({ id }) => id === command.id);
+      if (constraint?.kind !== "fixed_distance")
+        throw new Error("Select an existing driving distance.");
+      constraint.distanceMm = command.distanceMm;
+      return;
+    }
+    case "constraint.remove":
+      return editPlacement(draft.constraints ?? [], command.id, actor);
     case "window.add": {
       const windows = (draft.windows ??= []);
       if (windows.length >= openingLimit)
@@ -313,6 +334,21 @@ export function createDraftPlanStore(input: unknown = initialGraph()) {
         for (const command of commands) {
           if (applyEdit(draft, command, actor)) wallsChanged = true;
         }
+        const driving = commands.some(
+          ({ type }) =>
+            type === "constraint.add" || type === "constraint.drive",
+        );
+        if (driving) {
+          const solved = solveConstraints(draft.walls, draft.constraints ?? []);
+          for (let index = 0; index < solved.length; index++) {
+            const wall = solved[index];
+            if (sameParameters(draft.walls[index], wall)) continue;
+            draft.walls[index] = { ...wall, updatedBy: actor };
+            wallsChanged = true;
+          }
+        } else if (wallsChanged) {
+          validateConstraints(draft.walls, draft.constraints);
+        }
         if (
           wallsChanged ||
           commands.some(
@@ -320,10 +356,37 @@ export function createDraftPlanStore(input: unknown = initialGraph()) {
               type.startsWith("door.") || type.startsWith("window."),
           )
         ) {
-          validateOpenings(draft.walls, [
-            ...draft.openings,
-            ...(draft.windows ?? []),
-          ]);
+          const openings = [...draft.openings, ...(draft.windows ?? [])];
+          try {
+            validateOpenings(draft.walls, openings);
+          } catch (error) {
+            if (!driving) throw error;
+            const lengths = new Map(
+              draft.walls.map((w) => [
+                w.id,
+                Math.hypot(w.end.x - w.start.x, w.end.y - w.start.y),
+              ]),
+            );
+            const outside = openings.find(
+              (o) => o.offsetMm + o.widthMm / 2 > (lengths.get(o.wallId) ?? 0),
+            );
+            throw new ConstraintConflict(
+              commands.flatMap((command) =>
+                command.type === "constraint.drive"
+                  ? [command.id]
+                  : command.type === "constraint.add"
+                    ? [command.constraint.id]
+                    : [],
+              ),
+              outside
+                ? "The solved dimension would no longer fit hosted opening " +
+                    outside.id +
+                    "."
+                : error instanceof Error
+                  ? error.message
+                  : "The solved walls cannot host the openings.",
+            );
+          }
         }
         if (wallsChanged) draft.rooms = solveWallTopology(draft.walls).rooms;
       });

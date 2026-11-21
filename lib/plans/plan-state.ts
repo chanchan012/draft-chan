@@ -7,6 +7,7 @@ import {
   type Point,
   type Wall,
 } from "./model";
+import { validateConstraints } from "./constraints";
 import { validateOpenings } from "./openings";
 import { polygonAreaMm2 } from "./polygon";
 import { solveWallTopology } from "./wall-topology";
@@ -94,12 +95,14 @@ export function loadDraftPlan(input: unknown): DraftPlanState {
     state.utilities,
     state.annotations ?? [],
     state.sketches ?? [],
+    state.constraints ?? [],
   ]) {
     if (new Set(placements.map(({ id }) => id)).size !== placements.length) {
       throw new Error("Placement IDs must be unique on each layer.");
     }
     placements.sort((a, b) => compareText(a.id, b.id));
   }
+  validateConstraints(state.walls, state.constraints);
   state.rooms = solveWallTopology(state.walls).rooms;
   return state;
 }

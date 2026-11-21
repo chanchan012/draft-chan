@@ -189,10 +189,50 @@ export const sketchSchema = sketchInput
   });
 export type Sketch = z.infer<typeof sketchSchema>;
 
+export const wallEndpointInput = z.strictObject({
+  wallId: identifier,
+  endpoint: z.enum(["start", "end"]),
+});
+const distanceInput = z.number().finite().min(1).max(2_828_427);
+export const constraintInput = z.discriminatedUnion("kind", [
+  z.strictObject({
+    kind: z.literal("coincident"),
+    id: identifier,
+    first: wallEndpointInput,
+    second: wallEndpointInput,
+  }),
+  z.strictObject({
+    kind: z.enum(["parallel", "perpendicular", "equal_length"]),
+    id: identifier,
+    firstWallId: identifier,
+    secondWallId: identifier,
+  }),
+  z.strictObject({
+    kind: z.literal("fixed_distance"),
+    id: identifier,
+    first: wallEndpointInput,
+    second: wallEndpointInput,
+    distanceMm: distanceInput,
+  }),
+]);
+export const constraintLimit = 96;
+export type WallEndpoint = z.infer<typeof wallEndpointInput>;
+export type Constraint = z.infer<typeof constraintInput>;
+
 export const planCommandSchema = z.union([
   wallCommandSchema,
   furnishingCommandSchema,
   z.discriminatedUnion("type", [
+    z.strictObject({
+      type: z.literal("constraint.add"),
+      constraint: constraintInput,
+    }),
+    z.strictObject({
+      type: z.literal("constraint.drive"),
+      id: identifier,
+      distanceMm: distanceInput,
+    }),
+    z.strictObject({ type: z.literal("constraint.remove"), id: identifier }),
     z.strictObject({ type: z.literal("sketch.add"), sketch: sketchInput }),
     z.strictObject({
       type: z.literal("sketch.update"),
@@ -252,6 +292,7 @@ export const draftPlanSchema = z.looseObject({
   fixtures: z.array(fixtureSchema),
   utilities: z.array(utilitySchema).default([]),
   dimensions: z.array(z.unknown()),
+  constraints: z.array(constraintInput).max(constraintLimit).optional(),
   sketches: z.array(sketchSchema).max(placementLimit).optional(),
   annotations: z.array(annotationSchema).max(placementLimit).optional(),
 });

@@ -6,6 +6,7 @@ import {
   Armchair,
   Bot,
   ChevronLeft,
+  Link2,
   FileDown,
   Layers3,
   Zap,
@@ -28,6 +29,7 @@ import {
 import { useStore } from "zustand";
 import { cadEditCommands } from "@/lib/plans/cad-edit";
 import { summarizeChanges } from "@/lib/plans/change-summary";
+import { ConstraintsPanel } from "./constraints-panel";
 import { CadEditPanel } from "./cad-edit-panel";
 import { gridSteps, unitFactor } from "@/lib/plans/cad";
 import {
@@ -78,7 +80,12 @@ const tools = [
   { id: "pan", label: "Pan", icon: Hand, shortcut: "H" },
 ] as const;
 const overlayPanels = "(max-width: 1000px)";
-type RightPanel = "inspector" | "clearance" | "exports" | "edit";
+type RightPanel =
+  | "inspector"
+  | "clearance"
+  | "exports"
+  | "edit"
+  | "constraints";
 
 export function Studio({
   initial,
@@ -160,6 +167,7 @@ export function Studio({
   }, [picked, plan, layers]);
   const active = selection.length === 1 ? selection[0] : undefined;
   const [message, setMessage] = useState("");
+  const constraintControl = useRef<HTMLButtonElement>(null);
   const editControl = useRef<HTMLButtonElement>(null);
   const auditControl = useRef<HTMLButtonElement>(null);
   const inspectorControl = useRef<HTMLButtonElement>(null);
@@ -629,6 +637,20 @@ export function Studio({
             <MoveUpRight size={20} />
           </button>
           <button
+            ref={constraintControl}
+            aria-expanded={rightPanel === "constraints"}
+            aria-controls="studio-inspector"
+            aria-label="Constraints"
+            title="Constraints"
+            onClick={() => {
+              setTool("select");
+              setIso(false);
+              toggleRightPanel("constraints");
+            }}
+          >
+            <Link2 size={20} />
+          </button>
+          <button
             ref={auditControl}
             aria-expanded={rightPanel === "clearance"}
             aria-controls="studio-inspector"
@@ -677,26 +699,41 @@ export function Studio({
           label={
             rightPanel === "exports"
               ? "Exports"
-              : rightPanel === "edit"
-                ? "Edit geometry"
-                : "Inspector"
+              : rightPanel === "constraints"
+                ? "Constraints"
+                : rightPanel === "edit"
+                  ? "Edit geometry"
+                  : "Inspector"
           }
           title={rightPanel === "clearance" ? "Clearance check" : undefined}
           open={rightPanel !== null}
           onClose={() => {
             closeRightPanel();
             const trigger =
-              rightPanel === "edit"
-                ? editControl
-                : rightPanel === "exports"
-                  ? exportsControl
-                  : rightPanel === "clearance"
-                    ? auditControl
-                    : inspectorControl;
+              rightPanel === "constraints"
+                ? constraintControl
+                : rightPanel === "edit"
+                  ? editControl
+                  : rightPanel === "exports"
+                    ? exportsControl
+                    : rightPanel === "clearance"
+                      ? auditControl
+                      : inspectorControl;
             trigger.current?.focus();
           }}
         >
-          {rightPanel === "edit" ? (
+          {rightPanel === "constraints" ? (
+            <ConstraintsPanel
+              plan={plan}
+              selectedWalls={selection
+                .filter((item) => item.kind === "wall")
+                .map((item) => item.id)}
+              onCommand={(input) => {
+                executeBatch([input], actor);
+                setMessage("");
+              }}
+            />
+          ) : rightPanel === "edit" ? (
             <CadEditPanel
               selection={selection}
               onApply={(input) => {

@@ -1,6 +1,8 @@
 import { z } from "zod";
 import {
   displayUnits,
+  constraintInput,
+  constraintLimit,
   doorInput,
   fixtureInput,
   utilityInput,
@@ -44,6 +46,7 @@ export const saveStudioSchema = z.strictObject({
   fixtures: z.array(fixtureInput).max(placementLimit).optional(),
   utilities: z.array(utilityInput).max(placementLimit).optional(),
   windows: z.array(windowInput).max(openingLimit).optional(),
+  constraints: z.array(constraintInput).max(constraintLimit).optional(),
   sketches: z.array(sketchInput).max(placementLimit).optional(),
   annotations: z.array(annotationInput).max(placementLimit).optional(),
 });
@@ -63,6 +66,7 @@ export function studioSnapshot(plan: DraftPlanState, unit: DisplayUnit) {
     windows: (plan.windows ?? []).map((opening) =>
       windowInput.strip().parse(opening),
     ),
+    constraints: (plan.constraints ?? []).map((c) => constraintInput.parse(c)),
     sketches: (plan.sketches ?? []).map((item) =>
       sketchInput.strip().parse(item),
     ),
@@ -179,6 +183,7 @@ export function applyStudioSnapshot(
     windows,
     annotations,
     sketches,
+    constraints: input.constraints ?? previous.constraints,
     rooms: [],
   });
 }

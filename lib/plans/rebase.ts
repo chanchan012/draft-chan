@@ -46,6 +46,11 @@ export function rebaseSnapshot(
     fixtures: mergeItems(base.fixtures, draft.fixtures, saved.fixtures),
     utilities: mergeItems(base.utilities, draft.utilities, saved.utilities),
     windows: mergeItems(base.windows, draft.windows, saved.windows),
+    constraints: mergeItems(
+      base.constraints,
+      draft.constraints,
+      saved.constraints,
+    ),
     sketches: mergeItems(base.sketches, draft.sketches, saved.sketches),
     annotations: mergeItems(
       base.annotations,

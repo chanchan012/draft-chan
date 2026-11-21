@@ -10,6 +10,7 @@ import {
   cadEditOptions,
   type CadEdit,
 } from "../plans/cad-edit";
+import { ConstraintConflict, constraintReport } from "../plans/constraints";
 import { summarizeChanges } from "../plans/change-summary";
 import { calculateBom } from "../plans/bom";
 import {
@@ -37,6 +38,7 @@ import {
   fixtureInput,
   utilityInput,
   annotationInput,
+  constraintInput,
   sketchFields,
   type SketchGeometry,
   type DraftActor,
@@ -153,6 +155,7 @@ class ToolFailure extends Error {
   constructor(
     readonly reason: string,
     message: string,
+    readonly details?: object,
   ) {
     super(message);
   }
@@ -230,7 +233,7 @@ export function createDraftMcp(scope: AgentScope, backend = draftMcpBackend) {
       } catch (error) {
         return result(
           error instanceof ToolFailure
-            ? { code: error.reason, message: error.message }
+            ? { code: error.reason, message: error.message, ...error.details }
             : {
                 code: "temporarily_unavailable",
                 message:
@@ -277,6 +280,10 @@ export function createDraftMcp(scope: AgentScope, backend = draftMcpBackend) {
           ...studioSnapshot(changed.plan, doc.unit),
         });
       } catch (error) {
+        if (error instanceof ConstraintConflict)
+          throw new ToolFailure("constraint_conflict", error.message, {
+            constraintIds: error.constraintIds,
+          });
         throw new ToolFailure(
           "invalid_geometry",
           error instanceof Error ? error.message : "Invalid geometry.",
@@ -416,6 +423,106 @@ export function createDraftMcp(scope: AgentScope, backend = draftMcpBackend) {
           "A wall in this reference is unavailable.",
         );
       return { planId, revision: doc.revision, ...measurement };
+    },
+  );
+
+  edit(
+    "add_constraint",
+    "Add a wall relation or fixed distance and solve the affected wall endpoints. Supply a stable constraint ID.",
+    z.strictObject({
+      ...revision,
+      constraint: constraintInput,
+    }),
+    (doc, input) => {
+      const plan = commands(doc, [
+        { type: "constraint.add", constraint: input.constraint },
+      ]);
+      return {
+        plan,
+        result: {
+          constraintId: input.constraint.id,
+          ...summarizeChanges(doc.graph, plan),
+        },
+      };
+    },
+  );
+
+  edit(
+    "set_driving_dimension",
+    "Change a fixed-distance constraint in millimeters. Door and window hosts are validated before save.",
+    z.strictObject({
+      ...revision,
+      constraintId: objectId,
+      distanceMm: z.number().finite().min(1).max(2_828_427),
+    }),
+    (doc, input) => {
+      const plan = commands(doc, [
+        {
+          type: "constraint.drive",
+          id: input.constraintId,
+          distanceMm: input.distanceMm,
+        },
+      ]);
+      return {
+        plan,
+        result: {
+          constraintId: input.constraintId,
+          ...summarizeChanges(doc.graph, plan),
+        },
+      };
+    },
+  );
+
+  edit(
+    "remove_constraint",
+    "Remove a wall constraint by ID. Current geometry stays in place.",
+    z.strictObject({
+      ...revision,
+      constraintId: objectId,
+    }),
+    (doc, input) => ({
+      plan: commands(doc, [
+        { type: "constraint.remove", id: input.constraintId },
+      ]),
+      result: { constraintId: input.constraintId },
+    }),
+  );
+
+  tool(
+    "explain_constraints",
+    "List wall constraints and report Jacobian rank, degrees of freedom and conflicting IDs. Optionally test an additional constraint without saving.",
+    z.strictObject({
+      proposed: constraintInput.optional(),
+    }),
+    true,
+    async ({ proposed }) => {
+      const doc = await current();
+      if (!proposed)
+        return {
+          planId,
+          revision: doc.revision,
+          ...constraintReport(doc.graph.walls, doc.graph.constraints),
+        };
+      try {
+        const plan = commands(doc, [
+          { type: "constraint.add", constraint: proposed },
+        ]);
+        return {
+          planId,
+          revision: doc.revision,
+          feasible: true,
+          ...constraintReport(plan.walls, plan.constraints),
+        };
+      } catch (error) {
+        if (!(error instanceof ConstraintConflict)) throw error;
+        return {
+          planId,
+          revision: doc.revision,
+          feasible: false,
+          conflictingConstraintIds: error.constraintIds,
+          message: error.message,
+        };
+      }
     },
   );
 

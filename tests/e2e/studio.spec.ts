@@ -122,6 +122,7 @@ async function studio(
         windows: input.windows ?? current.graph.windows,
         annotations: input.annotations ?? current.graph.annotations,
         sketches: input.sketches ?? current.graph.sketches,
+        constraints: input.constraints ?? current.graph.constraints,
         fixtures: input.fixtures ?? current.graph.fixtures,
         utilities: input.utilities ?? current.graph.utilities,
       },
@@ -701,6 +702,25 @@ test("undoes one adjacent agent transaction in a clean Studio", async ({
     page.getByRole("button", { name: "Undo", exact: true }),
   ).toBeDisabled();
   await frame(page);
+});
+
+test("solves a driving distance in Studio and reloads its constrained wall", async ({
+  page,
+}) => {
+  const workspace = studioWorkspace();
+  workspace.document.graph = initialGraph({ width: 4000, depth: 3000 });
+  await studio(page, false, workspace);
+  await page.getByRole("button", { name: "Constraints", exact: true }).click();
+  const panel = page.getByRole("complementary", { name: "Constraints" });
+  await panel.getByRole("button", { name: "Add constraint" }).click();
+  await expect(page.locator("[data-driving]")).toContainText("4000 mm");
+  await panel.getByLabel("Driving distance (mm)").fill("4600");
+  await panel.getByRole("button", { name: "Solve distance" }).click();
+  await expect(page.locator("[data-driving]")).toContainText("4600 mm");
+  await saveIfNeeded(page);
+  await page.reload();
+  await expect(page.locator("[data-driving]")).toContainText("4600 mm");
+  await viewportFits(page);
 });
 
 test("keeps unsaved drawing after a revision conflict", async ({ page }) => {
