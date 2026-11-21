@@ -183,3 +183,10 @@ Named layers store stable entity-kind and ID references, a display name, visibil
 Shared block definitions support doors, windows and catalog fixtures. Instances retain native object IDs and placement. Each link stores its definition and an override map. Definition edits materialize inherited values into native objects, and direct instance edits update the relevant overrides. This keeps the existing clearance, quantity, isometric and export paths working with the resolved dimensions. Copy, mirror and arrays preserve links. A mirrored door copy records its new swing explicitly.
 
 The command store and snapshot save share `lib/plans/organization.ts`. While a layer remains locked, changes to its members, links, objects or an opening's host wall are rejected. A layer can be unlocked through the layer controls. Missing links from deleted unlocked objects are pruned. Snapshot rebasing and revision diffs include layers, definitions and instances. No relational migration is required.
+
+
+## M8.1 Storeys and wall assemblies
+
+Existing drawings resolve omitted storey references to `ground` with an elevation of 0 mm and wall height of 2450 mm. Named storeys share a single graph. Rooms are derived from wall reference segments by storey. Openings derive their storey from their host. Wall assemblies sum up to 16 named material thicknesses, and resolving the thickness leaves the authored wall endpoints fixed. Physical wall outlines, opening placement and face measurements use the resulting offsets from the reference line.
+
+`query_spaces` returns reference boundaries, net polygons after subtraction of wall material and gross enclosed plate areas. Gross omits free wall tails outside enclosed boundaries. Areas are geometric measurements in m². Studio edits and display are scoped to the active storey. SVG and DXF tile the storeys side by side in elevation order and label each plate.

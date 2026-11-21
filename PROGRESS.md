@@ -44,6 +44,12 @@ Application merge `652602cb61072f2cea51f68131f4b294f64c1b24` adds named layers w
 
 Strict TypeScript, the Next production build, 79 Vitest tests and 115 Playwright checks passed. Draft exposes 33 MCP tools and three resources. Optional graph v1 fields `drawingLayers`, `blocks` and `blockInstances` use the existing JSON storage. Database migrations stay at 0005. Vercel Preview `dpl_BTo4ZL17Pmi7vkdTRABiAzF8QSA9` and Production `dpl_EFJif7tmkywb5qU1idtWHPHgxHJS` reached Ready. Production smoke checks returned HTTP 200 for the landing page, HTTP 307 for signed-out Studio and HTTP 401 with OAuth discovery for signed-out MCP.
 
+## M8.1 · Storeys, assemblies and spaces
+
+Application merge `4ee5539b8592f129f620abf34b04e85495914a9e` adds the Studio Building panel and an explicit storey model with an implicit Ground floor for older plans. Room topology, wall constraints, clearances, snaps and live cursors are scoped by storey. Wall assemblies specify material thicknesses and an authored centre or face reference. Net room polygons use finished wall solids. Gross storey areas follow the enclosed outside faces. Multi-storey SVG and DXF exports label side-by-side plans.
+
+Strict TypeScript, the Next build and 82 Vitest tests passed. The initial browser matrix passed 117 cases. After correcting rebase snapshot field order, all ten targeted storey-switching and remote-undo checks passed across five viewports. Draft exposes 37 MCP tools. Graph v1 adds optional storeys, assemblies and object placements. Database migrations remain through 0005. Vercel production dpl_AG9LJxQoAAWD8St9kBgU1MWkh86L reached Ready. Feature preview dpl_BuBSvvsPRuvdN2Q6uey3HzQZEzi6 is building.
+
 ## M1.1 · Foundation and shell
 
 Released on 2026-11-18. The verified application merge is `0a0adcde04ab7fb14818dbdcea9e570e89d977b2`. The release documentation follows the application merge on main.

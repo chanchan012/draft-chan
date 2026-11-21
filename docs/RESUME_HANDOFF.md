@@ -2,6 +2,8 @@
 
 ## Next proposed subgoal
 
+M8.1 is implemented in `lib/plans/storeys.ts`, `lib/plans/spaces.ts` and `components/studio/building-panel.tsx`. Run `npm test -- tests/storeys.unit.test.ts tests/mcp.unit.test.ts` and `npm run test:e2e -- --grep "adds an upper storey|undoes one adjacent"`. The graph stays at v1, database migrations end at 0005, and MCP exposes 37 tools at this checkpoint. M8.2 adds structure and derived building views.
+
 M7.1 and M7.2 are complete. M8.1 is next in the drafting track. Review the [CAD roadmap](CAD_ROADMAP.md) and inspect `lib/plans/model.ts`, `lib/plans/constraints.ts` and `lib/plans/organization.ts` before changing the wall or room graph.
 
 M7.2 application merge `652602cb61072f2cea51f68131f4b294f64c1b24` exposes 33 MCP tools and three resources. Run `npm test -- tests/constraints.unit.test.ts tests/organization.unit.test.ts tests/mcp.unit.test.ts` and `npm run test:e2e -- --grep "solves a driving distance|updates a door block"` with a Studio test server. Graph v1 adds optional constraints, layers, definitions and instances. Neon migrations remain through 0005 and the existing environment variables are sufficient.
