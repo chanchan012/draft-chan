@@ -219,7 +219,127 @@ export const constraintLimit = 96;
 export type WallEndpoint = z.infer<typeof wallEndpointInput>;
 export type Constraint = z.infer<typeof constraintInput>;
 
+export const drawingEntityKinds = [
+  "wall",
+  "door",
+  "window",
+  "fixture",
+  "utility",
+  "dimension",
+  "sketch",
+] as const;
+export const drawingEntityInput = z.strictObject({
+  kind: z.enum(drawingEntityKinds),
+  id: identifier,
+});
+export const drawingLayerInput = z.strictObject({
+  id: identifier,
+  name: z.string().trim().min(1).max(80),
+  visible: z.boolean(),
+  locked: z.boolean(),
+  color: z.string().regex(/^#[0-9a-fA-F]{6}$/),
+  lineStyle: z.enum(["solid", "dashed", "dotted"]),
+  members: z.array(drawingEntityInput).max(5000),
+});
+export type DrawingEntity = z.infer<typeof drawingEntityInput>;
+export type DrawingLayer = z.infer<typeof drawingLayerInput>;
+
+const reusableKinds = ["door", "window", "fixture"] as const;
+const doorParameters = doorInput.pick({
+  widthMm: true,
+  hinge: true,
+  swing: true,
+});
+const windowParameters = windowInput.pick({
+  widthMm: true,
+  sillMm: true,
+  heightMm: true,
+});
+const reusableFixture = fixtureInput.pick({
+  template: true,
+  widthMm: true,
+  depthMm: true,
+  heightMm: true,
+});
+const definitionIdentity = {
+  id: identifier,
+  name: z.string().trim().min(1).max(80),
+};
+export const blockInput = z.discriminatedUnion("kind", [
+  z.strictObject({
+    ...definitionIdentity,
+    kind: z.literal("door"),
+    parameters: doorParameters,
+  }),
+  z.strictObject({
+    ...definitionIdentity,
+    kind: z.literal("window"),
+    parameters: windowParameters,
+  }),
+  z.strictObject({
+    ...definitionIdentity,
+    kind: z.literal("fixture"),
+    parameters: reusableFixture,
+  }),
+]);
+const instanceIdentity = { id: identifier, blockId: identifier };
+const hosting = doorInput.pick({ wallId: true, offsetMm: true });
+export const blockPlacementInput = z.discriminatedUnion("kind", [
+  hosting.extend({
+    kind: z.literal("door"),
+    overrides: doorParameters.partial().optional(),
+  }),
+  hosting.extend({
+    kind: z.literal("window"),
+    overrides: windowParameters.partial().optional(),
+  }),
+  fixtureInput.pick({ position: true, rotation: true }).extend({
+    kind: z.literal("fixture"),
+    overrides: reusableFixture.partial().optional(),
+  }),
+]);
+export const blockInstanceInput = z.discriminatedUnion("kind", [
+  z.strictObject({
+    ...instanceIdentity,
+    kind: z.literal("door"),
+    overrides: doorParameters.partial(),
+  }),
+  z.strictObject({
+    ...instanceIdentity,
+    kind: z.literal("window"),
+    overrides: windowParameters.partial(),
+  }),
+  z.strictObject({
+    ...instanceIdentity,
+    kind: z.literal("fixture"),
+    overrides: reusableFixture.partial(),
+  }),
+]);
+export type BlockDefinition = z.infer<typeof blockInput>;
+export type BlockPlacement = z.infer<typeof blockPlacementInput>;
+export type BlockInstance = z.infer<typeof blockInstanceInput>;
+export type ReusableKind = (typeof reusableKinds)[number];
+
 export const planCommandSchema = z.union([
+  z.discriminatedUnion("type", [
+    z.strictObject({
+      type: z.literal("layer.write"),
+      layer: drawingLayerInput,
+    }),
+    z.strictObject({ type: z.literal("layer.remove"), id: identifier }),
+    z.strictObject({ type: z.literal("block.define"), definition: blockInput }),
+    z.strictObject({ type: z.literal("block.update"), definition: blockInput }),
+    z.strictObject({
+      type: z.literal("block.link"),
+      instance: blockInstanceInput,
+    }),
+    z.strictObject({
+      type: z.literal("block.insert"),
+      id: identifier,
+      blockId: identifier,
+      placement: blockPlacementInput,
+    }),
+  ]),
   wallCommandSchema,
   furnishingCommandSchema,
   z.discriminatedUnion("type", [
@@ -292,6 +412,9 @@ export const draftPlanSchema = z.looseObject({
   fixtures: z.array(fixtureSchema),
   utilities: z.array(utilitySchema).default([]),
   dimensions: z.array(z.unknown()),
+  drawingLayers: z.array(drawingLayerInput).max(64).optional(),
+  blocks: z.array(blockInput).max(128).optional(),
+  blockInstances: z.array(blockInstanceInput).max(3072).optional(),
   constraints: z.array(constraintInput).max(constraintLimit).optional(),
   sketches: z.array(sketchSchema).max(placementLimit).optional(),
   annotations: z.array(annotationSchema).max(placementLimit).optional(),

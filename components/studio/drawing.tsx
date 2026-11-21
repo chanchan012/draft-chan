@@ -1,3 +1,5 @@
+import { layersByEntity } from "@/lib/plans/organization";
+import type { CSSProperties } from "react";
 import { drivingDimensions } from "@/lib/plans/constraints";
 import { sketchPath } from "@/lib/plans/sketch";
 import { useId, useMemo } from "react";
@@ -31,18 +33,26 @@ export type WallPreview = { start: Point; end: Point };
 const pair = ({ x, y }: Point) => `${x},${y}`;
 const ring = (points: Point[]) => "M" + points.map(pair).join(" ") + "Z";
 
+type LayerPresentation = {
+  style?: CSSProperties;
+  "data-drawing-layer"?: string;
+};
+
 function DoorShape({
   wall,
   door,
   active,
+  presentation,
 }: {
   wall: Wall;
   door: Door;
   active: boolean;
+  presentation?: LayerPresentation;
 }) {
   const { hinge, closed, leaf, clockwise } = doorSwing(wall, door);
   return (
     <g
+      {...presentation}
       data-door={door.id}
       className={active ? "cad-door is-selected" : "cad-door"}
     >
@@ -57,9 +67,11 @@ function DoorShape({
 function FixtureShape({
   fixture,
   active,
+  presentation,
 }: {
   fixture: Fixture;
   active: boolean;
+  presentation?: LayerPresentation;
 }) {
   const { position, widthMm, depthMm, rotation, template } = fixture;
   const x = -widthMm / 2,
@@ -68,6 +80,7 @@ function FixtureShape({
   const hasBasin = template === "vanity" || template === "kitchenSink";
   return (
     <g
+      {...presentation}
       data-fixture={fixture.id}
       className={active ? "cad-fixture is-selected" : "cad-fixture"}
       transform={`translate(${position.x} ${position.y}) rotate(${rotation})`}
@@ -159,6 +172,29 @@ export function PlanDrawing({
   scale: number;
   unit: DisplayUnit;
 }) {
+  const indexedLayers = useMemo(
+    () => layersByEntity(plan),
+    [plan.drawingLayers],
+  );
+  const paint = (kind: string, id: string): LayerPresentation => {
+    const layer = indexedLayers.get(kind + ":" + id);
+    if (!layer) return {};
+    const dash =
+      layer.lineStyle === "dashed"
+        ? [7, 4]
+        : layer.lineStyle === "dotted"
+          ? [2, 4]
+          : [];
+    return {
+      "data-drawing-layer": layer.name,
+      style: {
+        "--drawing-ink": layer.color,
+        "--drawing-dash": dash.join(" ") || "none",
+        "--drawing-wall-dash":
+          dash.map((value) => value / scale).join(" ") || "none",
+      } as CSSProperties,
+    };
+  };
   const walls = new Map(plan.walls.map((wall) => [wall.id, wall]));
   const mesh = useMemo(
     () => wallMesh(plan.walls, [...plan.openings, ...(plan.windows ?? [])]),
@@ -177,6 +213,7 @@ export function PlanDrawing({
       {mesh.joints.map(({ id, walls, footprint }) => (
         <path
           key={id}
+          {...paint("wall", walls[0].id)}
           data-wall-join={id}
           className={
             "cad-wall cad-wall-join" +
@@ -196,6 +233,7 @@ export function PlanDrawing({
       {plan.walls.map((wall) => (
         <g
           key={wall.id}
+          {...paint("wall", wall.id)}
           data-wall={wall.id}
           className={
             "cad-wall" +
@@ -221,6 +259,7 @@ export function PlanDrawing({
         <FixtureShape
           key={fixture.id}
           fixture={fixture}
+          presentation={paint("fixture", fixture.id)}
           active={isSelected(selection, { kind: "fixture", id: fixture.id })}
         />
       ))}
@@ -228,6 +267,7 @@ export function PlanDrawing({
         <DoorShape
           key={door.id}
           door={door}
+          presentation={paint("door", door.id)}
           wall={walls.get(door.wallId)!}
           active={isSelected(selection, { kind: "door", id: door.id })}
         />
@@ -240,6 +280,7 @@ export function PlanDrawing({
         return (
           <path
             key={window.id}
+            {...paint("window", window.id)}
             data-window={window.id}
             vectorEffect="non-scaling-stroke"
             className={
@@ -261,6 +302,7 @@ export function PlanDrawing({
       {plan.sketches?.map(({ id, geometry }) => (
         <path
           key={id}
+          {...paint("sketch", id)}
           data-sketch={id}
           data-kind={geometry.kind}
           className="cad-sketch"
@@ -299,6 +341,7 @@ export function PlanDrawing({
       {plan.annotations?.map(({ id, start, end }) => (
         <g
           key={id}
+          {...paint("dimension", id)}
           data-dimension={id}
           className={
             "cad-dimension" +
@@ -339,6 +382,7 @@ export function PlanDrawing({
         return (
           <g
             key={marker.id}
+            {...paint("utility", marker.id)}
             data-utility={marker.id}
             data-layer={template.layer}
             className={"cad-utility" + (active ? " is-selected" : "")}

@@ -39,6 +39,9 @@ import {
   utilityInput,
   annotationInput,
   constraintInput,
+  drawingLayerInput,
+  blockInput,
+  blockPlacementInput,
   sketchFields,
   type SketchGeometry,
   type DraftActor,
@@ -523,6 +526,91 @@ export function createDraftMcp(scope: AgentScope, backend = draftMcpBackend) {
           message: error.message,
         };
       }
+    },
+  );
+
+  edit(
+    "manage_layer",
+    "Create or replace a named layer, or remove an unlocked layer. Put includes the complete member list and style. A member moves from its previous layer if it is unlocked.",
+    z.discriminatedUnion("action", [
+      z.strictObject({
+        ...revision,
+        action: z.literal("put"),
+        layer: drawingLayerInput,
+      }),
+      z.strictObject({
+        ...revision,
+        action: z.literal("remove"),
+        layerId: objectId,
+      }),
+    ]),
+    (doc, input) => {
+      const command: PlanCommand =
+        input.action === "put"
+          ? { type: "layer.write", layer: input.layer }
+          : { type: "layer.remove", id: input.layerId };
+      const plan = commands(doc, [command]);
+      return { plan, result: summarizeChanges(doc.graph, plan) };
+    },
+  );
+
+  edit(
+    "define_block",
+    "Create a reusable door, window or fixture definition with typed defaults. Supply a unique definition ID and name.",
+    z.strictObject({
+      ...revision,
+      definition: blockInput,
+    }),
+    (doc, input) => ({
+      plan: commands(doc, [
+        { type: "block.define", definition: input.definition },
+      ]),
+      result: { blockId: input.definition.id },
+    }),
+  );
+
+  edit(
+    "insert_block",
+    "Insert a native object linked to a reusable definition. Provide a host wall and offset for openings, or a position and rotation for furniture. Optional overrides stay local to the instance.",
+    z.strictObject({
+      ...revision,
+      blockId: objectId,
+      placement: blockPlacementInput,
+    }),
+    (doc, input) => {
+      const id = newBatchId();
+      return {
+        plan: commands(doc, [
+          {
+            type: "block.insert",
+            id,
+            blockId: input.blockId,
+            placement: input.placement,
+          },
+        ]),
+        result: { blockId: input.blockId, instanceId: id },
+      };
+    },
+  );
+
+  edit(
+    "edit_block_definition",
+    "Replace the typed defaults of an existing definition. Inheriting objects update together and explicit instance overrides persist.",
+    z.strictObject({
+      ...revision,
+      definition: blockInput,
+    }),
+    (doc, input) => {
+      const plan = commands(doc, [
+        { type: "block.update", definition: input.definition },
+      ]);
+      return {
+        plan,
+        result: {
+          blockId: input.definition.id,
+          ...summarizeChanges(doc.graph, plan),
+        },
+      };
     },
   );
 

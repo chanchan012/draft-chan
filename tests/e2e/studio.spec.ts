@@ -123,6 +123,9 @@ async function studio(
         annotations: input.annotations ?? current.graph.annotations,
         sketches: input.sketches ?? current.graph.sketches,
         constraints: input.constraints ?? current.graph.constraints,
+        drawingLayers: input.drawingLayers ?? current.graph.drawingLayers,
+        blocks: input.blocks ?? current.graph.blocks,
+        blockInstances: input.blockInstances ?? current.graph.blockInstances,
         fixtures: input.fixtures ?? current.graph.fixtures,
         utilities: input.utilities ?? current.graph.utilities,
       },
@@ -720,6 +723,60 @@ test("solves a driving distance in Studio and reloads its constrained wall", asy
   await saveIfNeeded(page);
   await page.reload();
   await expect(page.locator("[data-driving]")).toContainText("4600 mm");
+  await viewportFits(page);
+});
+
+test("updates a door block and saves its linked drawing layer", async ({
+  page,
+}) => {
+  const workspace = studioWorkspace();
+  workspace.document.graph = initialGraph({ width: 6000, depth: 3400 });
+  await studio(page, false, workspace);
+  await page.getByRole("button", { name: "Blocks", exact: true }).click();
+  const panel = page.getByRole("complementary", { name: "Blocks" });
+  await panel.getByLabel("New block name").fill("Room doors");
+  await panel.getByRole("button", { name: "Create definition" }).click();
+  await panel.getByRole("button", { name: "Insert block" }).click();
+  await panel.getByLabel("Host offset (mm)").fill("3500");
+  await panel.getByLabel("Instance width override (mm)").fill("800");
+  await panel.getByRole("button", { name: "Insert block" }).click();
+  await panel.getByLabel("Default width (mm)").fill("1050");
+  await panel.getByRole("button", { name: "Update definition" }).click();
+  await expect(
+    panel.getByText("2 linked instances · 1 with overrides"),
+  ).toBeVisible();
+  await panel.getByRole("button", { name: "Close blocks" }).click();
+  await expect(page.locator("[data-door]")).toHaveCount(2);
+
+  await page
+    .getByRole("region", { name: "Drawing surface" })
+    .press("Control+a");
+  await page.getByRole("button", { name: "Layers", exact: true }).click();
+  const layers = page.getByRole("complementary", { name: "Layers" });
+  await layers.getByLabel("New layer name").fill("Room plan");
+  await layers.getByRole("button", { name: "Create layer" }).click();
+  await layers.getByLabel("Line style").selectOption("dashed");
+  await layers.getByRole("button", { name: "Save layer style" }).click();
+  await layers
+    .getByRole("button", { name: "Assign selection", exact: true })
+    .click();
+  await expect(
+    page.locator('[data-drawing-layer="Room plan"][data-door]'),
+  ).toHaveCount(2);
+  await layers.getByLabel("Lock layer").check();
+  await layers.getByLabel("Show layer").uncheck();
+  await expect(page.locator("[data-door]")).toHaveCount(0);
+  await saveIfNeeded(page);
+  expect(
+    workspace.document.graph.openings
+      .map((item) => item.widthMm)
+      .sort((a, b) => a - b),
+  ).toEqual([800, 1050]);
+  expect(workspace.document.graph.drawingLayers).toMatchObject([
+    { name: "Room plan", visible: false, locked: true, lineStyle: "dashed" },
+  ]);
+  await page.reload();
+  await expect(page.locator("[data-door]")).toHaveCount(0);
   await viewportFits(page);
 });
 

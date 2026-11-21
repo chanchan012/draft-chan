@@ -13,6 +13,7 @@ import {
   type Point,
   type Wall,
 } from "./model";
+import { layersByEntity } from "./organization";
 import { pointAlong } from "./openings";
 import { sketchPoints } from "./sketch";
 
@@ -71,6 +72,7 @@ function entries(
   plan: DraftPlanState,
   kinds = entityKinds as readonly EntityKind[],
 ) {
+  const namedLayers = layersByEntity(plan);
   const hosts = new Map(plan.walls.map((wall) => [wall.id, wall]));
   function entry(
     kind: EntityKind,
@@ -78,7 +80,17 @@ function entries(
     points: Point[],
     layer: string = kind,
   ) {
-    return { kind, id: entity.id, layer, bounds: bounds(points), entity };
+    const named = namedLayers.get(kind + ":" + entity.id);
+    return {
+      kind,
+      id: entity.id,
+      layer: named?.name ?? layer,
+      bounds: bounds(points),
+      entity,
+      ...(named
+        ? { layerId: named.id, locked: named.locked, visible: named.visible }
+        : {}),
+    };
   }
   return kinds.flatMap((kind) => {
     switch (kind) {
@@ -163,7 +175,9 @@ export function queryEntities(
   const matches = entries(plan, filter.kind ? [filter.kind] : undefined)
     .filter(
       (entry) =>
-        (!filter.layer || entry.layer === filter.layer) &&
+        (!filter.layer ||
+          entry.layer === filter.layer ||
+          entry.layerId === filter.layer) &&
         (!filter.bounds || boundsMeet(entry.bounds, filter.bounds)),
     )
     .sort((a, b) => compareText(a.kind, b.kind) || compareText(a.id, b.id));

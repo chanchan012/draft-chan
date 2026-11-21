@@ -3,12 +3,14 @@
 import { Crosshair, Focus, Minus, Plus } from "lucide-react";
 import {
   useEffect,
+  useMemo,
   useRef,
   useState,
   type FormEvent,
   type KeyboardEvent,
   type PointerEvent,
 } from "react";
+import { visibleDrawing } from "@/lib/plans/organization";
 import { createPortal } from "react-dom";
 import {
   fitCamera,
@@ -109,7 +111,7 @@ const same = (a: Point, b: Point) => a.x === b.x && a.y === b.y;
 const humanColors = ["#2d655d", "#395888", "#86465f", "#68509b"];
 
 export function Surface({
-  plan,
+  plan: authored,
   tool,
   iso,
   ortho,
@@ -132,6 +134,7 @@ export function Surface({
   onDimension,
   onDoor,
 }: SurfaceProps) {
+  const plan = useMemo(() => visibleDrawing(authored), [authored]);
   const surface = useRef<HTMLDivElement>(null);
   const svg = useRef<SVGSVGElement>(null);
   const gesture = useRef<Gesture | null>(null);

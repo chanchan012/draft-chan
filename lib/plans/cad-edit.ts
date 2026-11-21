@@ -208,6 +208,9 @@ function transformEntities(
     { newId: string; original: Wall; changed: Wall }
   >();
   const result: PlanCommand[] = [];
+  const blockLinks = new Map(
+    plan.blockInstances?.map((link) => [link.kind + ":" + link.id, link]),
+  );
   const point = (p: Point) => modelPrecision(map.point(p));
   for (const ref of selected.values()) {
     if (ref.kind !== "wall") continue;
@@ -341,6 +344,18 @@ function transformEntities(
             : { type: "utility.update", id, changes },
         );
       }
+    }
+    const link = copy ? blockLinks.get(ref.kind + ":" + ref.id) : undefined;
+    if (link) {
+      const instance = { ...link, id };
+      if (instance.kind === "door" && map.reflected) {
+        const door = lookup(plan.openings, ref);
+        instance.overrides = {
+          ...instance.overrides,
+          swing: door.swing === "left" ? "right" : "left",
+        };
+      }
+      result.push({ type: "block.link", instance });
     }
   }
   return result;

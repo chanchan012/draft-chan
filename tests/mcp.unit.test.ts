@@ -364,16 +364,20 @@ it("lays out a two-bedroom plan using all MCP resources and tools over HTTP", as
       "array_entities",
       "calculate_bom",
       "check_clearance_codes",
+      "define_block",
       "diff_revisions",
       "draw_arc",
       "draw_circle",
       "draw_construction_line",
       "draw_polyline",
       "draw_wall",
+      "edit_block_definition",
       "edit_corner",
       "explain_constraints",
       "furnish_room_preset",
+      "insert_block",
       "inspect_entity",
+      "manage_layer",
       "measure_geometry",
       "offset_geometry",
       "place_fixture",
@@ -895,6 +899,147 @@ it("drives wall distances and returns structured conflict IDs over MCP", async (
     await client.close();
   }
 });
+it("updates native block instances and rejects locked changes through MCP and graph RPC", async () => {
+  const session = await planWithToken();
+  const client = await connect(createMcpHttp(localWindow(60)), session.token);
+  async function call(name: string, args: Record<string, unknown>) {
+    const result = await client.callTool({ name, arguments: args });
+    if (!isCallToolResult(result)) throw new Error("Expected tool result");
+    return result;
+  }
+  const base = {
+    revision: 0,
+    unit: "mm",
+    walls: [
+      {
+        id: "wall",
+        start: { x: 0, y: 0 },
+        end: { x: 6000, y: 0 },
+        thicknessMm: 120,
+        kind: "interior",
+      },
+    ],
+    openings: [],
+  };
+  const definition = {
+    id: "door-type",
+    kind: "door",
+    name: "Office door",
+    parameters: { widthMm: 900, hinge: "start", swing: "right" },
+  };
+  try {
+    expect(
+      (
+        await session.api.request(
+          session.path + "/graph",
+          payload("PATCH", base),
+        )
+      ).status,
+    ).toBe(200);
+    expect(
+      await call("define_block", { expectedRevision: 1, definition }),
+    ).toMatchObject({ isError: false });
+    const instance = await call("insert_block", {
+      expectedRevision: 2,
+      blockId: definition.id,
+      placement: { kind: "door", wallId: "wall", offsetMm: 1600 },
+    });
+    const instanceId = (instance.structuredContent as { instanceId: string })
+      .instanceId;
+    expect(instanceId).toBeTruthy();
+    expect(
+      await call("insert_block", {
+        expectedRevision: 3,
+        blockId: definition.id,
+        placement: {
+          kind: "door",
+          wallId: "wall",
+          offsetMm: 4000,
+          overrides: { widthMm: 850 },
+        },
+      }),
+    ).toMatchObject({ isError: false });
+    expect(
+      await call("edit_block_definition", {
+        expectedRevision: 4,
+        definition: {
+          ...definition,
+          parameters: { ...definition.parameters, widthMm: 1000 },
+        },
+      }),
+    ).toMatchObject({ isError: false });
+    const graph = (await (
+      await session.api.request(session.path + "/graph")
+    ).json()) as StudioDocument;
+    expect(
+      graph.graph.openings.find((item) => item.id === instanceId)?.widthMm,
+    ).toBe(1000);
+    expect(
+      graph.graph.openings.find((item) => item.id !== instanceId)?.widthMm,
+    ).toBe(850);
+    expect(
+      graph.graph.blockInstances?.find((item) => item.id === instanceId)
+        ?.overrides,
+    ).toEqual({});
+    expect(
+      await call("manage_layer", {
+        expectedRevision: 5,
+        action: "put",
+        layer: {
+          id: "protected",
+          name: "Protected",
+          visible: true,
+          locked: true,
+          color: "#334455",
+          lineStyle: "dashed",
+          members: [{ kind: "door", id: instanceId }],
+        },
+      }),
+    ).toMatchObject({ isError: false });
+    expect(
+      await call("edit_block_definition", {
+        expectedRevision: 6,
+        definition: {
+          ...definition,
+          parameters: { ...definition.parameters, widthMm: 1100 },
+        },
+      }),
+    ).toMatchObject({
+      isError: true,
+      structuredContent: { message: expect.stringContaining("locked") },
+    });
+    expect(
+      await call("query_entities", { kind: "door", layer: "Protected" }),
+    ).toMatchObject({
+      isError: false,
+      structuredContent: {
+        revision: 6,
+        entities: [{ id: instanceId, locked: true }],
+      },
+    });
+    const attempt = await session.api.request(
+      session.path + "/graph",
+      payload("PATCH", {
+        ...base,
+        revision: 6,
+        walls: [
+          {
+            ...base.walls[0],
+            start: { x: 0, y: 100 },
+            end: { x: 6000, y: 100 },
+          },
+        ],
+        openings: graph.graph.openings.map(
+          ({ createdBy: _, updatedBy: __, ...opening }) => opening,
+        ),
+      }),
+    );
+    expect(attempt.status).toBe(400);
+    expect((await attempt.json()).error).toContain("locked");
+  } finally {
+    await client.close();
+  }
+});
 it("bridges stdio to the authenticated HTTP tools without sharing the database connection", async () => {
   const session = await planWithToken();
   const app = createMcpHttp(localWindow());
@@ -932,7 +1077,7 @@ it("bridges stdio to the authenticated HTTP tools without sharing the database c
         },
       }),
     );
-    expect((await client.listTools()).tools).toHaveLength(29);
+    expect((await client.listTools()).tools).toHaveLength(33);
     expect((await client.listResources()).resources).toHaveLength(3);
     expect(
       (await client.readResource({ uri: "draft://floorplan-graph" })).contents,
