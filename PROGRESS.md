@@ -32,6 +32,12 @@ Application merge `1bcb64c0354c0a1e78041fec49bf55e08ff7c234` adds `preview_chang
 
 Strict TypeScript, the Next production build, 73 Vitest tests and 105 Playwright checks across five viewports passed. The temporary Neon branch exercised the migration as the runtime role. Migration `0005_agent_transactions.sql` is applied to the shared `draft` database. The graph format stays at version 1. Vercel Preview `dpl_EPZYyH5AyDg7yk2r1ieK6xexLz8i` and Production `dpl_AT3Bi7w3uF5cfCCRVBWvrfaWdeik` reached Ready. Production returned HTTP 200 for the landing page, HTTP 307 for signed-out Studio and HTTP 401 with OAuth discovery for signed-out MCP.
 
+## M7.1 · Wall constraints and driving dimensions
+
+Application merge `e7bf6244e4b9217423e8f1566eb5bb824147ac7e` adds coincident, parallel, perpendicular, equal-length and fixed-distance relations. Studio solves driving dimensions and shows degrees of freedom. MCP exposes `add_constraint`, `set_driving_dimension`, `explain_constraints` and `remove_constraint` with conflict IDs on unsatisfied edits. Driving dimensions render in Studio and SVG/DXF exports.
+
+Strict TypeScript, the Next build, 77 Vitest tests and 110 Playwright checks passed. Production `dpl_CfgEwkGtQo1NHtVYrG4P9uWTaJBz` reached Ready. Preview `dpl_2trvKgr7mfwNa7zc8H28xfZrCakC` is the feature-branch deployment. Graph v1 gains optional `constraints` and uses database migrations through 0005.
+
 ## M1.1 · Foundation and shell
 
 Released on 2026-11-18. The verified application merge is `0a0adcde04ab7fb14818dbdcea9e570e89d977b2`. The release documentation follows the application merge on main.

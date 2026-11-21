@@ -2,6 +2,8 @@
 
 ## Next proposed subgoal
 
+M7.1 is implemented in `lib/plans/constraints.ts`, `lib/plans/command-store.ts` and `components/studio/constraints-panel.tsx`. Run `npm test -- tests/constraints.unit.test.ts tests/mcp.unit.test.ts` and `npm run test:e2e -- --grep "solves a driving distance"`. M7.2 follows. The graph stays at v1, database migrations end at 0005 and MCP exposes 29 tools at this checkpoint.
+
 M6.1 and M6.2 are complete. M7.1 is next in the drafting track. Read the [CAD roadmap](CAD_ROADMAP.md) and inspect `lib/plans/cad-edit.ts`, `lib/plans/command-store.ts` and `lib/plans/model.ts` before adding constraints.
 
 M6.2 application merge `1bcb64c0354c0a1e78041fec49bf55e08ff7c234` exposes 25 MCP tools and the three existing resources. To reproduce the agent workflow, use `preview_changes` with the latest saved revision and ordered operations, then `apply_changes` with the returned token and those same operations. Use `diff_revisions` with the base and saved revisions to inspect the result. Run `npm test -- tests/cad-edit.unit.test.ts tests/mcp.unit.test.ts` and `npm run test:e2e -- --grep "offsets a selected|one adjacent agent transaction"` with a Studio test server.

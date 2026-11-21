@@ -169,3 +169,8 @@ Studio's Edit geometry panel and MCP both use `lib/plans/cad-edit.ts` to build t
 Migration `0005_agent_transactions.sql` creates `floorplan_revisions` and `floorplan_edit_batches`. Revision changes from existing saves and renames archive the previous row. `diff_revisions` reads current and archived owner-scoped versions in a single query, then pages the authored object differences. Comparisons start with the state at migration rollout. Both tables cascade when the floorplan is deleted. The trigger archives from the floorplan row with a fixed search path. The runtime role reads the archive and reads and inserts receipts.
 
 Studio fetches the optional latest `agentBatch` marker with the saved graph. When an open tab has a clean baseline and receives the immediately following revision from an agent batch, it creates one undo entry for the whole change. Dirty or skipped-revision updates use the existing rebase and conflict behavior.
+
+
+## M7.1 Wall constraints
+
+The saved graph has up to 96 optional wall constraints. `lib/plans/constraints.ts` uses shared coordinates as joint variables during a solve and iterates damped least-squares steps. It rounds the solved coordinates to the millimeter model, validates relations within 2 mm, guards hosted opening bounds, and rebuilds derived rooms before committing. The diagnostic reports Jacobian rank and remaining coordinate degrees of freedom, including rigid motion. Driving dimensions reference wall endpoints and appear in drawing exports. Direct edits validate existing relations, and removing a referenced wall requires removing its constraints in the same edit or first.
