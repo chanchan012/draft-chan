@@ -2,7 +2,7 @@
 
 ## CAD roadmap
 
-The [architectural CAD roadmap](docs/CAD_ROADMAP.md) tracks shipped M5–M6 and planned M7–M17, with candidate MCP tools and release checks. M7.1 is next in the drafting track. M13.1 is the next visual milestone. Later milestones cover move-in rehearsals, client briefs, renovation and owner handover. The release history below records shipped work.
+The [architectural CAD roadmap](docs/CAD_ROADMAP.md) tracks shipped M5–M7 and planned M8–M17, with candidate MCP tools and release checks. M8.1 is next in the drafting track. M13.1 is the next visual milestone. Later milestones cover move-in rehearsals, client briefs, renovation and owner handover. The release history below records shipped work.
 
 ## M5.1 · Precision drafting
 
@@ -36,7 +36,13 @@ Strict TypeScript, the Next production build, 73 Vitest tests and 105 Playwright
 
 Application merge `e7bf6244e4b9217423e8f1566eb5bb824147ac7e` adds coincident, parallel, perpendicular, equal-length and fixed-distance relations. Studio solves driving dimensions and shows degrees of freedom. MCP exposes `add_constraint`, `set_driving_dimension`, `explain_constraints` and `remove_constraint` with conflict IDs on unsatisfied edits. Driving dimensions render in Studio and SVG/DXF exports.
 
-Strict TypeScript, the Next build, 77 Vitest tests and 110 Playwright checks passed. Production `dpl_CfgEwkGtQo1NHtVYrG4P9uWTaJBz` reached Ready. Preview `dpl_2trvKgr7mfwNa7zc8H28xfZrCakC` is the feature-branch deployment. Graph v1 gains optional `constraints` and uses database migrations through 0005.
+Strict TypeScript, the Next build, 77 Vitest tests and 110 Playwright checks passed. Production `dpl_CfgEwkGtQo1NHtVYrG4P9uWTaJBz` reached Ready. Preview `dpl_2trvKgr7mfwNa7zc8H28xfZrCakC` reached Ready. Graph v1 gains optional `constraints` and uses database migrations through 0005.
+
+## M7.2 · Named layers and reusable blocks
+
+Application merge `652602cb61072f2cea51f68131f4b294f64c1b24` adds named layers with assigned objects, visibility, color, line pattern and editing locks. Studio's Blocks panel creates and inserts typed door, window and fixture definitions. Editing defaults updates inheriting instances and keeps overrides. CAD copies retain their links, with an explicit door swing override on a mirrored copy. Layer locks protect members and hosted openings through Studio, MCP and snapshot saves.
+
+Strict TypeScript, the Next production build, 79 Vitest tests and 115 Playwright checks passed. Draft exposes 33 MCP tools and three resources. Optional graph v1 fields `drawingLayers`, `blocks` and `blockInstances` use the existing JSON storage. Database migrations stay at 0005. Vercel Preview `dpl_BTo4ZL17Pmi7vkdTRABiAzF8QSA9` and Production `dpl_EFJif7tmkywb5qU1idtWHPHgxHJS` reached Ready. Production smoke checks returned HTTP 200 for the landing page, HTTP 307 for signed-out Studio and HTTP 401 with OAuth discovery for signed-out MCP.
 
 ## M1.1 · Foundation and shell
 

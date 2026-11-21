@@ -174,3 +174,12 @@ Studio fetches the optional latest `agentBatch` marker with the saved graph. Whe
 ## M7.1 Wall constraints
 
 The saved graph has up to 96 optional wall constraints. `lib/plans/constraints.ts` uses shared coordinates as joint variables during a solve and iterates damped least-squares steps. It rounds the solved coordinates to the millimeter model, validates relations within 2 mm, guards hosted opening bounds, and rebuilds derived rooms before committing. The diagnostic reports Jacobian rank and remaining coordinate degrees of freedom, including rigid motion. Driving dimensions reference wall endpoints and appear in drawing exports. Direct edits validate existing relations, and removing a referenced wall requires removing its constraints in the same edit or first.
+
+
+## M7.2 Drawing organization
+
+Named layers store stable entity-kind and ID references, a display name, visibility, a color, a 2D line pattern and a lock flag. Each object belongs to at most one named layer. Visibility filters Studio display, hit testing and snapping. The export worker uses the authored graph, including geometry on layers hidden in Studio. Constraints and quantities also use the authored model.
+
+Shared block definitions support doors, windows and catalog fixtures. Instances retain native object IDs and placement. Each link stores its definition and an override map. Definition edits materialize inherited values into native objects, and direct instance edits update the relevant overrides. This keeps the existing clearance, quantity, isometric and export paths working with the resolved dimensions. Copy, mirror and arrays preserve links. A mirrored door copy records its new swing explicitly.
+
+The command store and snapshot save share `lib/plans/organization.ts`. While a layer remains locked, changes to its members, links, objects or an opening's host wall are rejected. A layer can be unlocked through the layer controls. Missing links from deleted unlocked objects are pruned. Snapshot rebasing and revision diffs include layers, definitions and instances. No relational migration is required.

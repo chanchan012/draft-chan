@@ -2,13 +2,11 @@
 
 ## Next proposed subgoal
 
-M7.1 is implemented in `lib/plans/constraints.ts`, `lib/plans/command-store.ts` and `components/studio/constraints-panel.tsx`. Run `npm test -- tests/constraints.unit.test.ts tests/mcp.unit.test.ts` and `npm run test:e2e -- --grep "solves a driving distance"`. M7.2 follows. The graph stays at v1, database migrations end at 0005 and MCP exposes 29 tools at this checkpoint.
+M7.1 and M7.2 are complete. M8.1 is next in the drafting track. Review the [CAD roadmap](CAD_ROADMAP.md) and inspect `lib/plans/model.ts`, `lib/plans/constraints.ts` and `lib/plans/organization.ts` before changing the wall or room graph.
 
-M6.1 and M6.2 are complete. M7.1 is next in the drafting track. Read the [CAD roadmap](CAD_ROADMAP.md) and inspect `lib/plans/cad-edit.ts`, `lib/plans/command-store.ts` and `lib/plans/model.ts` before adding constraints.
+M7.2 application merge `652602cb61072f2cea51f68131f4b294f64c1b24` exposes 33 MCP tools and three resources. Run `npm test -- tests/constraints.unit.test.ts tests/organization.unit.test.ts tests/mcp.unit.test.ts` and `npm run test:e2e -- --grep "solves a driving distance|updates a door block"` with a Studio test server. Graph v1 adds optional constraints, layers, definitions and instances. Neon migrations remain through 0005 and the existing environment variables are sufficient.
 
-M6.2 application merge `1bcb64c0354c0a1e78041fec49bf55e08ff7c234` exposes 25 MCP tools and the three existing resources. To reproduce the agent workflow, use `preview_changes` with the latest saved revision and ordered operations, then `apply_changes` with the returned token and those same operations. Use `diff_revisions` with the base and saved revisions to inspect the result. Run `npm test -- tests/cad-edit.unit.test.ts tests/mcp.unit.test.ts` and `npm run test:e2e -- --grep "offsets a selected|one adjacent agent transaction"` with a Studio test server.
-
-The shared `draft` database has migration `0005_agent_transactions.sql` recorded at `1795225128431` with SHA-256 `0249738f5c5d0d2dbe536f2154d728ffa12ebf07e250d171224e0ab85fa0a18f`. For a fresh database, run `npm run db:migrate` as the owner. Migration 0005 grants the runtime role access when `draft_app` already exists. If the role is created later, grant SELECT on `public.floorplan_revisions` and SELECT and INSERT on `public.floorplan_edit_batches`. Graph version 1 and existing environment variables are sufficient.
+The M6.2 preview/apply contract and migration ledger details are recorded below under M6.2 Agent transactions.
 
 The visual track starts at M13.1 in the [architectural CAD roadmap](CAD_ROADMAP.md). Inspect the current renderer with `rg --files components/studio lib/plans | rg "isometric|wall-mesh"`. Use the existing MCP-furnished apartment in `tests/e2e/studio.spec.ts` as the first reference scene.
 
@@ -270,3 +268,10 @@ npm start
 ```
 
 With the optimized server running, run `PLAYWRIGHT_BASE_URL=http://127.0.0.1:3000 npm run test:e2e`. All 65 Vitest tests and 85 Playwright checks passed. The MCP browser fixture verifies a joined outer corner and the furnished cutaway across five viewport sizes. Production returned HTTP 200 for the landing page and OAuth resource metadata, preserved the Studio sign-in destination, and returned the OAuth challenge for unauthenticated MCP requests. Signed-in rendering was verified on fixture plans.
+
+
+## M6.2 Agent transactions
+
+M6.2 application merge `1bcb64c0354c0a1e78041fec49bf55e08ff7c234` exposes 25 MCP tools and the three existing resources. To reproduce the agent workflow, use `preview_changes` with the latest saved revision and ordered operations, then `apply_changes` with the returned token and those same operations. Use `diff_revisions` with the base and saved revisions to inspect the result. Run `npm test -- tests/cad-edit.unit.test.ts tests/mcp.unit.test.ts` and `npm run test:e2e -- --grep "offsets a selected|one adjacent agent transaction"` with a Studio test server.
+
+The shared `draft` database has migration `0005_agent_transactions.sql` recorded at `1795225128431` with SHA-256 `0249738f5c5d0d2dbe536f2154d728ffa12ebf07e250d171224e0ab85fa0a18f`. For a fresh database, run `npm run db:migrate` as the owner. Migration 0005 grants the runtime role access when `draft_app` already exists. If the role is created later, grant SELECT on `public.floorplan_revisions` and SELECT and INSERT on `public.floorplan_edit_batches`. Graph version 1 and existing environment variables are sufficient.
