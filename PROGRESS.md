@@ -2,7 +2,7 @@
 
 ## CAD roadmap
 
-The [architectural CAD roadmap](docs/CAD_ROADMAP.md) tracks shipped M5 and planned M6–M17, with candidate MCP tools and release checks. M6 is next in the drafting track. M13.1 is the next visual milestone. Later milestones cover move-in rehearsals, client briefs, renovation and owner handover. The release history below records shipped work.
+The [architectural CAD roadmap](docs/CAD_ROADMAP.md) tracks shipped M5–M6 and planned M7–M17, with candidate MCP tools and release checks. M7.1 is next in the drafting track. M13.1 is the next visual milestone. Later milestones cover move-in rehearsals, client briefs, renovation and owner handover. The release history below records shipped work.
 
 ## M5.1 · Precision drafting
 
@@ -25,6 +25,12 @@ Type checking, 68 Vitest checks and the optimized Next build passed. After corre
 Application merge `24695794dc8c98ab33ae06d506912c4b6a856980` adds Studio's Edit geometry panel and five MCP tools for transforms, offsets, trim/extend, corner edits and arrays. Hosted openings follow selected walls. Trim and corner edits reject the entire change if an opening cannot stay hosted. Dimensions have independent endpoints and can be included in a transform. Vercel Preview `dpl_Cvruk5yyiE4m1SuKeGYsruksrzbc` and Production `dpl_H6TTFReYg6po56y6MVqLmDS1s4nA` reached Ready.
 
 Strict type checking, the Next production build and 72 Vitest tests passed. Playwright passed 99 checks in the initial run and the wall offset and undo case passed on all five viewports after targeting the exposed part of the wall in landscape. Graph version 1 and database migrations through 0004 carry the release.
+
+## M6.2 · Agent transactions
+
+Application merge `1bcb64c0354c0a1e78041fec49bf55e08ff7c234` adds `preview_changes`, `apply_changes` and `diff_revisions`, bringing MCP to 25 tools. The corridor fixture verifies that a preview reports the hosted door, an invalid trim makes no writes and concurrent retries commit only one revision. A clean Studio tab that receives the immediately following agent batch can undo it in one step.
+
+Strict TypeScript, the Next production build, 73 Vitest tests and 105 Playwright checks across five viewports passed. The temporary Neon branch exercised the migration as the runtime role. Migration `0005_agent_transactions.sql` is applied to the shared `draft` database. The graph format stays at version 1. Vercel Preview `dpl_EPZYyH5AyDg7yk2r1ieK6xexLz8i` and Production `dpl_AT3Bi7w3uF5cfCCRVBWvrfaWdeik` reached Ready. Production returned HTTP 200 for the landing page, HTTP 307 for signed-out Studio and HTTP 401 with OAuth discovery for signed-out MCP.
 
 ## M1.1 · Foundation and shell
 

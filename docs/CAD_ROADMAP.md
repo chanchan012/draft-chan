@@ -1,8 +1,8 @@
 # Architectural CAD and agent roadmap
 
-Draft supports floorplans, hosted openings, furnishing, an isometric cutaway, clearance screening, quantities, blueprint exports and the precision tools shipped in M5. Its authenticated MCP server exposes 17 tools and three resources. M6–M17 describe planned additions. The product focus is architectural drafting from measured survey through an issued drawing set.
+Draft supports floorplans, hosted openings, furnishing, an isometric cutaway, clearance screening, quantities, blueprint exports and the precision tools shipped in M5. Its authenticated MCP server exposes 25 tools and three resources. M7–M17 describe planned additions. The product focus is architectural drafting from measured survey through an issued drawing set.
 
-M5.1 and M5.2 shipped precision measurements, object snaps, exact entry and 2D sketch primitives. M6.1 is the next drafting subgoal. M13.1 is the next visual milestone. The sequence below identifies dependencies and suggested release order.
+M5.1 and M5.2 shipped precision measurements, object snaps, exact entry and 2D sketch primitives. M6.1 and M6.2 shipped Studio editing commands and agent transactions. M7.1 is the next drafting subgoal. M13.1 is the next visual milestone. The sequence below identifies dependencies and suggested release order.
 
 ## Milestones
 
@@ -15,12 +15,12 @@ Available MCP tools include `query_entities`, `inspect_entity`, `resolve_snap`, 
 
 **Acceptance.** On a rotated room, Studio and MCP return the same snap reference and face-to-face width. A 12 ft input yields 3657.6 mm before documented storage rounding. Construction geometry contributes zero room area and BOM quantity.
 
-### M6 · Editing and agent transactions
+### M6 · Editing and agent transactions (shipped)
 
 - **6.1** Add move/copy/rotate/mirror, offset, trim/extend to a boundary, fillet/chamfer and linear/polar arrays. Preserve or explicitly report effects on hosted doors, windows and dimensions.
 - **6.2** Expose preview, atomic apply and revision diff through MCP.
 
-Proposed MCP tools include `transform_entities`, `offset_geometry`, `trim_extend`, `edit_corner`, `array_entities`, `preview_changes`, `apply_changes`, `diff_revisions`.
+Available MCP tools include `transform_entities`, `offset_geometry`, `trim_extend`, `edit_corner`, `array_entities`, `preview_changes`, `apply_changes` and `diff_revisions`.
 
 **Acceptance.** An agent previews a corridor widening and sees the affected openings. A successful batch creates one revision and one undo step. An invalid trim or stale preview makes zero writes. Retrying the same committed request returns its original receipt.
 
@@ -136,6 +136,6 @@ Proposed MCP tools include `attach_site_observation`, `compare_site_measurement`
 ## Suggested release sequence
 
 1. **Next visual release.** M13.1 on a saved two-bedroom apartment. Build one excellent furnished scene and test it on a phone before expanding the asset catalog. Use the stable entity references from M5 across both views.
-2. **Next client review.** M13.2–13.3 and M15.1. Compare a daylight kitchen and an evening kitchen from the same camera, review the brief and publish a revision-linked image. Ship M6 for reversible editing and agent previews.
+2. **Next client review.** M13.2–13.3 and M15.1. Compare a daylight kitchen and an evening kitchen from the same camera, review the brief and publish a revision-linked image. Use the M6 editing commands and agent previews to make reversible changes.
 3. **Next design decision.** Use M14.1 and M16.1 to compare keeping an existing sofa with buying a smaller one. Show the path around the entrance corner, the cost difference and the furnished result. These first slices can use one storey and local comparison snapshots.
 4. **Project delivery.** M7–M12 support constrained drafting, storeys, construction sheets, interchange, coordination and team review. Use their completed capabilities for multi-storey rehearsals, named alternative reviews, construction phasing and M17 handover. Exercise recovery, permissions and performance with each release.

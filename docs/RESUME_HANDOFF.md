@@ -2,11 +2,11 @@
 
 ## Next proposed subgoal
 
-M6.1 is implemented in `lib/plans/cad-edit.ts` and `components/studio/cad-edit-panel.tsx`. Before M6.2, use `npm test -- tests/cad-edit.unit.test.ts tests/mcp.unit.test.ts`. For a focused browser test, run `npm run test:e2e -- --grep "offsets a selected"`. MCP exposes 22 tools at the M6.1 checkpoint.
+M6.1 and M6.2 are complete. M7.1 is next in the drafting track. Read the [CAD roadmap](CAD_ROADMAP.md) and inspect `lib/plans/cad-edit.ts`, `lib/plans/command-store.ts` and `lib/plans/model.ts` before adding constraints.
 
-M5.1 and M5.2 are complete. M6.1 is next in the drafting track. Read the [architectural CAD roadmap](CAD_ROADMAP.md), then inspect `lib/plans/editor-selection.ts`, `lib/plans/precision.ts`, `lib/plans/sketch.ts` and `lib/plans/command-store.ts` before adding transformations. Existing exact-entry tests use the 12 ft example and a 500 mm circle centered at a local origin.
+M6.2 application merge `1bcb64c0354c0a1e78041fec49bf55e08ff7c234` exposes 25 MCP tools and the three existing resources. To reproduce the agent workflow, use `preview_changes` with the latest saved revision and ordered operations, then `apply_changes` with the returned token and those same operations. Use `diff_revisions` with the base and saved revisions to inspect the result. Run `npm test -- tests/cad-edit.unit.test.ts tests/mcp.unit.test.ts` and `npm run test:e2e -- --grep "offsets a selected|one adjacent agent transaction"` with a Studio test server.
 
-The M5.2 application merge is `b63368f95fd7e8999c68d812485df150d0817dba`. The graph is v1 with optional `sketches` and database migrations through 0004. MCP exposes 17 tools and the same three resources. Run `npm test -- tests/precision.unit.test.ts tests/mcp.unit.test.ts` for focused geometry and authenticated MCP coverage. Run `npm run test:e2e -- --grep "places precise|exact circle"` with a Studio test server for the coordinate and polar flows.
+The shared `draft` database has migration `0005_agent_transactions.sql` recorded at `1795225128431` with SHA-256 `0249738f5c5d0d2dbe536f2154d728ffa12ebf07e250d171224e0ab85fa0a18f`. For a fresh database, run `npm run db:migrate` as the owner. Migration 0005 grants the runtime role access when `draft_app` already exists. If the role is created later, grant SELECT on `public.floorplan_revisions` and SELECT and INSERT on `public.floorplan_edit_batches`. Graph version 1 and existing environment variables are sufficient.
 
 The visual track starts at M13.1 in the [architectural CAD roadmap](CAD_ROADMAP.md). Inspect the current renderer with `rg --files components/studio lib/plans | rg "isometric|wall-mesh"`. Use the existing MCP-furnished apartment in `tests/e2e/studio.spec.ts` as the first reference scene.
 

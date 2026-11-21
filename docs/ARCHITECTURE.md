@@ -158,3 +158,14 @@ In Studio, the local origin shifts the drawing grid and the coordinate input fra
 ## M6.1 CAD editing commands
 
 Studio's Edit geometry panel and MCP both use `lib/plans/cad-edit.ts` to build the existing PlanCommand batches. Hosted doors and windows are translated, rotated or copied with their wall. Reflection flips the door swing. Trim/extend and chamfer project the existing opening centers onto the new wall and reject a cut that would leave an opening outside it. The change summary reports authored geometry and affected opening IDs. Dimension annotations are independent coordinates. Current furniture uses cardinal rotations, and fillets are curves on sketch linework. Straight walls support a chamfer with matching type and thickness.
+
+
+## M6.2 Agent transactions and revision history
+
+`preview_changes` runs up to 24 ordered CAD edits in memory. Each operation validates geometry before the next operation runs. The response includes before and after geometry, affected opening IDs and a 15-minute HMAC-signed token. The signature is domain-separated and uses the existing Clerk server secret. It binds the floorplan, owner and agent scope to the saved revision, normalized inputs and resulting authored snapshot. Generated entity IDs derive from the preview UUID so apply reproduces the preview across instances.
+
+`apply_changes` verifies the token and reruns the same operations. The conditional floorplan UPDATE and the receipt INSERT share one PostgreSQL statement. A database trigger archives the previous revision within that statement. Competing requests with the same token return the originally committed receipt, including after preview expiry while authentication and token verification succeed. Different previews against a stale revision receive `revision_conflict`. The existing live bus sends one revision event after commit.
+
+Migration `0005_agent_transactions.sql` creates `floorplan_revisions` and `floorplan_edit_batches`. Revision changes from existing saves and renames archive the previous row. `diff_revisions` reads current and archived owner-scoped versions in a single query, then pages the authored object differences. Comparisons start with the state at migration rollout. Both tables cascade when the floorplan is deleted. The trigger archives from the floorplan row with a fixed search path. The runtime role reads the archive and reads and inserts receipts.
+
+Studio fetches the optional latest `agentBatch` marker with the saved graph. When an open tab has a clean baseline and receives the immediately following revision from an agent batch, it creates one undo entry for the whole change. Dirty or skipped-revision updates use the existing rebase and conflict behavior.
