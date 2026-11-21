@@ -12,6 +12,7 @@ import {
   sketchSchema,
   compareText,
   constraintLimit,
+  documentItemLimit,
   doorSchema,
   fixtureSchema,
   placementLimit,
@@ -37,6 +38,7 @@ import {
   reconcileOrganization,
   upsertLayer,
 } from "./organization";
+import { validateDocuments } from "./drawing-documents";
 import { validateBuilding } from "./building";
 import { initialGraph, loadDraftPlan } from "./plan-state";
 import { validateOpenings } from "./openings";
@@ -120,6 +122,26 @@ function applyEdit(
   actor: DraftActor,
 ) {
   switch (command.type) {
+    case "document.write": {
+      const items = (draft.documentItems ??= []);
+      const index = items.findIndex(({ id }) => id === command.item.id);
+      if (index >= 0) {
+        if (items[index].kind !== command.item.kind)
+          throw new Error("A drawing document item keeps its type.");
+        if (JSON.stringify(items[index]) !== JSON.stringify(command.item))
+          items[index] = command.item;
+      } else {
+        if (items.length >= documentItemLimit)
+          throw new Error(
+            "The plan has reached the drawing document item limit.",
+          );
+        items.push(command.item);
+        items.sort((a, b) => compareText(a.id, b.id));
+      }
+      return;
+    }
+    case "document.remove":
+      return editPlacement(draft.documentItems ?? [], command.id, actor);
     case "building.write": {
       const items = (draft.buildingElements ??= []);
       const index = items.findIndex((item) => item.id === command.item.id);
@@ -476,6 +498,7 @@ export function createDraftPlanStore(input: unknown = initialGraph()) {
         reconcileOrganization(plan, draft, actor);
         validateStoreys(draft);
         validateBuilding(draft);
+        validateDocuments(draft, plan);
         if (
           wallsChanged ||
           hasOrganization(draft) ||
@@ -508,8 +531,8 @@ export function createDraftPlanStore(input: unknown = initialGraph()) {
               ),
               outside
                 ? "The solved dimension would no longer fit hosted opening " +
-                    outside.id +
-                    "."
+                  outside.id +
+                  "."
                 : error instanceof Error
                   ? error.message
                   : "The solved walls cannot host the openings.",

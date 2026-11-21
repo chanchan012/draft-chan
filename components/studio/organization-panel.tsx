@@ -137,7 +137,13 @@ export function NamedLayersPanel({
             </select>
           </label>
           <form
-            key={layer.id + layer.name + layer.color + layer.lineStyle}
+            key={
+              layer.id +
+              layer.name +
+              layer.color +
+              layer.lineStyle +
+              (layer.lineWeightMm ?? "")
+            }
             className="studio-fields"
             aria-label="Layer style"
             onSubmit={(event) => {
@@ -147,6 +153,9 @@ export function NamedLayersPanel({
                 name: String(data.get("name")),
                 color: String(data.get("color")),
                 lineStyle: data.get("line") as DrawingLayer["lineStyle"],
+                lineWeightMm: data.get("weight")
+                  ? Number(data.get("weight"))
+                  : undefined,
               });
             }}
           >
@@ -173,6 +182,18 @@ export function NamedLayersPanel({
                 </select>
               </label>
             </div>
+            <label>
+              Paper line weight (mm)
+              <input
+                type="number"
+                name="weight"
+                min="0.05"
+                max="2"
+                step="0.01"
+                placeholder="Automatic"
+                defaultValue={layer.lineWeightMm}
+              />
+            </label>
             <button className="studio-cad-apply" type="submit">
               Save layer style
             </button>

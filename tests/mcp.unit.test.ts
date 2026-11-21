@@ -360,6 +360,8 @@ it("lays out a two-bedroom plan using all MCP resources and tools over HTTP", as
     ).toEqual([
       "add_constraint",
       "add_dimension_annotation",
+      "add_hatch",
+      "add_leader",
       "apply_changes",
       "array_entities",
       "calculate_bom",
@@ -368,10 +370,12 @@ it("lays out a two-bedroom plan using all MCP resources and tools over HTTP", as
       "create_floor_opening",
       "create_roof",
       "create_section",
+      "create_sheet",
       "create_slab",
       "create_storey",
       "define_block",
       "diff_revisions",
+      "dimension_chain",
       "draw_arc",
       "draw_circle",
       "draw_construction_line",
@@ -389,16 +393,21 @@ it("lays out a two-bedroom plan using all MCP resources and tools over HTTP", as
       "place_fixture",
       "place_opening",
       "place_stair",
+      "place_viewport",
       "preview_changes",
       "query_building_view",
+      "query_drawing_documents",
       "query_entities",
       "query_spaces",
       "remove_building_item",
       "remove_constraint",
+      "remove_document_items",
       "resolve_snap",
+      "save_named_view",
       "set_driving_dimension",
       "set_wall_type",
       "split_or_join_wall",
+      "tag_entities",
       "transform_entities",
       "trigger_dxf_export",
       "trim_extend",
@@ -1260,7 +1269,7 @@ it("bridges stdio to the authenticated HTTP tools without sharing the database c
         },
       }),
     );
-    expect((await client.listTools()).tools).toHaveLength(45);
+    expect((await client.listTools()).tools).toHaveLength(54);
     expect((await client.listResources()).resources).toHaveLength(3);
     expect(
       (await client.readResource({ uri: "draft://floorplan-graph" })).contents,
@@ -1273,3 +1282,92 @@ it("bridges stdio to the authenticated HTTP tools without sharing the database c
     await closed;
   }
 }, 15_000);
+
+it("authors a scaled sheet with associative dimensions through MCP", async () => {
+  const session = await planWithToken();
+  const client = await connect(createMcpHttp(localWindow(100)), session.token);
+  let expectedRevision = 0;
+  async function write(name: string, args: Record<string, unknown>) {
+    const result = await client.callTool({
+      name,
+      arguments: { ...args, expectedRevision },
+    });
+    expect(result).toMatchObject({
+      isError: false,
+      structuredContent: { revision: ++expectedRevision },
+    });
+    if (!isCallToolResult(result)) throw new Error("Expected drawing response");
+    return result.structuredContent;
+  }
+  try {
+    const drawn = await write("draw_wall", {
+      start: { x: 0, y: 0 },
+      end: { x: 5000, y: 0 },
+      thicknessMm: 120,
+      kind: "exterior",
+    });
+    const { wallId } = drawn as { wallId: string };
+    await write("dimension_chain", {
+      chain: {
+        id: "chain",
+        storeyId: "ground",
+        axis: "horizontal",
+        offsetMm: -400,
+        anchors: [
+          { kind: "wall", id: wallId, end: "start" },
+          { kind: "wall", id: wallId, end: "end" },
+        ],
+      },
+    });
+    await write("save_named_view", {
+      view: {
+        id: "ground-plan",
+        name: "Ground floor",
+        source: { kind: "plan", storeyId: "ground" },
+        center: { x: 2500, y: 0 },
+      },
+    });
+    await write("create_sheet", {
+      sheet: {
+        id: "a101",
+        number: "A101",
+        name: "Plans",
+        size: "A3",
+        orientation: "landscape",
+      },
+    });
+    await write("place_viewport", {
+      viewport: {
+        id: "panel",
+        sheetId: "a101",
+        viewId: "ground-plan",
+        x: 10,
+        y: 10,
+        width: 400,
+        height: 250,
+        scale: 50,
+      },
+    });
+    const drawing = await client.callTool({
+      name: "query_drawing_documents",
+      arguments: { sheetId: "a101" },
+    });
+    expect(drawing).toMatchObject({
+      isError: false,
+      structuredContent: {
+        width: 420,
+        height: 297,
+        panels: [
+          expect.objectContaining({
+            viewport: expect.objectContaining({ scale: 50 }),
+            primitives: expect.arrayContaining([
+              expect.objectContaining({ kind: "text", text: "5000" }),
+            ]),
+          }),
+        ],
+      },
+    });
+  } finally {
+    await client.close();
+  }
+});
