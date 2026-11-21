@@ -20,11 +20,15 @@ import {
   Redo2,
   Ruler,
   MoveHorizontal,
+  MoveUpRight,
   Save,
   Undo2,
   X,
 } from "lucide-react";
 import { useStore } from "zustand";
+import { cadEditCommands } from "@/lib/plans/cad-edit";
+import { summarizeChanges } from "@/lib/plans/change-summary";
+import { CadEditPanel } from "./cad-edit-panel";
 import { gridSteps, unitFactor } from "@/lib/plans/cad";
 import {
   utilityCatalog,
@@ -74,7 +78,7 @@ const tools = [
   { id: "pan", label: "Pan", icon: Hand, shortcut: "H" },
 ] as const;
 const overlayPanels = "(max-width: 1000px)";
-type RightPanel = "inspector" | "clearance" | "exports";
+type RightPanel = "inspector" | "clearance" | "exports" | "edit";
 
 export function Studio({
   initial,
@@ -156,6 +160,7 @@ export function Studio({
   }, [picked, plan, layers]);
   const active = selection.length === 1 ? selection[0] : undefined;
   const [message, setMessage] = useState("");
+  const editControl = useRef<HTMLButtonElement>(null);
   const auditControl = useRef<HTMLButtonElement>(null);
   const inspectorControl = useRef<HTMLButtonElement>(null);
   const exportsControl = useRef<HTMLButtonElement>(null);
@@ -610,6 +615,20 @@ export function Studio({
             <PanelRight size={20} />
           </button>
           <button
+            ref={editControl}
+            aria-expanded={rightPanel === "edit"}
+            aria-controls="studio-inspector"
+            aria-label="Edit geometry"
+            title="Edit geometry"
+            onClick={() => {
+              setTool("select");
+              setIso(false);
+              toggleRightPanel("edit");
+            }}
+          >
+            <MoveUpRight size={20} />
+          </button>
+          <button
             ref={auditControl}
             aria-expanded={rightPanel === "clearance"}
             aria-controls="studio-inspector"
@@ -655,21 +674,50 @@ export function Studio({
         <StudioPanel
           side="right"
           id="studio-inspector"
-          label={rightPanel === "exports" ? "Exports" : "Inspector"}
+          label={
+            rightPanel === "exports"
+              ? "Exports"
+              : rightPanel === "edit"
+                ? "Edit geometry"
+                : "Inspector"
+          }
           title={rightPanel === "clearance" ? "Clearance check" : undefined}
           open={rightPanel !== null}
           onClose={() => {
             closeRightPanel();
             const trigger =
-              rightPanel === "exports"
-                ? exportsControl
-                : rightPanel === "clearance"
-                  ? auditControl
-                  : inspectorControl;
+              rightPanel === "edit"
+                ? editControl
+                : rightPanel === "exports"
+                  ? exportsControl
+                  : rightPanel === "clearance"
+                    ? auditControl
+                    : inspectorControl;
             trigger.current?.focus();
           }}
         >
-          {rightPanel === "exports" ? (
+          {rightPanel === "edit" ? (
+            <CadEditPanel
+              selection={selection}
+              onApply={(input) => {
+                const before = store.getState().plan;
+                if (!executeBatch(cadEditCommands(before, input), actor))
+                  return "The selection is already in that position.";
+                const { affectedOpenings, warnings, changes } =
+                  summarizeChanges(before, store.getState().plan);
+                setMessage("");
+                return [
+                  `${changes.length} object${changes.length === 1 ? "" : "s"} changed.`,
+                  affectedOpenings.length
+                    ? `${affectedOpenings.length} hosted opening${affectedOpenings.length === 1 ? "" : "s"} carried or checked.`
+                    : "",
+                  ...warnings,
+                ]
+                  .filter(Boolean)
+                  .join(" ");
+              }}
+            />
+          ) : rightPanel === "exports" ? (
             <ExportPanel
               key={`${initial.id}:${checkpoint.revision}`}
               id={initial.id}

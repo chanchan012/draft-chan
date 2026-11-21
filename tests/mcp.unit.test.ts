@@ -354,6 +354,7 @@ it("lays out a two-bedroom plan using all MCP resources and tools over HTTP", as
       (await client.listTools()).tools.map(({ name }) => name).sort(),
     ).toEqual([
       "add_dimension_annotation",
+      "array_entities",
       "calculate_bom",
       "check_clearance_codes",
       "draw_arc",
@@ -361,15 +362,19 @@ it("lays out a two-bedroom plan using all MCP resources and tools over HTTP", as
       "draw_construction_line",
       "draw_polyline",
       "draw_wall",
+      "edit_corner",
       "furnish_room_preset",
       "inspect_entity",
       "measure_geometry",
+      "offset_geometry",
       "place_fixture",
       "place_opening",
       "query_entities",
       "resolve_snap",
       "split_or_join_wall",
+      "transform_entities",
       "trigger_dxf_export",
+      "trim_extend",
     ]);
     expect(
       (await client.listResources()).resources.map(({ name }) => name).sort(),
@@ -650,7 +655,7 @@ it("bridges stdio to the authenticated HTTP tools without sharing the database c
         },
       }),
     );
-    expect((await client.listTools()).tools).toHaveLength(17);
+    expect((await client.listTools()).tools).toHaveLength(22);
     expect((await client.listResources()).resources).toHaveLength(3);
     expect(
       (await client.readResource({ uri: "draft://floorplan-graph" })).contents,
