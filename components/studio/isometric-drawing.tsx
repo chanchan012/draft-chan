@@ -220,13 +220,15 @@ function depth(points: readonly Point[]) {
 
 export const IsometricDrawing = memo(function IsometricDrawing({
   plan,
+  heightMm,
 }: {
   plan: DraftPlanState;
+  heightMm?: number;
 }) {
   const { walls, rooms, openings, windows, fixtures } = plan;
   const model = useMemo(
-    () => buildIsometric({ walls, rooms, openings, windows }),
-    [walls, rooms, openings, windows],
+    () => buildIsometric({ walls, rooms, openings, windows }, heightMm),
+    [walls, rooms, openings, windows, heightMm],
   );
   const grain = useId();
   const scene = [

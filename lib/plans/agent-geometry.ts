@@ -9,6 +9,7 @@ import {
   type Wall,
 } from "./model";
 import { doorBounds, pointAlong, wallLength } from "./openings";
+import { storeyOf } from "./storeys";
 import { loadDraftPlan } from "./plan-state";
 import { inRoom, polygonAreaMm2 } from "./polygon";
 
@@ -104,6 +105,9 @@ export function splitWall(
         end: wall.end,
         kind: wall.kind,
         thicknessMm: wall.thicknessMm,
+        ...(wall.storeyId ? { storeyId: wall.storeyId } : {}),
+        ...(wall.wallTypeId ? { wallTypeId: wall.wallTypeId } : {}),
+        ...(wall.referenceLine ? { referenceLine: wall.referenceLine } : {}),
       },
     ],
   });
@@ -112,7 +116,14 @@ export function splitWall(
 export function joinWalls(plan: DraftPlanState, first: string, second: string) {
   const a = wallById(plan, first);
   const b = wallById(plan, second);
-  if (a.id === b.id || a.kind !== b.kind || a.thicknessMm !== b.thicknessMm)
+  if (
+    a.id === b.id ||
+    storeyOf(a) !== storeyOf(b) ||
+    a.kind !== b.kind ||
+    a.thicknessMm !== b.thicknessMm ||
+    a.wallTypeId !== b.wallTypeId ||
+    (a.referenceLine ?? "center") !== (b.referenceLine ?? "center")
+  )
     throw new Error(
       "Join two distinct walls with matching thickness and kind.",
     );
@@ -130,6 +141,16 @@ export function joinWalls(plan: DraftPlanState, first: string, second: string) {
       "The walls must continue in a straight line without overlapping.",
     );
   const heading = direction(start, end);
+  const sameDirection = (wall: Wall) =>
+    dot(direction(wall.start, wall.end), heading) > 0;
+  if (
+    a.referenceLine &&
+    a.referenceLine !== "center" &&
+    sameDirection(a) !== sameDirection(b)
+  )
+    throw new Error(
+      "Face-aligned walls must have compatible reference directions.",
+    );
   const length = wallLength({ start, end });
   const mapped = remapOpenings(plan, (wallId, offset) => {
     const wall = wallId === a.id ? a : wallId === b.id ? b : null;
@@ -148,7 +169,17 @@ export function joinWalls(plan: DraftPlanState, first: string, second: string) {
     rooms: [],
     walls: [
       ...plan.walls.filter(({ id }) => id !== a.id && id !== b.id),
-      { ...a, start, end },
+      {
+        ...a,
+        start,
+        end,
+        referenceLine:
+          a.referenceLine === "center" || !a.referenceLine || sameDirection(a)
+            ? a.referenceLine
+            : a.referenceLine === "positive"
+              ? "negative"
+              : "positive",
+      },
     ],
   });
 }
@@ -171,11 +202,13 @@ export function spatialAudit(plan: DraftPlanState) {
     const heading = direction(wall.start, wall.end);
     const distance = (wall.thicknessMm / 2 + 10) / wallLength(wall);
     const onSide = (side: number) =>
-      plan.rooms.find((room) =>
-        inRoom(room, {
-          x: center.x - heading.y * distance * side,
-          y: center.y + heading.x * distance * side,
-        }),
+      plan.rooms.find(
+        (room) =>
+          storeyOf(room) === storeyOf(wall) &&
+          inRoom(room, {
+            x: center.x - heading.y * distance * side,
+            y: center.y + heading.x * distance * side,
+          }),
       )?.id ?? null;
     return { doorwayId: door.id, first: onSide(1), second: onSide(-1) };
   });
@@ -225,9 +258,9 @@ export function furnishRoom(
       "Room unavailable. Read the spatial audit for current room IDs.",
     );
   const { left, right, top, bottom } = bounds(room.polygon);
-  const occupied = plan.fixtures.map((fixture) =>
-    bounds(fixtureFootprint(fixture)),
-  );
+  const occupied = plan.fixtures
+    .filter((fixture) => storeyOf(fixture) === storeyOf(room))
+    .map((fixture) => bounds(fixtureFootprint(fixture)));
   const fixtures: Fixture[] = [];
   for (const template of roomPresets[preset]) {
     const { widthMm, depthMm, heightMm } = fixtureCatalog[template];
@@ -238,6 +271,7 @@ export function furnishRoom(
         for (let col = 1; col <= 18 && !found; col++) {
           const candidate = {
             id,
+            ...(room.storeyId ? { storeyId: room.storeyId } : {}),
             template,
             widthMm,
             depthMm,

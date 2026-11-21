@@ -1,6 +1,6 @@
 import polygonClipping, { type Polygon } from "polygon-clipping";
 import { wallHeight } from "./cad";
-import { wallFootprint } from "./footprints";
+import { wallMaterialCenter, wallMaterialFootprint } from "./footprints";
 import type { DraftPlanState, Point, Room, Wall } from "./model";
 import { doorBounds, pointAlong, wallLength } from "./openings";
 import { inRoom } from "./polygon";
@@ -53,14 +53,15 @@ export function wallRole(wall: Wall, rooms: readonly Room[]): WallRole {
   return outward > 0 ? "front" : "rear";
 }
 
-function viewHeight(role: WallRole) {
+function viewHeight(role: WallRole, heightMm = wallHeight) {
   return role === "front" || role === "interior"
-    ? cutawayHeight[role]
-    : wallHeight;
+    ? Math.min(heightMm, cutawayHeight[role])
+    : heightMm;
 }
 
 export function buildIsometric(
   plan: Pick<DraftPlanState, "walls" | "rooms" | "openings" | "windows">,
+  heightMm = wallHeight,
 ) {
   const rooms = plan.rooms.map((room) => [room.polygon, ...(room.holes ?? [])]);
   const slab = rooms.length
@@ -96,30 +97,38 @@ export function buildIsometric(
     for (const { start, end } of mesh.runs.get(wall.id)!)
       section(
         role,
-        wallFootprint(start, end, wall.thicknessMm),
+        wallMaterialFootprint(wall, { start, end }),
         0,
-        viewHeight(role),
+        viewHeight(role, heightMm),
       );
   }
   for (const joint of mesh.joints) {
     const [a, b] = joint.walls.map((wall) => host.get(wall.id)!.role);
-    const role = viewHeight(a) <= viewHeight(b) ? a : b;
-    section(role, joint.footprint, 0, viewHeight(role));
+    const role = viewHeight(a, heightMm) <= viewHeight(b, heightMm) ? a : b;
+    section(role, joint.footprint, 0, viewHeight(role, heightMm));
   }
 
   const windows = (plan.windows ?? []).flatMap((window) => {
     const { wall, role } = host.get(window.wallId)!;
-    const max = viewHeight(role);
+    const max = viewHeight(role, heightMm);
     const [start, end] = doorBounds(window).map((offset) =>
       pointAlong(wall, offset),
     );
-    const footprint = wallFootprint(start, end, wall.thicknessMm);
+    const footprint = wallMaterialFootprint(wall, { start, end });
     const lintel = window.sillMm + window.heightMm;
     section(role, footprint, 0, Math.min(max, window.sillMm));
     section(role, footprint, lintel, max - lintel);
     const height = Math.min(max, lintel) - window.sillMm;
     return height > 0
-      ? [{ id: window.id, role, start, end, base: window.sillMm, height }]
+      ? [
+          {
+            id: window.id,
+            role,
+            ...wallMaterialCenter(wall, { start, end }),
+            base: window.sillMm,
+            height,
+          },
+        ]
       : [];
   });
   const walls: Section[] = [...groups.values()].flatMap(

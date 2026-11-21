@@ -3,6 +3,8 @@ import type { DraftPlanState } from "./model";
 
 const collections = [
   ["wall", "walls"],
+  ["storey", "storeys"],
+  ["wall_type", "wallTypes"],
   ["door", "openings"],
   ["window", "windows"],
   ["fixture", "fixtures"],
@@ -22,8 +24,12 @@ export function summarizeChanges(
   const earlier = studioSnapshot(before, "mm");
   const later = studioSnapshot(after, "mm");
   const changes = collections.flatMap(([kind, field]) => {
-    const old = new Map(earlier[field].map((entity) => [entity.id, entity]));
-    const current = new Map(later[field].map((entity) => [entity.id, entity]));
+    const old = new Map(
+      (earlier[field] ?? []).map((entity) => [entity.id, entity]),
+    );
+    const current = new Map(
+      (later[field] ?? []).map((entity) => [entity.id, entity]),
+    );
     return [...new Set([...old.keys(), ...current.keys()])]
       .sort()
       .flatMap((id) => {

@@ -46,6 +46,15 @@ export function rebaseSnapshot(
     fixtures: mergeItems(base.fixtures, draft.fixtures, saved.fixtures),
     utilities: mergeItems(base.utilities, draft.utilities, saved.utilities),
     windows: mergeItems(base.windows, draft.windows, saved.windows),
+    storeys:
+      base.storeys || draft.storeys || saved.storeys
+        ? mergeItems(
+            base.storeys ?? [],
+            draft.storeys ?? [],
+            saved.storeys ?? [],
+          )
+        : undefined,
+    wallTypes: mergeItems(base.wallTypes, draft.wallTypes, saved.wallTypes),
     drawingLayers: mergeItems(
       base.drawingLayers,
       draft.drawingLayers,

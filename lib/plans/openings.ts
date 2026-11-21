@@ -1,3 +1,4 @@
+import { wallMaterialCenter } from "./footprints";
 import { compareText, type Door, type Point, type Wall } from "./model";
 type Opening = Pick<Door, "id" | "wallId" | "offsetMm" | "widthMm">;
 
@@ -69,8 +70,9 @@ export function wallRuns(wall: Wall, doors: readonly Opening[]) {
 export function doorSwing(wall: Wall, door: Door) {
   const [start, end] = doorBounds(door);
   const reverse = door.hinge === "end";
-  const hinge = pointAlong(wall, reverse ? end : start);
-  const closed = pointAlong(wall, reverse ? start : end);
+  const center = { ...wall, ...wallMaterialCenter(wall) };
+  const hinge = pointAlong(center, reverse ? end : start);
+  const closed = pointAlong(center, reverse ? start : end);
   const side = door.swing === "left" ? -1 : 1;
   const leaf = {
     x: hinge.x - (closed.y - hinge.y) * side,

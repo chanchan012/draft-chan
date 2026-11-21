@@ -2,11 +2,17 @@ import { z } from "zod";
 
 const coordinate = z.number().finite().min(-10_000_000).max(10_000_000);
 const cursor = z.strictObject({ x: coordinate, y: coordinate }).nullable();
-export const presenceInput = z.strictObject({ clientId: z.uuid(), cursor });
+const storeyId = z.string().min(1).max(128).optional();
+export const presenceInput = z.strictObject({
+  clientId: z.uuid(),
+  cursor,
+  storeyId,
+});
 export const peerSchema = z.strictObject({
   id: z.string().max(100),
   kind: z.enum(["human", "ai"]),
   cursor,
+  storeyId,
   expiresAt: z.int().positive(),
 });
 const revision = z.int().nonnegative();

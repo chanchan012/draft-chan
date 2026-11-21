@@ -12,7 +12,42 @@ const coordinate = z.int().min(-1_000_000).max(1_000_000);
 const wallPoint = z.object({ x: coordinate, y: coordinate });
 export const modelPointInput = wallPoint.strict();
 const identifier = z.string().trim().min(1).max(128);
+export const defaultStoreyId = "ground";
+export const storeyIdInput = identifier.optional();
+export const wallReferenceInput = z.enum(["center", "positive", "negative"]);
+export const storeyInput = z.strictObject({
+  id: identifier,
+  name: z.string().trim().min(1).max(80),
+  elevationMm: z.int().min(-100_000).max(1_000_000),
+  wallHeightMm: z.int().min(1000).max(12_000),
+});
+export const wallTypeInput = z
+  .strictObject({
+    id: identifier,
+    name: z.string().trim().min(1).max(80),
+    layers: z
+      .array(
+        z.strictObject({
+          material: z.string().trim().min(1).max(80),
+          thicknessMm: z.int().positive().max(10_000),
+        }),
+      )
+      .min(1)
+      .max(16),
+  })
+  .refine(
+    (type) =>
+      type.layers.reduce((sum, layer) => sum + layer.thicknessMm, 0) <= 10_000,
+    "The assembly thickness must be at most 10000 mm.",
+  );
+export type Storey = z.infer<typeof storeyInput>;
+export type WallType = z.infer<typeof wallTypeInput>;
+export type WallReference = z.infer<typeof wallReferenceInput>;
+
 const wallParameters = z.object({
+  storeyId: storeyIdInput,
+  wallTypeId: identifier.optional(),
+  referenceLine: wallReferenceInput.optional(),
   start: wallPoint,
   end: wallPoint,
   thicknessMm: z.int().positive().max(10_000),
@@ -78,6 +113,7 @@ export const windowSchema = windowInput
 export type WindowOpening = z.infer<typeof windowSchema>;
 
 export const annotationInput = z.strictObject({
+  storeyId: storeyIdInput,
   id: identifier,
   start: modelPointInput,
   end: modelPointInput,
@@ -90,7 +126,10 @@ export const annotationSchema = annotationInput
   .refine(hasLength, "A dimension requires distinct endpoints.");
 export type DimensionAnnotation = z.infer<typeof annotationSchema>;
 
-const objectParameters = z.strictObject({ position: wallPoint });
+const objectParameters = z.strictObject({
+  position: wallPoint,
+  storeyId: storeyIdInput,
+});
 const fixtureParameters = objectParameters.extend({
   template: z.enum(fixtureKinds),
   widthMm: z.int().min(50).max(10_000),
@@ -151,6 +190,7 @@ export const sketchFields = [
 export const sketchGeometry = z.discriminatedUnion("kind", sketchFields);
 export type SketchGeometry = z.infer<typeof sketchGeometry>;
 export const sketchInput = z.strictObject({
+  storeyId: storeyIdInput,
   id: identifier,
   geometry: sketchGeometry,
 });
@@ -293,7 +333,7 @@ export const blockPlacementInput = z.discriminatedUnion("kind", [
     kind: z.literal("window"),
     overrides: windowParameters.partial().optional(),
   }),
-  fixtureInput.pick({ position: true, rotation: true }).extend({
+  fixtureInput.pick({ position: true, rotation: true, storeyId: true }).extend({
     kind: z.literal("fixture"),
     overrides: reusableFixture.partial().optional(),
   }),
@@ -338,6 +378,19 @@ export const planCommandSchema = z.union([
       id: identifier,
       blockId: identifier,
       placement: blockPlacementInput,
+    }),
+  ]),
+  z.discriminatedUnion("type", [
+    z.strictObject({ type: z.literal("storey.write"), storey: storeyInput }),
+    z.strictObject({
+      type: z.literal("wall_type.write"),
+      wallType: wallTypeInput,
+    }),
+    z.strictObject({
+      type: z.literal("wall.assembly"),
+      id: identifier,
+      wallTypeId: identifier.nullable(),
+      referenceLine: wallReferenceInput,
     }),
   ]),
   wallCommandSchema,
@@ -397,6 +450,7 @@ export const openingLimit = 1024;
 export const placementLimit = 512;
 
 export const roomSchema = z.object({
+  storeyId: storeyIdInput,
   id: z.string().min(1),
   polygon: polygonSchema,
   holes: z.array(polygonSchema).optional(),
@@ -412,6 +466,8 @@ export const draftPlanSchema = z.looseObject({
   fixtures: z.array(fixtureSchema),
   utilities: z.array(utilitySchema).default([]),
   dimensions: z.array(z.unknown()),
+  storeys: z.array(storeyInput).max(32).optional(),
+  wallTypes: z.array(wallTypeInput).max(128).optional(),
   drawingLayers: z.array(drawingLayerInput).max(64).optional(),
   blocks: z.array(blockInput).max(128).optional(),
   blockInstances: z.array(blockInstanceInput).max(3072).optional(),

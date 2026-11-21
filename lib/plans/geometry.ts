@@ -1,6 +1,6 @@
 import { z } from "zod";
 
-import { polygonSchema, wallSchema } from "./model";
+import { defaultStoreyId, polygonSchema, wallSchema } from "./model";
 import { polygonAreaMm2 } from "./polygon";
 export { initialGraph } from "./plan-state";
 
@@ -22,6 +22,7 @@ export const renamePlan = newPlan
   .strict();
 
 const roomBoundary = z.object({
+  storeyId: z.string().optional(),
   polygon: polygonSchema,
   holes: z.array(polygonSchema).optional(),
 });
@@ -42,15 +43,26 @@ export function areaM2(graph: unknown) {
   );
 }
 export function thumbnailSvg(graph: unknown) {
-  const rooms = roomBoundaries(graph);
+  const allRooms = roomBoundaries(graph);
   const decoded = z.object({ walls: z.array(z.unknown()) }).safeParse(graph);
-  const walls = decoded.success
+  const allWalls = decoded.success
     ? decoded.data.walls.flatMap((raw) => {
         const wall = wallSchema.safeParse(raw);
         return wall.success ? [wall.data] : [];
       })
     : [];
   let shapes = '<path d="M148 84h24m-12-12v24" fill="none" stroke="#969d88"/>';
+  const level = [...allRooms, ...allWalls].some(
+    (item) => (item.storeyId ?? defaultStoreyId) === defaultStoreyId,
+  )
+    ? defaultStoreyId
+    : ([...allRooms, ...allWalls][0]?.storeyId ?? defaultStoreyId);
+  const rooms = allRooms.filter(
+    (item) => (item.storeyId ?? defaultStoreyId) === level,
+  );
+  const walls = allWalls.filter(
+    (item) => (item.storeyId ?? defaultStoreyId) === level,
+  );
   if (rooms.length || walls.length) {
     const points = rooms
       .flatMap(({ polygon, holes = [] }) => [polygon, ...holes])

@@ -9,6 +9,7 @@ import {
 } from "./model";
 import { modelPrecision } from "./precision";
 import { directionDegrees, normalizeDegrees, pointAt } from "./sketch";
+import { storeyOf } from "./storeys";
 import { dot, subtract } from "./footprints";
 import { doorBounds, pointAlong, wallLength } from "./openings";
 
@@ -217,8 +218,27 @@ function transformEntities(
     const original = lookup(plan.walls, ref);
     const id = copy ? nextId() : ref.id;
     const { thicknessMm, kind } = original;
-    const changes = { start: point(original.start), end: point(original.end) };
-    const changed = { id, thicknessMm, kind, ...changes };
+    const referenceLine =
+      map.reflected &&
+      original.referenceLine &&
+      original.referenceLine !== "center"
+        ? original.referenceLine === "positive"
+          ? "negative"
+          : "positive"
+        : original.referenceLine;
+    const changes = {
+      start: point(original.start),
+      end: point(original.end),
+      referenceLine,
+    };
+    const changed = {
+      id,
+      thicknessMm,
+      kind,
+      storeyId: original.storeyId,
+      wallTypeId: original.wallTypeId,
+      ...changes,
+    };
     walls.set(ref.id, { newId: id, original, changed });
     result.push(
       copy
@@ -291,23 +311,37 @@ function transformEntities(
         const changes = { start: point(item.start), end: point(item.end) };
         result.push(
           copy
-            ? { type: "dimension.add", annotation: { id, ...changes } }
+            ? {
+                type: "dimension.add",
+                annotation: { id, ...changes, storeyId: item.storeyId },
+              }
             : { type: "dimension.update", id, changes },
         );
         break;
       }
       case "sketch": {
-        const geometry = mapSketch(lookup(plan.sketches, ref).geometry, map);
+        const item = lookup(plan.sketches, ref);
+        const geometry = mapSketch(item.geometry, map);
         result.push(
           copy
-            ? { type: "sketch.add", sketch: { id, geometry } }
+            ? {
+                type: "sketch.add",
+                sketch: { id, geometry, storeyId: item.storeyId },
+              }
             : { type: "sketch.update", id, geometry },
         );
         break;
       }
       case "fixture": {
-        const { position, rotation, template, widthMm, depthMm, heightMm } =
-          lookup(plan.fixtures, ref);
+        const {
+          position,
+          rotation,
+          template,
+          widthMm,
+          depthMm,
+          heightMm,
+          storeyId,
+        } = lookup(plan.fixtures, ref);
         const heading = map.heading(rotation);
         const index = Math.round(heading / 90);
         if (Math.abs(heading - index * 90) > 1e-7)
@@ -325,6 +359,7 @@ function transformEntities(
                 fixture: {
                   id,
                   template,
+                  storeyId,
                   widthMm,
                   depthMm,
                   heightMm,
@@ -336,11 +371,14 @@ function transformEntities(
         break;
       }
       case "utility": {
-        const { position, template } = lookup(plan.utilities, ref);
+        const { position, template, storeyId } = lookup(plan.utilities, ref);
         const changes = { position: point(position) };
         result.push(
           copy
-            ? { type: "utility.add", utility: { id, template, ...changes } }
+            ? {
+                type: "utility.add",
+                utility: { id, template, storeyId, ...changes },
+              }
             : { type: "utility.update", id, changes },
         );
       }
@@ -493,6 +531,16 @@ function offsetSketch(
   return { ...geometry, points: newPoints };
 }
 
+function sameStorey(plan: DraftPlanState, first: LineRef, second: LineRef) {
+  const find = (ref: LineRef) =>
+    ref.kind === "wall" ? lookup(plan.walls, ref) : lookup(plan.sketches, ref);
+  const a = find(first);
+  const b = find(second);
+  if (storeyOf(a) !== storeyOf(b))
+    throw new Error("CAD boundaries must be on the same storey.");
+  return a.storeyId;
+}
+
 function cornerCommands(
   plan: DraftPlanState,
   input: Extract<CadEdit, { operation: "corner" }>,
@@ -508,6 +556,7 @@ function cornerCommands(
       "Fillets apply to sketch linework. Use a chamfer for straight wall corners.",
     );
   const a = lineFor(plan, first);
+  const storeyId = sameStorey(plan, first, second);
   const b = lineFor(plan, second);
   const aEnd = same(a.start, b.start) || same(a.start, b.end) ? "start" : "end";
   const vertex = a[aEnd];
@@ -543,14 +592,22 @@ function cornerCommands(
       );
     commands.push({
       type: "wall.add",
-      wall: { id, start, end, kind: wall.kind, thicknessMm: wall.thicknessMm },
+      wall: {
+        id,
+        start,
+        end,
+        kind: wall.kind,
+        thicknessMm: wall.thicknessMm,
+        storeyId,
+        wallTypeId: wall.wallTypeId,
+      },
     });
   } else {
     const geometry: SketchGeometry =
       mode === "chamfer"
         ? { kind: "construction", start, end }
         : connectorArc(start, end, vertex, sizeMm, u, v);
-    commands.push({ type: "sketch.add", sketch: { id, geometry } });
+    commands.push({ type: "sketch.add", sketch: { id, geometry, storeyId } });
   }
   return commands;
 }
@@ -654,15 +711,19 @@ export function cadEditCommands(
           nextId,
         );
       }
-      const geometry = offsetSketch(
-        lookup(plan.sketches, entity).geometry,
-        distanceMm,
-      );
+      const sketch = lookup(plan.sketches, entity);
+      const geometry = offsetSketch(sketch.geometry, distanceMm);
       return copy
-        ? [{ type: "sketch.add", sketch: { id: nextId(), geometry } }]
+        ? [
+            {
+              type: "sketch.add",
+              sketch: { id: nextId(), geometry, storeyId: sketch.storeyId },
+            },
+          ]
         : [{ type: "sketch.update", id: entity.id, geometry }];
     }
     case "trim_extend": {
+      sameStorey(plan, input.entity, input.boundary);
       const line = lineFor(plan, input.entity);
       const boundary = lineFor(plan, input.boundary);
       const hit = meeting(line, boundary);

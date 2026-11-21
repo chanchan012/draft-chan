@@ -8,7 +8,12 @@ import {
 } from "@tarikjabiri/dxf";
 import { drivingDimensions } from "./constraints";
 import { utilityCatalog } from "./catalog";
-import { bounds, fixtureFootprint, wallFootprint } from "./footprints";
+import {
+  bounds,
+  fixtureFootprint,
+  wallMaterialFootprint,
+  wallMaterialCenter,
+} from "./footprints";
 import {
   doorBounds,
   doorSwing,
@@ -16,7 +21,13 @@ import {
   wallLength,
   wallRuns,
 } from "./openings";
-import { normalizeDegrees, sketchPath, sketchPoints } from "./sketch";
+import {
+  normalizeDegrees,
+  shiftSketch,
+  sketchPath,
+  sketchPoints,
+} from "./sketch";
+import { planStoreys, storeyPlan } from "./storeys";
 import type { DraftPlanState, Point } from "./model";
 import type { BlueprintFormat } from "./exports";
 
@@ -24,10 +35,11 @@ function blueprintGeometry(plan: DraftPlanState) {
   const wallsById = new Map(plan.walls.map((wall) => [wall.id, wall]));
   const openings = [...plan.openings, ...(plan.windows ?? [])];
   return {
+    labels: [] as { name: string; position: Point }[],
     sketches: (plan.sketches ?? []).map(({ geometry }) => geometry),
     walls: plan.walls.flatMap((wall) =>
       wallRuns(wall, openings).map(({ start, end }) =>
-        wallFootprint(start, end, wall.thicknessMm),
+        wallMaterialFootprint(wall, { start, end }),
       ),
     ),
     doors: plan.openings.map((door) => ({
@@ -40,9 +52,8 @@ function blueprintGeometry(plan: DraftPlanState) {
         pointAlong(wall, offset),
       );
       return {
-        start,
-        end,
-        outline: wallFootprint(start, end, wall.thicknessMm),
+        ...wallMaterialCenter(wall, { start, end }),
+        outline: wallMaterialFootprint(wall, { start, end }),
       };
     }),
     dimensions: [
@@ -88,6 +99,7 @@ function exportDxf({
   fixtures,
   utilities,
   sketches,
+  labels,
 }: Geometry) {
   const writer = new DxfWriter();
   writer.setUnits(Units.Millimeters);
@@ -174,6 +186,16 @@ function exportDxf({
       { layerName },
     );
   }
+  if (labels.length) {
+    writer.addLayer("STOREYS", Colors.White);
+    for (const label of labels)
+      writer.addText(
+        vertex(label.position),
+        125,
+        label.name.replace(/[\u0000-\u001f\u007f]/g, " "),
+        { layerName: "STOREYS" },
+      );
+  }
   return writer.stringify();
 }
 
@@ -197,11 +219,16 @@ function exportSvg(
     fixtures,
     utilities,
     sketches,
+    labels,
   }: Geometry,
   title: string,
 ) {
   const points = [
     ...walls.flat(),
+    ...labels.flatMap(({ name, position }) => [
+      position,
+      { x: position.x + name.length * 82, y: position.y - 140 },
+    ]),
     ...sketches.flatMap(sketchPoints),
     ...fixtures.flat(),
     ...doors.flatMap(({ hinge, radius }) => square(hinge, radius)),
@@ -270,6 +297,10 @@ function exportSvg(
     '<?xml version="1.0" encoding="UTF-8"?>',
     `<svg xmlns="http://www.w3.org/2000/svg" width="${width}mm" height="${height}mm" viewBox="${viewBox}">`,
     `<title>${escapeXml(title)}</title>`,
+    ...labels.map(
+      (label) =>
+        `<text x="${rounded(label.position.x)}" y="${rounded(label.position.y)}" font-size="125" fill="#253a49">${escapeXml(label.name)}</text>`,
+    ),
     layer("walls", "#253a49", "#253a49", walls.map(polygonTag).join("")),
     layer("doors", "none", "#38566c", doorShapes),
     ...(windows.length
@@ -300,11 +331,80 @@ function exportSvg(
   ].join("\n");
 }
 
+function multiStoreyGeometry(plan: DraftPlanState): Geometry {
+  const storeys = [...planStoreys(plan)].sort(
+    (a, b) => a.elevationMm - b.elevationMm,
+  );
+  if (storeys.length === 1) return blueprintGeometry(plan);
+  const result = blueprintGeometry(storeyPlan(plan, ""));
+  let right = 0;
+  for (const level of storeys) {
+    const drawing = storeyPlan(plan, level.id);
+    const source = blueprintGeometry(drawing);
+    const points = [
+      ...source.walls.flat(),
+      ...source.fixtures.flat(),
+      ...source.sketches.flatMap(sketchPoints),
+      ...source.doors.flatMap((item) => [item.hinge, item.closed, item.leaf]),
+      ...source.windows.flatMap((item) => item.outline),
+      ...source.dimensions.flatMap((item) => [item.start, item.end]),
+      ...source.utilities.map((item) => item.position),
+    ];
+    const box = points.length
+      ? bounds(points)
+      : { left: 0, right: 1000, top: 0 };
+    const delta = { x: right - box.left, y: 0 };
+    const shift = (point: Point) => ({ x: point.x + delta.x, y: point.y });
+    result.labels.push({
+      name: level.name,
+      position: { x: right, y: box.top - 250 },
+    });
+    result.walls.push(...source.walls.map((ring) => ring.map(shift)));
+    result.fixtures.push(...source.fixtures.map((ring) => ring.map(shift)));
+    result.sketches.push(
+      ...source.sketches.map((item) => shiftSketch(item, delta)),
+    );
+    result.doors.push(
+      ...source.doors.map((item) => ({
+        ...item,
+        hinge: shift(item.hinge),
+        closed: shift(item.closed),
+        leaf: shift(item.leaf),
+      })),
+    );
+    result.windows.push(
+      ...source.windows.map((item) => ({
+        ...item,
+        start: shift(item.start),
+        end: shift(item.end),
+        outline: item.outline.map(shift),
+      })),
+    );
+    result.dimensions.push(
+      ...source.dimensions.map((item) => ({
+        ...item,
+        start: shift(item.start),
+        end: shift(item.end),
+        label: shift(item.label),
+      })),
+    );
+    result.utilities.push(
+      ...source.utilities.map((item) => ({
+        ...item,
+        position: shift(item.position),
+      })),
+    );
+    right +=
+      Math.max(box.right - box.left, level.name.length * 82, 1000) + 1600;
+  }
+  return result;
+}
+
 export function renderBlueprint(
   format: BlueprintFormat,
   plan: DraftPlanState,
   title: string,
 ) {
-  const geometry = blueprintGeometry(plan);
+  const geometry = multiStoreyGeometry(plan);
   return format === "dxf" ? exportDxf(geometry) : exportSvg(geometry, title);
 }

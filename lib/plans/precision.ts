@@ -5,7 +5,8 @@ import {
   dot,
   fixtureFootprint,
   subtract,
-  wallFootprint,
+  wallMaterialFootprint,
+  wallMaterialCenter,
 } from "./footprints";
 import {
   compareText,
@@ -14,6 +15,7 @@ import {
   type Wall,
 } from "./model";
 import { layersByEntity } from "./organization";
+import { storeyOf } from "./storeys";
 import { pointAlong } from "./openings";
 import { sketchPoints } from "./sketch";
 
@@ -34,7 +36,12 @@ export const snapKinds = [
   "perpendicular",
   "face",
 ] as const;
-export const wallEdges = ["center", "positive", "negative"] as const;
+export const wallEdges = [
+  "center",
+  "positive",
+  "negative",
+  "reference",
+] as const;
 export const lengthUnits = ["mm", "cm", "m", "in", "ft"] as const;
 export type EntityKind = (typeof entityKinds)[number];
 export type SnapKind = (typeof snapKinds)[number];
@@ -96,11 +103,7 @@ function entries(
     switch (kind) {
       case "wall":
         return plan.walls.map((wall) =>
-          entry(
-            kind,
-            wall,
-            wallFootprint(wall.start, wall.end, wall.thicknessMm),
-          ),
+          entry(kind, wall, wallMaterialFootprint(wall)),
         );
       case "room":
         return plan.rooms.map((room) => entry(kind, room, room.polygon));
@@ -122,7 +125,7 @@ function entries(
               entry(
                 kind,
                 opening,
-                wallFootprint(start, end, wall.thicknessMm),
+                wallMaterialFootprint(wall, { start, end }),
                 "openings",
               ),
             ];
@@ -196,8 +199,9 @@ export function modelPrecision(point: Point): Point {
 }
 
 function segmentFor(wall: Wall, edge: WallEdge): Segment {
-  if (edge === "center") return { start: wall.start, end: wall.end };
-  const [a, b, c, d] = wallFootprint(wall.start, wall.end, wall.thicknessMm);
+  if (edge === "reference") return { start: wall.start, end: wall.end };
+  if (edge === "center") return wallMaterialCenter(wall);
+  const [a, b, c, d] = wallMaterialFootprint(wall);
   return edge === "positive" ? { start: d, end: c } : { start: a, end: b };
 }
 
@@ -247,7 +251,7 @@ export function resolveSnap(
     boundsMeet(
       zone,
       bounds([wall.start, wall.end]),
-      modes.includes("face") ? wall.thicknessMm / 2 : 0,
+      modes.includes("face") ? wall.thicknessMm : 0,
     ),
   );
   let best: SnapResult | undefined;
@@ -280,8 +284,15 @@ export function resolveSnap(
     }
   }
   const ordered = near.sort((a, b) => compareText(a.id, b.id));
+  const reference = (wall: Wall): WallRef => ({
+    wallId: wall.id,
+    edge:
+      wall.referenceLine && wall.referenceLine !== "center"
+        ? "reference"
+        : "center",
+  });
   for (const [i, wall] of ordered.entries()) {
-    const center: WallRef = { wallId: wall.id, edge: "center" };
+    const center = reference(wall);
     if (modes.includes("endpoint")) {
       offer("endpoint", wall.start, [center]);
       offer("endpoint", wall.end, [center]);
@@ -307,7 +318,7 @@ export function resolveSnap(
       for (let j = i + 1; j < ordered.length; j++) {
         offer("intersection", intersection(wall, ordered[j]), [
           center,
-          { wallId: ordered[j].id, edge: "center" },
+          reference(ordered[j]),
         ]);
       }
     }
@@ -338,7 +349,7 @@ export function measureWallEdges(
 ) {
   const first = walls.find(({ id }) => id === from.wallId);
   const second = walls.find(({ id }) => id === to.wallId);
-  if (!first || !second) return;
+  if (!first || !second || storeyOf(first) !== storeyOf(second)) return;
   const a = segmentFor(first, from.edge);
   const b = segmentFor(second, to.edge);
   const crossing = intersection(a, b);

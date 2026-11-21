@@ -7,7 +7,12 @@ import type {
   Utility,
   Wall,
 } from "./model";
-import { fixtureFootprint, bounds } from "./footprints";
+import {
+  fixtureFootprint,
+  bounds,
+  wallMaterialCenter,
+  wallMaterialFootprint,
+} from "./footprints";
 import { sketchPoints } from "./sketch";
 import { wallLength } from "./openings";
 
@@ -52,7 +57,8 @@ export function snapPoint(
 
 export function wallHit(point: Point, walls: readonly Wall[], radius: number) {
   let result: { wall: Wall; offset: number; distance: number } | undefined;
-  for (const wall of walls) {
+  for (const stored of walls) {
+    const wall = { ...stored, ...wallMaterialCenter(stored) };
     const length = wallLength(wall);
     const dx = (wall.end.x - wall.start.x) / length;
     const dy = (wall.end.y - wall.start.y) / length;
@@ -69,7 +75,7 @@ export function wallHit(point: Point, walls: readonly Wall[], radius: number) {
       distance <= radius + wall.thicknessMm / 2 &&
       (!result || distance < result.distance)
     ) {
-      result = { wall, offset, distance };
+      result = { wall: stored, offset, distance };
     }
   }
   return result;
@@ -115,6 +121,7 @@ export function fitCamera(
   utilities: readonly Utility[] = [],
   dimensions: readonly DimensionAnnotation[] = [],
   sketches: readonly Sketch[] = [],
+  heightMm = wallHeight,
 ): Camera {
   if (
     !walls.length &&
@@ -126,23 +133,15 @@ export function fitCamera(
       y: 0,
       scale: Math.min(0.11, Math.min(viewport.width, viewport.height) / 4200),
     };
-  const points = walls.flatMap((wall) =>
-    [wall.start, wall.end].flatMap((p) => {
-      const r = wall.thicknessMm / 2;
-      const bounds = [
-        { x: p.x - r, y: p.y - r },
-        { x: p.x + r, y: p.y + r },
-        { x: p.x + r, y: p.y - r },
-        { x: p.x - r, y: p.y + r },
-      ];
-      return isometric
-        ? bounds.flatMap((corner) => [
-            projectIso(corner),
-            projectIso(corner, wallHeight),
-          ])
-        : bounds;
-    }),
-  );
+  const points = walls.flatMap((wall) => {
+    const footprint = wallMaterialFootprint(wall);
+    return isometric
+      ? footprint.flatMap((corner) => [
+          projectIso(corner),
+          projectIso(corner, heightMm),
+        ])
+      : footprint;
+  });
   for (const fixture of fixtures) {
     const footprint = fixtureFootprint(fixture);
     points.push(

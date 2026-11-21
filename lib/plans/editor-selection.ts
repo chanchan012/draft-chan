@@ -1,5 +1,5 @@
 import { utilityCatalog, type UtilityLayer } from "./catalog";
-import { bounds, fixtureFootprint, wallFootprint } from "./footprints";
+import { bounds, fixtureFootprint, wallMaterialFootprint } from "./footprints";
 import { wallHit } from "./cad";
 import { doorBounds, pointAlong, wallLength } from "./openings";
 import { shiftSketch, sketchDistance, sketchPoints } from "./sketch";
@@ -39,7 +39,7 @@ export function selectInBox(
   const walls = new Map(plan.walls.map((wall) => [wall.id, wall]));
   const result: Selection[] = [];
   for (const wall of plan.walls) {
-    if (inside(bounds(wallFootprint(wall.start, wall.end, wall.thicknessMm))))
+    if (inside(bounds(wallMaterialFootprint(wall))))
       result.push({ kind: "wall", id: wall.id });
   }
   for (const door of plan.openings) {

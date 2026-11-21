@@ -65,13 +65,21 @@ export function usePlanLive(
   stopped: boolean,
   onRevision: (revision: number) => void,
   onStop: (reason: SyncStop) => void,
+  storeyId?: string,
 ) {
   const [clientId] = useState(() => crypto.randomUUID());
   const [connection, setConnection] = useState<Connection>("connecting");
   const [peers, setPeers] = useState<LivePeer[]>([]);
   const cursor = useRef<Point | null>(null);
+  const floor = useRef(storeyId);
   const schedule = useRef<() => void>(() => {});
   const base = `/api/floorplans/${id}`;
+
+  useEffect(() => {
+    floor.current = storeyId;
+    cursor.current = null;
+    schedule.current();
+  }, [storeyId]);
 
   const moveCursor = useCallback((point: Point | null) => {
     const previous = cursor.current;
@@ -212,7 +220,11 @@ export function usePlanLive(
         const response = await fetch(base + "/presence", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ clientId, cursor: cursor.current }),
+          body: JSON.stringify({
+            clientId,
+            cursor: cursor.current,
+            storeyId: floor.current,
+          }),
           signal,
         });
         if (response.status === 401 || response.status === 404)

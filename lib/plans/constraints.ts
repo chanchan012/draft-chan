@@ -1,6 +1,7 @@
 import { dot, subtract } from "./footprints";
 import {
   compareText,
+  defaultStoreyId,
   modelPointInput,
   type Constraint,
   type Point,
@@ -36,7 +37,7 @@ function system(walls: readonly Wall[], constraints: readonly Constraint[]) {
   for (const wall of walls) {
     const indices = endpoints.map((endpoint) => {
       const p = wall[endpoint];
-      const key = pointKey(p);
+      const key = (wall.storeyId ?? defaultStoreyId) + ":" + pointKey(p);
       const index = variables.get(key) ?? original.length;
       if (index === original.length) {
         original.push(p.x, p.y);
@@ -268,7 +269,9 @@ export function solveConstraints(
     );
   const result = walls.map((wall) => {
     const nextPoint = (end: WallEndpoint["endpoint"]) => {
-      const index = variables.get(pointKey(wall[end]))!;
+      const index = variables.get(
+        (wall.storeyId ?? defaultStoreyId) + ":" + pointKey(wall[end]),
+      )!;
       return {
         x: Math.round(values[index]) + 0,
         y: Math.round(values[index + 1]) + 0,

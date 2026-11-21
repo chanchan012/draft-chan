@@ -2,6 +2,8 @@ import { z } from "zod";
 import {
   displayUnits,
   constraintInput,
+  storeyInput,
+  wallTypeInput,
   drawingLayerInput,
   blockInput,
   blockInstanceInput,
@@ -29,6 +31,7 @@ import {
   type DimensionAnnotation,
 } from "./model";
 import { hasOrganization, reconcileOrganization } from "./organization";
+import { resolveWallTypes } from "./storeys";
 import { loadDraftPlan } from "./plan-state";
 
 export interface StudioDocument {
@@ -50,6 +53,8 @@ export const saveStudioSchema = z.strictObject({
   fixtures: z.array(fixtureInput).max(placementLimit).optional(),
   utilities: z.array(utilityInput).max(placementLimit).optional(),
   windows: z.array(windowInput).max(openingLimit).optional(),
+  storeys: z.array(storeyInput).max(32).optional(),
+  wallTypes: z.array(wallTypeInput).max(128).optional(),
   drawingLayers: z.array(drawingLayerInput).max(64).optional(),
   blocks: z.array(blockInput).max(128).optional(),
   blockInstances: z.array(blockInstanceInput).max(3072).optional(),
@@ -73,6 +78,8 @@ export function studioSnapshot(plan: DraftPlanState, unit: DisplayUnit) {
     windows: (plan.windows ?? []).map((opening) =>
       windowInput.strip().parse(opening),
     ),
+    storeys: plan.storeys?.map((item) => storeyInput.parse(item)),
+    wallTypes: (plan.wallTypes ?? []).map((item) => wallTypeInput.parse(item)),
     drawingLayers: (plan.drawingLayers ?? []).map((item) =>
       drawingLayerInput.parse(item),
     ),
@@ -198,14 +205,21 @@ export function applyStudioSnapshot(
     annotations,
     sketches,
     constraints: input.constraints ?? previous.constraints,
+    storeys: input.storeys ?? previous.storeys,
+    wallTypes: input.wallTypes ?? previous.wallTypes,
     drawingLayers: input.drawingLayers ?? previous.drawingLayers,
     blocks: input.blocks ?? previous.blocks,
     blockInstances: input.blockInstances ?? previous.blockInstances,
     rooms: [],
   };
-  if (!hasOrganization(previous) && !hasOrganization(next))
+  if (
+    !hasOrganization(previous) &&
+    !hasOrganization(next) &&
+    !next.wallTypes?.length
+  )
     return loadDraftPlan(next);
   const candidate = structuredClone(next);
+  resolveWallTypes(candidate, actor);
   reconcileOrganization(previous, candidate, actor);
   return loadDraftPlan(candidate);
 }
