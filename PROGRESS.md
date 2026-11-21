@@ -2,7 +2,7 @@
 
 ## CAD roadmap
 
-The [architectural CAD roadmap](docs/CAD_ROADMAP.md) tracks shipped M5–M8 and planned M9–M17, with candidate MCP tools and release checks. M9.1 is next in the drafting track. M13.1 is the next visual milestone. Later milestones cover move-in rehearsals, client briefs, renovation and owner handover. The release history below records shipped work.
+The [architectural CAD roadmap](docs/CAD_ROADMAP.md) tracks shipped M5–M8 and planned M9–M17, with candidate MCP tools and release checks. M9.1 is shipped. M9.2 is next in the drafting track. M13.1 is the next visual milestone. Later milestones cover move-in rehearsals, client briefs, renovation and owner handover. The release history below records shipped work.
 
 ## M5.1 · Precision drafting
 
@@ -57,6 +57,12 @@ Application merge `85385402a2c6a343cce25661f0ecf673507e8cb0` adds polygonal slab
 Strict TypeScript, the Next.js production build, 85 Vitest tests and 125 Playwright checks passed. The browser run covered five viewports. Its two-storey fixture verifies that moving a stair updates the section and the opening in the upper storey. The authenticated MCP tests verify that workflow and expose 45 tools and three resources in total. The graph stays at v1 with optional `buildingElements` and `buildingViews` fields. Neon migrations remain through 0005 and existing environment variables suffice.
 
 Vercel preview `dpl_GX3JHUXH6yTVpLF8Cj4ZXZ5PTDpr` and production `dpl_BAuBvqHaxnysMeuF2XY45jWE38Pe` reached Ready. Production checks returned HTTP 200 for the landing page, HTTP 307 for signed-out Studio and HTTP 401 with OAuth discovery for signed-out MCP.
+
+## M9.1 · Drawing annotations and paper space
+
+Application merge `9736d2ee21bfcd1e0dab1075714a64935877ebf7`. Studio’s Sheets panel authors dimension chains, leaders, entity tags and polygon hatches. Named views reference storey plans, sections or elevations. Paper-space viewports accept exact paper millimeters and scale denominators. Named layer weights apply to the paper drawing. Studio and MCP use the same model, save validation and undo commands.
+
+TypeScript, the Next.js build, 88 Vitest tests and 130 Playwright checks passed. In the five-viewport browser matrix, a 5000 mm wall occupied 100 mm of the A3 sheet at 1:50 and its viewport restored after reload. MCP exposes 54 tools and three resources. Graph v1 adds optional `documentItems` and `drawingLayers[].lineWeightMm`. Vercel preview `dpl_CW7bE7qm2zPXdufhE9r7Cfa1Yv3v` reached Ready. Production is pending because Vercel returned HTTP 402 with its daily deployment limit. Neon stays at migration 0005.
 
 ## M1.1 · Foundation and shell
 

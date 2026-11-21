@@ -1,8 +1,8 @@
 # Architectural CAD and agent roadmap
 
-Draft supports floorplans, hosted openings, furnishing, an isometric cutaway, clearance screening, quantities, blueprint exports and the precision tools shipped in M5. Its authenticated MCP server exposes 45 tools and three resources. M9–M17 describe planned additions. The product focus is architectural drafting from measured survey through an issued drawing set.
+Draft supports floorplans, hosted openings, furnishing, an isometric cutaway, clearance screening, quantities, blueprint exports and the precision tools shipped in M5. Its authenticated MCP server exposes 54 tools and three resources. M9–M17 describe planned additions. The product focus is architectural drafting from measured survey through an issued drawing set.
 
-M5.1 and M5.2 shipped precision measurements, object snaps, exact entry and 2D sketch primitives. M6.1 and M6.2 shipped Studio editing commands and agent transactions. M7 is shipped with driving wall dimensions, layers and reusable blocks. M8 shipped multi-storey plans, wall assemblies, slabs, stairs, floor openings, roofs, sections and elevations. M9.1 is the next drafting subgoal. M13.1 is the next visual milestone. The sequence below identifies dependencies and suggested release order.
+M5.1 and M5.2 shipped precision measurements, object snaps, exact entry and 2D sketch primitives. M6.1 and M6.2 shipped Studio editing commands and agent transactions. M7 is shipped with driving wall dimensions, layers and reusable blocks. M8 shipped multi-storey plans, wall assemblies, slabs, stairs, floor openings, roofs, sections and elevations. M9.1 shipped annotations and scaled paper space. M9.2 is the next drafting subgoal. M13.1 is the next visual milestone. The sequence below identifies dependencies and suggested release order.
 
 ## Milestones
 
@@ -44,7 +44,7 @@ Shipped MCP tools include `create_storey`, `update_storey`, `set_wall_type`, `qu
 
 ### M9 · Construction documents and quantities
 
-- **9.1** Add associative dimension chains, leaders, tags, hatches, line weights, paper/model space, named views and scaled sheet viewports.
+- **9.1 (shipped)** Add associative dimension chains, leaders, tags, hatches, line weights, paper/model space, named views and scaled sheet viewports.
 - **9.2** Add title blocks, sheet numbers, door/window/finish schedules, vector PDF sets and issue revisions linked to the source model.
 
 Proposed MCP tools include `tag_entities`, `dimension_chain`, `create_sheet`, `place_viewport`, `generate_schedule`, `publish_sheet_set`, `get_job_status`.

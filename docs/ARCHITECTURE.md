@@ -200,3 +200,11 @@ Graph v1 optionally stores `buildingElements` and `buildingViews`. Element recor
 `lib/plans/building-views.ts` derives a section along two plan points or an orthographic elevation from a cardinal direction. Views display storey datums, walls and hosted openings, slabs, stairs and roof profiles. Studio shows structure in each active storey plan and isometric view. Plan SVG and DXF include slab, floor opening, stair and roof outlines. Saved view definitions store the cut or orientation parameters, so they remain linked to subsequent model edits.
 
 The eight M8.2 MCP tools are `create_slab`, `create_floor_opening`, `place_stair`, `create_roof`, `create_section`, `create_elevation`, `query_building_view` and `remove_building_item`. Writes use the existing authenticated plan scope and revision control. Use the same ID in `place_stair` to update the stair and read its regenerated opening. `query_building_view` returns derived drawing geometry for a saved view ID and lists view definitions and slab openings when the ID is omitted.
+
+## M9.1 Drawing documents
+
+Graph v1 stores optional `documentItems` with stable IDs for dimension chains, leaders, tags, hatches, named views, sheets and viewports. Chain dimensions and leaders resolve wall endpoints, opening centers, fixtures or user-entered fixed model coordinates when drawn. If referenced geometry is deleted, the annotations remain editable and Studio and MCP report their unresolved anchors. Hatches clip diagonal or crosshatch lines to a simple polygon.
+
+A named view stores a source storey or building view plus a model-space center. A viewport occupies a rectangle in paper millimeters and converts model coordinates by its explicit scale denominator. Paper styles resolve optional named layer weights in millimeters. The same paper primitives describe clipping, paths and text for Studio and the forthcoming PDF renderer. The existing revision graph persists paper layout and model geometry together.
+
+The MCP tools are `dimension_chain`, `add_leader`, `tag_entities`, `add_hatch`, `save_named_view`, `create_sheet`, `place_viewport`, `remove_document_items` and `query_drawing_documents`.

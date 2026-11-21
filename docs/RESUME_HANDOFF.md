@@ -1,5 +1,11 @@
 # Resume handoff
 
+## M9.1 release checkpoint
+
+Application merge `9736d2ee21bfcd1e0dab1075714a64935877ebf7`. Preview `dpl_CW7bE7qm2zPXdufhE9r7Cfa1Yv3v` reached Ready. Production is pending because Vercel returned HTTP 402 with its daily deployment limit. Run `npm test -- tests/drawing-documents.unit.test.ts tests/mcp.unit.test.ts`, `npm run test:e2e -- --grep 'lays out an A3'` and `npm run build`. Tests passed for 88 Vitest cases and 130 browser checks. Graph v1 stores optional `documentItems` and named layer print weights. Neon remains at 0005. MCP exposes 54 tools and three resources.
+
+M9.2 starts with `lib/plans/sheet-drawing.ts` and the revision-bound job flow in `lib/server/blueprint-store.ts`. Add title blocks, schedules, issue tracking and vector PDF publication from a saved source revision.
+
 ## M8 release checkpoint
 
 M8.1 application merge `4ee5539b8592f129f620abf34b04e85495914a9e` shipped storeys, wall assemblies and net/gross areas. M8.2 application merge `85385402a2c6a343cce25661f0ecf673507e8cb0` shipped slabs, stairs, floor openings, roof profiles, sections and elevations. Vercel preview `dpl_GX3JHUXH6yTVpLF8Cj4ZXZ5PTDpr` and production `dpl_BAuBvqHaxnysMeuF2XY45jWE38Pe` reached Ready. The MCP server exposes 45 tools and three resources. The optional v1 `buildingElements` and `buildingViews` fields use existing JSON storage. Neon migrations remain through 0005 and there are no new environment variables.
@@ -17,7 +23,7 @@ The release passed all 85 Vitest tests and 125 Playwright checks. Playwright use
 
 ## Next proposed subgoal
 
-M9.1 starts construction documents with associative notes and dimensions, line styles, paper space and scaled sheet viewports. Read the [CAD roadmap](CAD_ROADMAP.md) and inspect `lib/plans/building-views.ts`, `lib/plans/blueprints.ts` and `components/studio/building-drawing.tsx`. Reuse model-space geometry to verify that a 5000 mm reference line occupies 100 mm at 1:50 on a sheet.
+M9.2 adds title blocks, schedule tables and vector PDF issue sets to the shipped paper-space workspace.
 
 The visual track starts at M13.1 in the [CAD roadmap](CAD_ROADMAP.md). Inspect the current renderer with `rg --files components/studio lib/plans | rg "isometric|wall-mesh"`. Use the MCP-furnished apartment in `tests/e2e/studio.spec.ts` as the first reference scene.
 
