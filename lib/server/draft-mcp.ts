@@ -5,6 +5,12 @@ import {
   type ToolCallback,
 } from "@modelcontextprotocol/server";
 import { z } from "zod";
+import {
+  cadEditCommands,
+  cadEditOptions,
+  type CadEdit,
+} from "../plans/cad-edit";
+import { summarizeChanges } from "../plans/change-summary";
 import { calculateBom } from "../plans/bom";
 import {
   fixtureCatalog,
@@ -400,6 +406,49 @@ export function createDraftMcp(scope: AgentScope, backend = draftMcpBackend) {
         );
       return { planId, revision: doc.revision, ...measurement };
     },
+  );
+
+  function editCad(doc: StudioDocument, input: CadEdit): AgentEdit {
+    const plan = commands(doc, cadEditCommands(doc.graph, input));
+    const result = summarizeChanges(doc.graph, plan);
+    if (!result.changes.length)
+      throw new Error("The edit does not change any geometry.");
+    return { plan, result };
+  }
+  edit(
+    "transform_entities",
+    "Move, copy, rotate or mirror selected entities. Hosted openings follow selected walls. Angles are clockwise, coordinates in millimeters.",
+    cadEditOptions.transform.extend(revision),
+    (doc, { expectedRevision: _, ...input }) =>
+      editCad(doc, { operation: "transform", ...input }),
+  );
+  edit(
+    "offset_geometry",
+    "Offset a wall or sketch by a signed distance. Positive offsets follow the positive wall edge, or increase an arc or circle radius.",
+    cadEditOptions.offset.extend(revision),
+    (doc, { expectedRevision: _, ...input }) =>
+      editCad(doc, { operation: "offset", ...input }),
+  );
+  edit(
+    "trim_extend",
+    "Trim or extend one endpoint to the finite boundary of a wall or two-point sketch. Rejects cuts through openings.",
+    cadEditOptions.trim_extend.extend(revision),
+    (doc, { expectedRevision: _, ...input }) =>
+      editCad(doc, { operation: "trim_extend", ...input }),
+  );
+  edit(
+    "edit_corner",
+    "Chamfer two walls or two straight sketches with a shared endpoint. Fillets apply to straight sketch linework. Size is setback for chamfer and radius for fillet.",
+    cadEditOptions.corner.extend(revision),
+    (doc, { expectedRevision: _, ...input }) =>
+      editCad(doc, { operation: "corner", ...input }),
+  );
+  edit(
+    "array_entities",
+    "Create a linear or clockwise polar array. Count includes the original selection and hosted openings are copied with their walls.",
+    cadEditOptions.array.extend(revision),
+    (doc, { expectedRevision: _, ...input }) =>
+      editCad(doc, { operation: "array", ...input }),
   );
 
   function addSketch(doc: StudioDocument, geometry: SketchGeometry): AgentEdit {

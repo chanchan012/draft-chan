@@ -1231,3 +1231,41 @@
     min-width: 27px;
   }
 }
+
+.studio-cad-edit {
+  padding: 12px 14px;
+}
+
+.studio-cad-edit p {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.studio-cad-parameters {
+  display: grid;
+  gap: 9px;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 110px), 1fr));
+}
+
+.studio-cad-edit .studio-cad-checkbox {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.studio-cad-checkbox input {
+  width: auto;
+}
+
+.studio-cad-apply {
+  justify-self: start;
+  padding: 7px 12px;
+  border-radius: 6px;
+  background: var(--studio-dark);
+  color: white;
+}
+
+.studio-cad-apply:disabled {
+  opacity: 0.5;
+}

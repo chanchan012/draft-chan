@@ -628,6 +628,49 @@ test("sketches an exact circle from a local origin and restores it after reload"
   await frame(page);
 });
 
+test("offsets a selected wall with its hosted door and undoes the edit together", async ({
+  page,
+}) => {
+  const workspace = studioWorkspace();
+  const graph = initialGraph({ width: 4000, depth: 3000 });
+  graph.openings.push({
+    id: "entry",
+    wallId: "starter-wall-1",
+    hinge: "start",
+    swing: "right",
+    offsetMm: 2000,
+    widthMm: 900,
+  });
+  workspace.document.graph = graph;
+  const edits = await studio(page, false, workspace);
+  const canvas = page.getByRole("region", { name: "Drawing surface" });
+  const wall = page.locator('[data-wall="starter-wall-1"]');
+  const line = await wall.locator("line").first().boundingBox();
+  await page.mouse.click(
+    line!.x + line!.width * 0.15,
+    line!.y + line!.height / 2,
+  );
+  await expect(page.getByText("1 selected")).toBeVisible();
+  await page.getByRole("button", { name: "Edit geometry" }).click();
+  const panel = page.getByRole("complementary", { name: "Edit geometry" });
+  await panel.getByLabel("Operation").selectOption("offset");
+  await panel.getByLabel("Keep original").uncheck();
+  await panel.getByLabel("Distance (mm)").fill("300");
+  await panel.getByRole("button", { name: "Apply edit" }).click();
+  await expect(panel.getByRole("status")).toContainText("1 hosted opening");
+  await expect(wall.locator("line").first()).toHaveAttribute("y1", "300");
+  await expect(canvas.locator("[data-door]")).toHaveCount(1);
+  await saveIfNeeded(page);
+  expect(edits.at(-1)?.openings[0]).toMatchObject({
+    id: "entry",
+    wallId: "starter-wall-1",
+    offsetMm: 2000,
+  });
+  await page.getByRole("button", { name: "Undo", exact: true }).click();
+  await expect(wall.locator("line").first()).toHaveAttribute("y1", "0");
+  await viewportFits(page);
+});
+
 test("keeps unsaved drawing after a revision conflict", async ({ page }) => {
   await studio(page, true);
   await page.getByRole("button", { name: "Wall", exact: true }).click();
