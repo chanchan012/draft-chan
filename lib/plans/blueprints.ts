@@ -6,6 +6,7 @@ import {
   point2d,
   point3d,
 } from "@tarikjabiri/dxf";
+import { drivingDimensions } from "./constraints";
 import { utilityCatalog } from "./catalog";
 import { bounds, fixtureFootprint, wallFootprint } from "./footprints";
 import {
@@ -44,11 +45,19 @@ function blueprintGeometry(plan: DraftPlanState) {
         outline: wallFootprint(start, end, wall.thicknessMm),
       };
     }),
-    dimensions: (plan.annotations ?? []).map(({ start, end }) => ({
-      start,
-      end,
-      text: Math.round(wallLength({ start, end })) + " mm",
-      label: { x: (start.x + end.x) / 2, y: (start.y + end.y) / 2 - 65 },
+    dimensions: [
+      ...(plan.annotations ?? []),
+      ...drivingDimensions(plan.walls, plan.constraints),
+    ].map((item) => ({
+      ...item,
+      text:
+        ("distanceMm" in item
+          ? item.distanceMm
+          : Math.round(wallLength(item))) + " mm",
+      label: {
+        x: (item.start.x + item.end.x) / 2,
+        y: (item.start.y + item.end.y) / 2 - 65,
+      },
     })),
     fixtures: plan.fixtures.map(fixtureFootprint),
     utilities: plan.utilities.map(({ position, template }) => ({

@@ -1,3 +1,4 @@
+import { drivingDimensions } from "@/lib/plans/constraints";
 import { sketchPath } from "@/lib/plans/sketch";
 import { useId, useMemo } from "react";
 import {
@@ -268,6 +269,33 @@ export function PlanDrawing({
           vectorEffect="non-scaling-stroke"
         />
       ))}
+      {drivingDimensions(plan.walls, plan.constraints).map((c) => {
+        const { start, end } = c;
+        return (
+          <g
+            key={c.id}
+            className="cad-dimension cad-driving"
+            data-driving={c.id}
+          >
+            <line
+              x1={start.x}
+              y1={start.y}
+              x2={end.x}
+              y2={end.y}
+              vectorEffect="non-scaling-stroke"
+            />
+            <circle cx={start.x} cy={start.y} r={3 / scale} />
+            <circle cx={end.x} cy={end.y} r={3 / scale} />
+            <text
+              transform={`translate(${(start.x + end.x) / 2} ${(start.y + end.y) / 2}) scale(${1 / scale})`}
+              textAnchor="middle"
+              y="-11"
+            >
+              {Number((c.distanceMm / unitFactor(unit)).toFixed(2))} {unit}
+            </text>
+          </g>
+        );
+      })}
       {plan.annotations?.map(({ id, start, end }) => (
         <g
           key={id}

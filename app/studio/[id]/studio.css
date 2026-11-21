@@ -1269,3 +1269,37 @@
 .studio-cad-apply:disabled {
   opacity: 0.5;
 }
+
+.studio-parametric {
+  display: grid;
+  gap: 12px;
+  padding: 12px 14px;
+}
+
+.studio-parametric p {
+  margin: 0;
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.studio-parametric-item {
+  display: grid;
+  gap: 7px;
+  padding-block: 10px;
+  border-top: 1px solid var(--studio-rule);
+  font-size: 12px;
+}
+
+.studio-parametric-remove {
+  justify-self: start;
+  color: #84351e;
+  text-decoration: underline;
+}
+
+.cad-driving {
+  color: #30558e;
+}
+
+.cad-driving line {
+  stroke-dasharray: 4 3;
+}
