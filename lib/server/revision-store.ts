@@ -30,7 +30,7 @@ type Queries = {
     receipt: BatchReceipt,
   ): Promise<boolean>;
   revisions(
-    scope: AgentScope,
+    scope: Pick<AgentScope, "owner" | "planId">,
     from: number,
     to: number,
   ): Promise<StudioDocument[]>;

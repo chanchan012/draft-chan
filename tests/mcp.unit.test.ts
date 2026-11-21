@@ -30,7 +30,11 @@ import {
   floorplanRevisions,
 } from "../db/schema";
 import { eq } from "drizzle-orm";
-import type { StudioDocument } from "../lib/plans/studio-document";
+import {
+  studioSnapshot,
+  type StudioDocument,
+} from "../lib/plans/studio-document";
+import { sheetFixture } from "./sheet-fixture";
 
 const pg = new PGlite();
 const db = drizzle(pg);
@@ -385,8 +389,11 @@ it("lays out a two-bedroom plan using all MCP resources and tools over HTTP", as
       "edit_corner",
       "explain_constraints",
       "furnish_room_preset",
+      "generate_schedule",
+      "get_job_status",
       "insert_block",
       "inspect_entity",
+      "list_sheet_issues",
       "manage_layer",
       "measure_geometry",
       "offset_geometry",
@@ -395,6 +402,7 @@ it("lays out a two-bedroom plan using all MCP resources and tools over HTTP", as
       "place_stair",
       "place_viewport",
       "preview_changes",
+      "publish_sheet_set",
       "query_building_view",
       "query_drawing_documents",
       "query_entities",
@@ -405,6 +413,7 @@ it("lays out a two-bedroom plan using all MCP resources and tools over HTTP", as
       "resolve_snap",
       "save_named_view",
       "set_driving_dimension",
+      "set_room_finish",
       "set_wall_type",
       "split_or_join_wall",
       "tag_entities",
@@ -1269,7 +1278,7 @@ it("bridges stdio to the authenticated HTTP tools without sharing the database c
         },
       }),
     );
-    expect((await client.listTools()).tools).toHaveLength(54);
+    expect((await client.listTools()).tools).toHaveLength(59);
     expect((await client.listResources()).resources).toHaveLength(3);
     expect(
       (await client.readResource({ uri: "draft://floorplan-graph" })).contents,
@@ -1366,6 +1375,78 @@ it("authors a scaled sheet with associative dimensions through MCP", async () =>
           }),
         ],
       },
+    });
+  } finally {
+    await client.close();
+  }
+});
+
+it("schedules openings and publishes a pinned PDF issue over MCP", async () => {
+  const session = await planWithToken();
+  const saved = await session.api.request(
+    session.path + "/graph",
+    payload("PATCH", { revision: 0, ...studioSnapshot(sheetFixture(), "mm") }),
+  );
+  expect(await saved.json()).toEqual({ revision: 1 });
+  const client = await connect(createMcpHttp(localWindow(100)), session.token);
+  const call = (name: string, args: Record<string, unknown>) =>
+    client.callTool({ name, arguments: args });
+  try {
+    expect(
+      await call("set_room_finish", {
+        expectedRevision: 1,
+        finish: {
+          id: "living",
+          storeyId: "ground",
+          point: { x: 2500, y: 1500 },
+          room: "Living room",
+          floor: "Concrete",
+          walls: "Plaster",
+          ceiling: "Paint",
+        },
+      }),
+    ).toMatchObject({ isError: false, structuredContent: { revision: 2 } });
+    expect(
+      await call("generate_schedule", { kind: "doors", revision: 1 }),
+    ).toMatchObject({
+      isError: false,
+      structuredContent: {
+        revision: 1,
+        total: 1,
+        rows: [{ tag: "D-01", widthMm: 900 }],
+      },
+    });
+    expect(await call("generate_schedule", { kind: "finishes" })).toMatchObject(
+      {
+        isError: false,
+        structuredContent: {
+          revision: 2,
+          total: 1,
+          rows: [{ floor: "Concrete" }],
+        },
+      },
+    );
+    const issued = await call("publish_sheet_set", { expectedRevision: 1 });
+    expect(issued).toMatchObject({
+      isError: false,
+      structuredContent: {
+        issue: { format: "pdf", revision: 1, status: "pending" },
+      },
+    });
+    if (!isCallToolResult(issued)) throw new Error("Expected issue response");
+    const { issue } = issued.structuredContent as { issue: { id: string } };
+    expect(await renderQueuedBlueprint({ id: issue.id, attempt: 1 })).toEqual({
+      written: true,
+    });
+    expect(await call("get_job_status", { jobId: issue.id })).toMatchObject({
+      isError: false,
+      structuredContent: {
+        job: { id: issue.id, status: "ready", revision: 1 },
+      },
+    });
+    expect(await call("list_sheet_issues", {})).toMatchObject({
+      isError: false,
+      structuredContent: { issues: [{ id: issue.id }] },
     });
   } finally {
     await client.close();

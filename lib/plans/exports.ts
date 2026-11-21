@@ -1,6 +1,6 @@
 import { z } from "zod";
 
-export const blueprintFormat = z.enum(["dxf", "svg"]);
+export const blueprintFormat = z.enum(["dxf", "svg", "pdf"]);
 export const exportRevision = z.int().nonnegative().max(2_147_483_647);
 export const requestBlueprintSchema = z.strictObject({
   format: blueprintFormat,
@@ -27,6 +27,6 @@ export function exportFilename(
       .replace(/[^a-z0-9]+/g, "-")
       .slice(0, 64)
       .replace(/^-+|-+$/g, "") || "floorplan";
-  const kind = format === "csv" ? "-bom" : "";
+  const kind = format === "csv" ? "-bom" : format === "pdf" ? "-issued" : "";
   return `${stem}-r${revision}${kind}.${format}`;
 }

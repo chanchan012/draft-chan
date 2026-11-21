@@ -516,6 +516,16 @@ export const documentItems = [
     width: paperNumber.min(10),
     height: paperNumber.min(10),
   }),
+  z.strictObject({
+    kind: z.literal("finish"),
+    id: identifier,
+    storeyId: identifier,
+    point: modelPointInput,
+    room: note,
+    floor: note,
+    walls: note,
+    ceiling: note,
+  }),
 ] as const;
 export const documentItemInput = z.discriminatedUnion("kind", documentItems);
 export const documentItemLimit = 640;
@@ -523,7 +533,10 @@ export type DocumentItem = z.infer<typeof documentItemInput>;
 export type Sheet = Extract<DocumentItem, { kind: "sheet" }>;
 export type SheetViewport = Extract<DocumentItem, { kind: "viewport" }>;
 export type NamedDrawingView = Extract<DocumentItem, { kind: "view" }>;
-export type DrawingMark = Extract<DocumentItem, { storeyId: string }>;
+export type DrawingMark = Extract<
+  DocumentItem,
+  { kind: "chain" | "leader" | "tag" | "hatch" }
+>;
 
 export const planCommandSchema = z.union([
   z.discriminatedUnion("type", [

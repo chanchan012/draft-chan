@@ -10,6 +10,11 @@ import {
   cadEditOptions,
   type CadEdit,
 } from "../plans/cad-edit";
+import {
+  finishRoom,
+  scheduleKinds,
+  schedules,
+} from "../plans/construction-schedules";
 import { ConstraintConflict, constraintReport } from "../plans/constraints";
 import { summarizeChanges } from "../plans/change-summary";
 import { calculateBom } from "../plans/bom";
@@ -92,7 +97,11 @@ import {
   readPreview,
 } from "./agent-transactions";
 import { revisionStore, type BatchReceipt } from "./revision-store";
-import { requestBlueprint } from "./blueprint-store";
+import {
+  getBlueprintStatus,
+  listSheetIssues,
+  requestBlueprint,
+} from "./blueprint-store";
 import { queueBlueprint } from "./blueprint-jobs";
 import { liveBus, planChannel, publishPlanPresence } from "./live-bus";
 import { plans } from "./plans";
@@ -476,6 +485,118 @@ export function createDraftMcp(scope: AgentScope, backend = draftMcpBackend) {
           "The sheet is unavailable.",
         );
       return { ...details, ...paperDrawing(doc.graph, sheet) };
+    },
+  );
+
+  edit(
+    "set_room_finish",
+    "Assign floor, wall and ceiling finishes to the enclosed room at a model point on the specified storey.",
+    z.strictObject({
+      ...revision,
+      finish: documentItems[7].omit({ kind: true }),
+    }),
+    (doc, { finish }) => {
+      const item = { kind: "finish" as const, ...finish };
+      if (!finishRoom(doc.graph, item))
+        throw new Error("Use a point inside an enclosed room.");
+      return writeDocument(doc, [item]);
+    },
+  );
+  tool(
+    "generate_schedule",
+    "Read the door, window or room finish schedule at the current or a saved historical revision. Door and window rows reuse plan tags.",
+    z.strictObject({
+      kind: z.enum(scheduleKinds),
+      revision: exportRevision.optional(),
+      offset: z.int().nonnegative().default(0),
+      limit: z.int().min(1).max(100).default(50),
+    }),
+    true,
+    async ({ kind, revision, offset, limit }) => {
+      const doc = await current();
+      const source =
+        revision === undefined || doc.revision === revision
+          ? doc
+          : (
+              await (backend.transactions ?? revisionStore).revisions(
+                scope,
+                revision,
+                revision,
+              )
+            )[0];
+      if (!source)
+        throw new ToolFailure(
+          "revision_unavailable",
+          "That source revision is unavailable.",
+        );
+      const rows = schedules(source.graph)[kind];
+      return {
+        planId,
+        revision: source.revision,
+        kind,
+        total: rows.length,
+        rows: rows.slice(offset, offset + limit),
+      };
+    },
+  );
+  tool(
+    "publish_sheet_set",
+    "Queue a vector PDF issue of the sheet set and schedules from a saved revision. Subsequent requests reuse the same issue.",
+    z.strictObject({ ...revision }),
+    false,
+    async ({ expectedRevision }) => {
+      const requested = await requestBlueprint(owner, planId, {
+        format: "pdf",
+        revision: expectedRevision,
+      });
+      if (requested.status === "invalid")
+        throw new ToolFailure("invalid_sheet_set", requested.error);
+      if (requested.status !== "accepted")
+        throw new ToolFailure(
+          "revision_unavailable",
+          "That source revision is unavailable.",
+        );
+      if (requested.queue)
+        await queueBlueprint(requested.queue).catch(() => {});
+      return {
+        planId,
+        issue: requested.blueprint,
+        downloadPath: `/api/floorplans/${planId}/exports/${requested.blueprint.id}/download`,
+      };
+    },
+  );
+  tool(
+    "get_job_status",
+    "Read the status and source revision for a queued PDF, SVG or DXF job on the connected floorplan.",
+    z.strictObject({ jobId: z.uuid() }),
+    true,
+    async ({ jobId }) => {
+      const job = await getBlueprintStatus(owner, planId, jobId);
+      if (!job)
+        throw new ToolFailure(
+          "job_unavailable",
+          "The export job is unavailable.",
+        );
+      return {
+        planId,
+        job,
+        downloadPath: `/api/floorplans/${planId}/exports/${jobId}/download`,
+      };
+    },
+  );
+  tool(
+    "list_sheet_issues",
+    "List up to 100 PDF issues for the connected floorplan, newest source revision first.",
+    z.strictObject({}),
+    true,
+    async () => {
+      const issues = await listSheetIssues(owner, planId);
+      if (!issues)
+        throw new ToolFailure(
+          "plan_unavailable",
+          "The connected floorplan is unavailable.",
+        );
+      return { planId, issues };
     },
   );
 

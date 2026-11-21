@@ -4,7 +4,12 @@ import {
   buildingElementFootprint,
   openingsForSlab,
 } from "./building";
-import { anchorPoint, markAnchors, paperSize } from "./drawing-documents";
+import {
+  anchorPoint,
+  isDrawingMark,
+  markAnchors,
+  paperSize,
+} from "./drawing-documents";
 import { bounds, fixtureFootprint, wallMaterialFootprint } from "./footprints";
 import type {
   DraftPlanState,
@@ -84,7 +89,7 @@ export function documentMarks(
   const output: DrawingPrimitive[] = [];
   const unresolved: string[] = [];
   for (const mark of plan.documentItems ?? []) {
-    if (!("storeyId" in mark) || mark.storeyId !== storeyId) continue;
+    if (!isDrawingMark(mark) || mark.storeyId !== storeyId) continue;
     if (mark.kind === "hatch") {
       output.push(...hatchLines(mark));
       continue;

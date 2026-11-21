@@ -12,6 +12,7 @@ import { plans } from "./plans";
 import { queueThumbnail } from "./thumbnails";
 import {
   getBlueprintFile,
+  listSheetIssues,
   listBlueprints,
   requestBlueprint,
 } from "./blueprint-store";
@@ -33,7 +34,7 @@ const revisionQuery = z
   .transform(Number)
   .pipe(exportRevision);
 
-function attachment(body: string, type: string, filename: string) {
+function attachment(body: BodyInit, type: string, filename: string) {
   return new Response(body, {
     headers: {
       "Content-Type": type,
@@ -78,6 +79,7 @@ export function planRoutes(
   app.use("/:id/presence", validateId);
   app.use("/:id/bom", validateId);
   app.use("/:id/exports", validateId);
+  app.use("/:id/issues", validateId);
   app.use("/:id/exports/:exportId/download", validateId);
   return app
     .get("/", async (c) => c.json(await repo.list(c.get("owner"))))
@@ -160,6 +162,12 @@ export function planRoutes(
       );
       return jobs ? c.json(jobs) : c.json({ error: "Plan unavailable" }, 404);
     })
+    .get("/:id/issues", async (c) => {
+      const issues = await listSheetIssues(c.get("owner"), c.req.param("id"));
+      return issues
+        ? c.json(issues)
+        : c.json({ error: "Plan unavailable" }, 404);
+    })
     .post("/:id/exports", async (c) => {
       const input = requestBlueprintSchema.safeParse(
         await c.req.json().catch(() => null),
@@ -173,6 +181,8 @@ export function planRoutes(
       );
       if (pending.status === "missing")
         return c.json({ error: "Plan unavailable" }, 404);
+      if (pending.status === "invalid")
+        return c.json({ error: pending.error }, 400);
       if (pending.status === "stale")
         return c.json(
           {
@@ -201,6 +211,12 @@ export function planRoutes(
       if (!file) return c.json({ error: "Export unavailable" }, 404);
       if (file.artifact === null)
         return c.json({ error: "Export is not ready" }, 409);
+      if (file.format === "pdf")
+        return attachment(
+          Uint8Array.from(Buffer.from(file.artifact, "base64")),
+          "application/pdf",
+          exportFilename(file.name, file.revision, "pdf"),
+        );
       return attachment(
         file.artifact,
         file.format === "svg"

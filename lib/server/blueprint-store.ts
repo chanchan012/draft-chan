@@ -1,9 +1,13 @@
-import { and, eq, lt, sql } from "drizzle-orm";
+import { and, desc, eq, lt, sql } from "drizzle-orm";
 import { openDatabase } from "../../db/client";
 import { floorplanExports, floorplans } from "../../db/schema";
 import type { BlueprintRequest } from "../plans/exports";
 import { renderBlueprint } from "../plans/blueprints";
 import { loadDraftPlan } from "../plans/plan-state";
+import { issueSheets } from "../plans/construction-schedules";
+import { revisionStore } from "./revision-store";
+import { renderSheetSet } from "./sheet-pdf";
+import type { StudioDocument } from "../plans/studio-document";
 
 const job = floorplanExports;
 const summary = {
@@ -25,7 +29,48 @@ export async function requestBlueprint(
 ) {
   const db = openDatabase();
   const plan = ownedPlan(owner, planId);
-  // INSERT ... SELECT captures ownership, revision, name and graph in one statement.
+  const liveRevision =
+    input.format === "pdf"
+      ? undefined
+      : eq(floorplans.revision, input.revision);
+  let source: StudioDocument | undefined;
+  if (input.format === "pdf") {
+    const [existing] = await db
+      .select(summary)
+      .from(job)
+      .innerJoin(floorplans, eq(floorplans.id, job.floorplanId))
+      .where(
+        and(plan, eq(job.revision, input.revision), eq(job.format, "pdf")),
+      );
+    if (existing && existing.status !== "failed")
+      return { status: "accepted", blueprint: existing, queue: null } as const;
+    [source] = await revisionStore.revisions(
+      { owner, planId },
+      input.revision,
+      input.revision,
+    );
+    if (!source) {
+      const [found] = await db
+        .select({ id: floorplans.id })
+        .from(floorplans)
+        .where(plan);
+      return found
+        ? ({ status: "stale" } as const)
+        : ({ status: "missing" } as const);
+    }
+    try {
+      issueSheets(source.graph);
+    } catch (error) {
+      return {
+        status: "invalid",
+        error:
+          error instanceof Error
+            ? error.message
+            : "The sheet set is incomplete.",
+      } as const;
+    }
+  }
+  // The INSERT checks current ownership. A PDF may use an immutable archived revision.
   const [queued] = await db
     .insert(job)
     .select(
@@ -33,17 +78,21 @@ export async function requestBlueprint(
         .select({
           id: sql`gen_random_uuid()`.as("id"),
           floorplanId: floorplans.id,
-          revision: floorplans.revision,
+          revision: source
+            ? sql`${source.revision}::integer`.as("revision")
+            : floorplans.revision,
           format: sql`${input.format}::blueprint_format`.as("format"),
           status: sql`'pending'::blueprint_status`.as("status"),
           attempt: sql`1`.as("attempt"),
-          name: floorplans.name,
-          snapshot: floorplans.graph,
+          name: source ? sql`${source.name}::text`.as("name") : floorplans.name,
+          snapshot: source
+            ? sql`${JSON.stringify(source.graph)}::jsonb`.as("snapshot")
+            : floorplans.graph,
           artifact: sql`NULL::text`.as("artifact"),
           requestedAt: sql`now()`.as("requested_at"),
         })
         .from(floorplans)
-        .where(and(plan, eq(floorplans.revision, input.revision))),
+        .where(and(plan, liveRevision)),
     )
     .onConflictDoUpdate({
       target: [job.floorplanId, job.revision, job.format],
@@ -69,7 +118,8 @@ export async function requestBlueprint(
     .from(floorplans)
     .where(plan);
   if (!saved) return { status: "missing" } as const;
-  if (saved.revision !== input.revision) return { status: "stale" } as const;
+  if (liveRevision && saved.revision !== input.revision)
+    return { status: "stale" } as const;
   const [existing] = await db
     .select(summary)
     .from(job)
@@ -77,7 +127,7 @@ export async function requestBlueprint(
     .where(
       and(
         plan,
-        eq(floorplans.revision, input.revision),
+        liveRevision,
         eq(job.revision, input.revision),
         eq(job.format, input.format),
       ),
@@ -103,6 +153,35 @@ export async function listBlueprints(
     )
     .where(ownedPlan(owner, planId))
     .orderBy(job.format);
+  return rows.length
+    ? rows.flatMap(({ blueprint }) => (blueprint ? [blueprint] : []))
+    : null;
+}
+
+export async function getBlueprintStatus(
+  owner: string,
+  planId: string,
+  id: string,
+) {
+  const [row] = await openDatabase()
+    .select(summary)
+    .from(job)
+    .innerJoin(floorplans, eq(floorplans.id, job.floorplanId))
+    .where(and(ownedPlan(owner, planId), eq(job.id, id)));
+  return row ?? null;
+}
+
+export async function listSheetIssues(owner: string, planId: string) {
+  const rows = await openDatabase()
+    .select({ blueprint: summary })
+    .from(floorplans)
+    .leftJoin(
+      job,
+      and(eq(job.floorplanId, floorplans.id), eq(job.format, "pdf")),
+    )
+    .where(ownedPlan(owner, planId))
+    .orderBy(desc(job.revision))
+    .limit(100);
   return rows.length
     ? rows.flatMap(({ blueprint }) => (blueprint ? [blueprint] : []))
     : null;
@@ -146,11 +225,17 @@ export async function renderQueuedBlueprint(input: BlueprintAttempt) {
     .from(job)
     .where(pending(input));
   if (!row) return { written: false };
-  const artifact = renderBlueprint(
-    row.format,
-    loadDraftPlan(row.snapshot),
-    `${row.name} · Revision ${row.revision}`,
-  );
+  const graph = loadDraftPlan(row.snapshot);
+  const artifact =
+    row.format === "pdf"
+      ? Buffer.from(
+          await renderSheetSet(graph, row.name, row.revision),
+        ).toString("base64")
+      : renderBlueprint(
+          row.format,
+          graph,
+          `${row.name} · Revision ${row.revision}`,
+        );
   // Keep the Inngest step output small. The snapshot is replaced by the artifact.
   const written = await db
     .update(job)

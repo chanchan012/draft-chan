@@ -44,7 +44,11 @@ export const floorplans = pgTable(
   ],
 );
 
-export const blueprintFormat = pgEnum("blueprint_format", ["dxf", "svg"]);
+export const blueprintFormat = pgEnum("blueprint_format", [
+  "dxf",
+  "svg",
+  "pdf",
+]);
 export const blueprintStatus = pgEnum("blueprint_status", [
   "pending",
   "ready",

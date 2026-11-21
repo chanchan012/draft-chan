@@ -486,7 +486,7 @@ function multiStoreyGeometry(plan: DraftPlanState): Geometry {
 }
 
 export function renderBlueprint(
-  format: BlueprintFormat,
+  format: Exclude<BlueprintFormat, "pdf">,
   plan: DraftPlanState,
   title: string,
 ) {
