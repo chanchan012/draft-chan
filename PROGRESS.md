@@ -20,6 +20,12 @@ MCP adds `draw_construction_line`, `draw_polyline`, `draw_circle` and `draw_arc`
 
 Type checking, 68 Vitest checks and the optimized Next build passed. After correcting the circle test locator and save fixture, all 95 Chromium checks passed across desktop, tablet, phone, compact phone and landscape viewports.
 
+## M6.1 · CAD editing
+
+Application merge `24695794dc8c98ab33ae06d506912c4b6a856980` adds Studio's Edit geometry panel and five MCP tools for transforms, offsets, trim/extend, corner edits and arrays. Hosted openings follow selected walls. Trim and corner edits reject the entire change if an opening cannot stay hosted. Dimensions have independent endpoints and can be included in a transform. Vercel Preview `dpl_Cvruk5yyiE4m1SuKeGYsruksrzbc` and Production `dpl_H6TTFReYg6po56y6MVqLmDS1s4nA` reached Ready.
+
+Strict type checking, the Next production build and 72 Vitest tests passed. Playwright passed 99 checks in the initial run and the wall offset and undo case passed on all five viewports after targeting the exposed part of the wall in landscape. Graph version 1 and database migrations through 0004 carry the release.
+
 ## M1.1 · Foundation and shell
 
 Released on 2026-11-18. The verified application merge is `0a0adcde04ab7fb14818dbdcea9e570e89d977b2`. The release documentation follows the application merge on main.

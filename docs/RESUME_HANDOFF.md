@@ -2,6 +2,8 @@
 
 ## Next proposed subgoal
 
+M6.1 is implemented in `lib/plans/cad-edit.ts` and `components/studio/cad-edit-panel.tsx`. Before M6.2, use `npm test -- tests/cad-edit.unit.test.ts tests/mcp.unit.test.ts`. For a focused browser test, run `npm run test:e2e -- --grep "offsets a selected"`. MCP exposes 22 tools at the M6.1 checkpoint.
+
 M5.1 and M5.2 are complete. M6.1 is next in the drafting track. Read the [architectural CAD roadmap](CAD_ROADMAP.md), then inspect `lib/plans/editor-selection.ts`, `lib/plans/precision.ts`, `lib/plans/sketch.ts` and `lib/plans/command-store.ts` before adding transformations. Existing exact-entry tests use the 12 ft example and a 500 mm circle centered at a local origin.
 
 The M5.2 application merge is `b63368f95fd7e8999c68d812485df150d0817dba`. The graph is v1 with optional `sketches` and database migrations through 0004. MCP exposes 17 tools and the same three resources. Run `npm test -- tests/precision.unit.test.ts tests/mcp.unit.test.ts` for focused geometry and authenticated MCP coverage. Run `npm run test:e2e -- --grep "places precise|exact circle"` with a Studio test server for the coordinate and polar flows.

@@ -153,3 +153,8 @@ Graph v1 has an optional `sketches` array of up to 512 records. Each record has 
 `lib/plans/sketch.ts` supplies SVG path generation, bounds, hit testing and polar input. The command store applies add, replace and remove within existing undo batches. Snapshot saves validate the optional collection and preserve the saved array if an older client omits it. The rebase merges disjoint sketches by ID and surfaces conflicts on simultaneous edits of the same sketch. Construction lines appear dashed in Studio and SVG and are placed on a separate CONSTRUCTION layer in DXF. Sketch records remain separate from wall topology, clearance and material quantities.
 
 In Studio, the local origin shifts the drawing grid and the coordinate input frame for the open workspace. The public graph and MCP tools keep absolute model coordinates. Numeric distance and angle input bypasses snap and tracking. With pointer input the active object snap takes precedence, followed by wall Ortho, optional polar tracking and grid snapping. The precision measurement tools continue to use wall references and model points.
+
+
+## M6.1 CAD editing commands
+
+Studio's Edit geometry panel and MCP both use `lib/plans/cad-edit.ts` to build the existing PlanCommand batches. Hosted doors and windows are translated, rotated or copied with their wall. Reflection flips the door swing. Trim/extend and chamfer project the existing opening centers onto the new wall and reject a cut that would leave an opening outside it. The change summary reports authored geometry and affected opening IDs. Dimension annotations are independent coordinates. Current furniture uses cardinal rotations, and fillets are curves on sketch linework. Straight walls support a chamfer with matching type and thickness.
