@@ -124,6 +124,9 @@ async function studio(
         sketches: input.sketches ?? current.graph.sketches,
         constraints: input.constraints ?? current.graph.constraints,
         storeys: input.storeys ?? current.graph.storeys,
+        buildingElements:
+          input.buildingElements ?? current.graph.buildingElements,
+        buildingViews: input.buildingViews ?? current.graph.buildingViews,
         wallTypes: input.wallTypes ?? current.graph.wallTypes,
         drawingLayers: input.drawingLayers ?? current.graph.drawingLayers,
         blocks: input.blocks ?? current.graph.blocks,
@@ -812,6 +815,78 @@ test("adds an upper storey and keeps its drawing separate", async ({
   ).toHaveLength(1);
   await page.reload();
   await expect(page.locator("[data-wall]")).toHaveCount(4);
+  await frame(page);
+});
+
+test("moves a linked stair and sees the section and floor opening update", async ({
+  page,
+}) => {
+  const workspace = studioWorkspace();
+  const p = (x: number, y: number) => ({ x, y });
+  const footprint = [p(0, 0), p(6000, 0), p(6000, 4000), p(0, 4000)];
+  const graph = initialGraph({ width: 6000, depth: 4000 });
+  graph.storeys = [
+    { id: "ground", name: "Ground floor", elevationMm: 0, wallHeightMm: 2450 },
+    { id: "upper", name: "Upper floor", elevationMm: 3000, wallHeightMm: 2600 },
+  ];
+  graph.buildingElements = [
+    {
+      id: "deck",
+      kind: "slab",
+      name: "Upper deck",
+      storeyId: "upper",
+      footprint,
+      thicknessMm: 200,
+      offsetMm: 0,
+    },
+    {
+      id: "stair",
+      kind: "stair",
+      name: "Main stair",
+      fromStoreyId: "ground",
+      toStoreyId: "upper",
+      start: p(1000, 1500),
+      end: p(4000, 1500),
+      widthMm: 1000,
+      risers: 16,
+      openingSlabId: "deck",
+    },
+  ];
+  graph.buildingViews = [
+    {
+      id: "section-a",
+      kind: "section",
+      name: "Section A",
+      start: p(0, 1500),
+      end: p(6000, 1500),
+    },
+  ];
+  workspace.document.graph = graph;
+  await studio(page, false, workspace);
+  await page.getByRole("button", { name: "Building", exact: true }).click();
+  const panel = page.getByRole("complementary", { name: "Building" });
+  await panel.getByRole("button", { name: "Views", exact: true }).click();
+  await panel.getByLabel("Building view").selectOption("section-a");
+  const drawing = page.getByRole("img", { name: "Section A", exact: true });
+  await expect(
+    drawing.locator('[data-surface-kind="stair"]').first(),
+  ).toHaveAttribute("d", /^M 1000 /);
+  await panel.getByRole("button", { name: "Structure", exact: true }).click();
+  await panel.getByLabel("Building element").selectOption("stair");
+  await panel.getByLabel("Start X (mm)").fill("1600");
+  await panel.getByLabel("End X (mm)").fill("4600");
+  await panel.getByRole("button", { name: "Update element" }).click();
+  await expect(
+    drawing.locator('[data-surface-kind="stair"]').first(),
+  ).toHaveAttribute("d", /^M 1600 /);
+  await panel.getByRole("button", { name: "Storeys", exact: true }).click();
+  await panel.getByLabel("Active storey").selectOption("upper");
+  await panel.getByRole("button", { name: "Close building" }).click();
+  await expect(page.locator('[data-floor-opening="stair"]')).toHaveAttribute(
+    "d",
+    /^M 1600 /,
+  );
+  await saveIfNeeded(page);
   await frame(page);
 });
 

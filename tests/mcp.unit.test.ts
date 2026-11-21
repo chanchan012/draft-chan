@@ -364,6 +364,11 @@ it("lays out a two-bedroom plan using all MCP resources and tools over HTTP", as
       "array_entities",
       "calculate_bom",
       "check_clearance_codes",
+      "create_elevation",
+      "create_floor_opening",
+      "create_roof",
+      "create_section",
+      "create_slab",
       "create_storey",
       "define_block",
       "diff_revisions",
@@ -383,9 +388,12 @@ it("lays out a two-bedroom plan using all MCP resources and tools over HTTP", as
       "offset_geometry",
       "place_fixture",
       "place_opening",
+      "place_stair",
       "preview_changes",
+      "query_building_view",
       "query_entities",
       "query_spaces",
+      "remove_building_item",
       "remove_constraint",
       "resolve_snap",
       "set_driving_dimension",
@@ -1099,6 +1107,122 @@ it("creates an upper storey and applies an assembly over MCP", async () => {
     await client.close();
   }
 });
+it("rebuilds the section and floor opening after moving an MCP stair", async () => {
+  const session = await planWithToken();
+  const client = await connect(createMcpHttp(localWindow(100)), session.token);
+  async function call(name: string, args: Record<string, unknown>) {
+    const result = await client.callTool({ name, arguments: args });
+    expect(result).toMatchObject({ isError: false });
+    return result;
+  }
+  const p = (x: number, y: number) => ({ x, y });
+  const footprint = [p(0, 0), p(6000, 0), p(6000, 4000), p(0, 4000)];
+  const stair = {
+    id: "stair",
+    name: "Stair",
+    fromStoreyId: "ground",
+    toStoreyId: "upper",
+    start: p(1000, 1500),
+    end: p(4000, 1500),
+    widthMm: 1000,
+    risers: 16,
+    openingSlabId: "slab",
+  };
+  try {
+    await call("create_storey", {
+      expectedRevision: 0,
+      storey: {
+        id: "upper",
+        name: "Upper",
+        elevationMm: 3000,
+        wallHeightMm: 2600,
+      },
+    });
+    await call("create_slab", {
+      expectedRevision: 1,
+      slab: {
+        id: "slab",
+        name: "Deck",
+        storeyId: "upper",
+        footprint,
+        thicknessMm: 200,
+      },
+    });
+    await call("place_stair", { expectedRevision: 2, stair });
+    await call("create_floor_opening", {
+      expectedRevision: 3,
+      opening: {
+        id: "void",
+        name: "Duct",
+        slabId: "slab",
+        footprint: [p(500, 500), p(800, 500), p(800, 800), p(500, 800)],
+      },
+    });
+    await call("create_roof", {
+      expectedRevision: 4,
+      roof: {
+        id: "roof",
+        name: "Roof",
+        storeyId: "upper",
+        footprint,
+        profile: "gable",
+        directionDeg: 0,
+        pitchDeg: 25,
+        thicknessMm: 150,
+      },
+    });
+    await call("create_section", {
+      expectedRevision: 5,
+      section: {
+        id: "section",
+        name: "A-A",
+        start: p(0, 1500),
+        end: p(6000, 1500),
+      },
+    });
+    await call("create_elevation", {
+      expectedRevision: 6,
+      elevation: { id: "east", name: "East", direction: "east" },
+    });
+    expect(
+      await call("place_stair", {
+        expectedRevision: 7,
+        stair: { ...stair, start: p(1700, 1500), end: p(4700, 1500) },
+      }),
+    ).toMatchObject({
+      structuredContent: {
+        revision: 8,
+        openings: expect.arrayContaining([
+          expect.objectContaining({
+            id: "stair",
+            footprint: expect.arrayContaining([p(1700, 1000)]),
+          }),
+        ]),
+      },
+    });
+    expect(
+      await call("query_building_view", { viewId: "section" }),
+    ).toMatchObject({
+      structuredContent: {
+        revision: 8,
+        surfaces: expect.arrayContaining([
+          expect.objectContaining({
+            id: "stair",
+            kind: "stair",
+            polygon: expect.arrayContaining([p(1700, 0)]),
+          }),
+        ]),
+      },
+    });
+    await call("remove_building_item", {
+      expectedRevision: 8,
+      id: "east",
+      collection: "views",
+    });
+  } finally {
+    await client.close();
+  }
+}, 30_000);
 it("bridges stdio to the authenticated HTTP tools without sharing the database connection", async () => {
   const session = await planWithToken();
   const app = createMcpHttp(localWindow());
@@ -1136,7 +1260,7 @@ it("bridges stdio to the authenticated HTTP tools without sharing the database c
         },
       }),
     );
-    expect((await client.listTools()).tools).toHaveLength(37);
+    expect((await client.listTools()).tools).toHaveLength(45);
     expect((await client.listResources()).resources).toHaveLength(3);
     expect(
       (await client.readResource({ uri: "draft://floorplan-graph" })).contents,

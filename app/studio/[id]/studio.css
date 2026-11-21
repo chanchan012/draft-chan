@@ -1369,3 +1369,113 @@
   color: white;
   background: var(--studio-dark);
 }
+
+.studio-fields textarea {
+  width: 100%;
+  min-width: 0;
+  resize: vertical;
+  padding: 7px;
+  border: 1px solid var(--studio-rule);
+  border-radius: 5px;
+  font: 13px var(--mono);
+}
+
+.cad-slab-plan {
+  fill: #8ea8a21c;
+  stroke: #648080;
+  stroke-width: 1.2;
+}
+
+.cad-stair-plan {
+  fill: #849aa44f;
+  stroke: #45626d;
+  stroke-width: 1.25;
+}
+
+.cad-opening-plan {
+  fill: var(--studio-paper);
+  stroke: #416f7b;
+  stroke-width: 1.5;
+  stroke-dasharray: 5 4;
+}
+
+.cad-section-cut,
+.cad-roof-plan {
+  fill: none;
+  stroke: #547b76;
+  stroke-width: 1.35;
+  stroke-dasharray: 8 5;
+}
+
+.cad-section-cut {
+  stroke: #856044;
+  stroke-dasharray: 11 4 2 4;
+}
+
+.studio-building-view {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  background: linear-gradient(175deg, #f2f4ea, #fafaf4);
+}
+
+.studio-building-view-canvas {
+  position: absolute;
+  inset: 52px 0 0;
+  width: 100%;
+  height: calc(100% - 52px);
+}
+
+.studio-building-view-label {
+  position: absolute;
+  z-index: 1;
+  top: 63px;
+  left: 12px;
+  display: grid;
+  gap: 3px;
+  max-width: min(80%, 400px);
+  padding: 6px 8px;
+  border-radius: 6px;
+  background: #f8f9f0de;
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}
+
+.studio-building-view-label span {
+  color: #536358;
+  text-transform: capitalize;
+}
+
+.cad-building-surface {
+  fill: #d4ddc8;
+  stroke: #435749;
+  stroke-width: 1.15px;
+  stroke-linejoin: round;
+}
+.cad-building-slab { fill: #b8c4bb; }
+.cad-building-stair { fill: #dbcaab; }
+.cad-building-roof { fill: #708576; }
+.cad-building-glazing { fill: #c2d8df; stroke: #567984; }
+
+.cad-building-datum {
+  fill: #526659;
+  font-family: var(--mono);
+}
+
+.cad-building-datum line {
+  stroke: #718679;
+  stroke-width: 0.9px;
+  stroke-dasharray: 5 4;
+}
+
+.studio-building-view-empty {
+  position: absolute;
+  inset: auto 12px 13%;
+  margin: 0;
+  text-align: center;
+  font-size: 12px;
+}
+
+@media (max-width: 620px) {
+  .studio-fields textarea { font-size: 16px; }
+}

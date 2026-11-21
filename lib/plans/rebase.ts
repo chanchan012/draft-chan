@@ -54,6 +54,16 @@ export function rebaseSnapshot(
             saved.storeys ?? [],
           )
         : undefined,
+    buildingElements: mergeItems(
+      base.buildingElements,
+      draft.buildingElements,
+      saved.buildingElements,
+    ),
+    buildingViews: mergeItems(
+      base.buildingViews,
+      draft.buildingViews,
+      saved.buildingViews,
+    ),
     wallTypes: mergeItems(base.wallTypes, draft.wallTypes, saved.wallTypes),
     drawingLayers: mergeItems(
       base.drawingLayers,

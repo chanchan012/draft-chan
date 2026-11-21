@@ -122,8 +122,10 @@ export function fitCamera(
   dimensions: readonly DimensionAnnotation[] = [],
   sketches: readonly Sketch[] = [],
   heightMm = wallHeight,
+  additionalPoints: readonly Point[] = [],
 ): Camera {
   if (
+    !additionalPoints.length &&
     !walls.length &&
     !fixtures.length &&
     (isometric || (!utilities.length && !dimensions.length && !sketches.length))
@@ -159,7 +161,7 @@ export function fitCamera(
       points.push(...sketchPoints(sketch.geometry));
     points.push(...dimensions.flatMap(({ start, end }) => [start, end]));
   }
-  const { left, right, top, bottom } = bounds(points);
+  const { left, right, top, bottom } = bounds([...points, ...additionalPoints]);
   return {
     x: (left + right) / 2,
     y: (top + bottom) / 2,

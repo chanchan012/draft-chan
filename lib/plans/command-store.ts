@@ -37,6 +37,7 @@ import {
   reconcileOrganization,
   upsertLayer,
 } from "./organization";
+import { validateBuilding } from "./building";
 import { initialGraph, loadDraftPlan } from "./plan-state";
 import { validateOpenings } from "./openings";
 import {
@@ -119,6 +120,38 @@ function applyEdit(
   actor: DraftActor,
 ) {
   switch (command.type) {
+    case "building.write": {
+      const items = (draft.buildingElements ??= []);
+      const index = items.findIndex((item) => item.id === command.item.id);
+      if (index >= 0) {
+        if (items[index].kind !== command.item.kind)
+          throw new Error("A building element keeps its original type.");
+        items[index] = command.item;
+      } else {
+        if (items.length >= 256)
+          throw new Error("The plan has reached the building element limit.");
+        addPlacement(items, command.item);
+      }
+      return;
+    }
+    case "building.view": {
+      const views = (draft.buildingViews ??= []);
+      const index = views.findIndex((view) => view.id === command.view.id);
+      if (index >= 0) {
+        if (views[index].kind !== command.view.kind)
+          throw new Error("A building view keeps its original type.");
+        views[index] = command.view;
+      } else {
+        if (views.length >= 80)
+          throw new Error("The plan has reached the building view limit.");
+        addPlacement(views, command.view);
+      }
+      return;
+    }
+    case "building.remove":
+      if (command.collection === "elements")
+        return editPlacement(draft.buildingElements ?? [], command.id, actor);
+      return editPlacement(draft.buildingViews ?? [], command.id, actor);
     case "storey.write": {
       const levels = (draft.storeys ??= [{ ...groundStorey }]);
       const i = levels.findIndex((item) => item.id === command.storey.id);
@@ -442,6 +475,7 @@ export function createDraftPlanStore(input: unknown = initialGraph()) {
         resolveWallTypes(draft, actor);
         reconcileOrganization(plan, draft, actor);
         validateStoreys(draft);
+        validateBuilding(draft);
         if (
           wallsChanged ||
           hasOrganization(draft) ||

@@ -1,3 +1,14 @@
+import polygonClipping from "polygon-clipping";
+import {
+  elementsOnStorey,
+  lerpPoint,
+  roofProfile,
+  slabPolygons,
+  stairSteps,
+  storeyVoids,
+} from "@/lib/plans/building";
+import { clipPolygon, drawingPolygons } from "@/lib/plans/clipping";
+import { storeyById } from "@/lib/plans/storeys";
 import { memo, useId, useMemo } from "react";
 import { projectIso } from "@/lib/plans/cad";
 import { fixtureCatalog } from "@/lib/plans/catalog";
@@ -221,15 +232,73 @@ function depth(points: readonly Point[]) {
 export const IsometricDrawing = memo(function IsometricDrawing({
   plan,
   heightMm,
+  storeyId = "ground",
 }: {
   plan: DraftPlanState;
   heightMm?: number;
+  storeyId?: string;
 }) {
   const { walls, rooms, openings, windows, fixtures } = plan;
   const model = useMemo(
     () => buildIsometric({ walls, rooms, openings, windows }, heightMm),
     [walls, rooms, openings, windows, heightMm],
   );
+  const structure = useMemo(() => {
+    const level = storeyById(plan, storeyId);
+    const items = elementsOnStorey(plan, storeyId);
+    const slabs = items.flatMap((item) =>
+      item.kind === "slab"
+        ? slabPolygons(plan, item).map((rings) => ({
+            rings,
+            base: item.offsetMm - item.thicknessMm,
+            height: item.thicknessMm,
+          }))
+        : [],
+    );
+    const cutouts = storeyVoids(plan, storeyId).map((hole) =>
+      clipPolygon([hole.footprint]),
+    );
+    const floor = model.rooms.map((rings) =>
+      cutouts.length
+        ? drawingPolygons(
+            polygonClipping.difference(clipPolygon(rings), ...cutouts),
+          )
+        : [rings],
+    );
+    const stairs = items.flatMap((item) =>
+      item.kind === "stair" && item.fromStoreyId === storeyId
+        ? stairSteps(plan, item).map((step, index) => ({
+            key: item.id + ":" + index,
+            rings: [step.footprint],
+            base: step.baseMm - level.elevationMm,
+            height: step.topMm - step.baseMm,
+          }))
+        : [],
+    );
+    const roofs = items.flatMap((item) => {
+      if (item.kind !== "roof") return [];
+      const profile = roofProfile(plan, item);
+      const project = (point: Point) =>
+        projectIso(point, profile.height(point) - level.elevationMm);
+      const points = item.footprint.flatMap((point, i) => {
+        const next = item.footprint[(i + 1) % item.footprint.length];
+        const a = profile.coordinate(point);
+        const b = profile.coordinate(next);
+        const t = (profile.ridge - a) / (b - a);
+        return item.profile === "gable" && t > 0 && t < 1
+          ? [project(point), project(lerpPoint(point, next, t))]
+          : [project(point)];
+      });
+      return [{ id: item.id, points, ridge: profile.ridgePoints.map(project) }];
+    });
+    return {
+      slabs,
+      floor,
+      stairs,
+      roofs,
+      hasSlab: items.some((item) => item.kind === "slab"),
+    };
+  }, [plan, model.rooms, storeyId]);
   const grain = useId();
   const scene = [
     ...model.walls.map(({ rings, role, base, height }, i) => ({
@@ -255,6 +324,22 @@ export const IsometricDrawing = memo(function IsometricDrawing({
       order: window.base,
       item: <WindowPane {...window} />,
     })),
+    ...structure.stairs.map(({ key, rings, height, base }) => ({
+      key,
+      stage: 1,
+      depth: depth(rings[0]),
+      order: base,
+      item: (
+        <g data-iso-stair>
+          <Prism
+            rings={rings}
+            height={height}
+            base={base}
+            material="iso-slab"
+          />
+        </g>
+      ),
+    })),
     ...fixtures.map((fixture) => ({
       key: `fixture:${fixture.id}`,
       stage: 1,
@@ -279,28 +364,35 @@ export const IsometricDrawing = memo(function IsometricDrawing({
           />
         </pattern>
       </defs>
-      {model.slab.map((rings, index) => (
+      {(structure.hasSlab
+        ? structure.slabs
+        : model.slab.map((rings) => ({
+            rings,
+            base: -slabDepth,
+            height: slabDepth,
+          }))
+      ).map(({ rings, base, height }, index) => (
         <g key={index} data-iso-slab>
           <path
             className="cad-iso-shadow"
             fillRule="evenodd"
-            d={outline(rings, -slabDepth)}
+            d={outline(rings, base)}
           />
           <Prism
             rings={rings}
-            base={-slabDepth}
-            height={slabDepth}
+            base={base}
+            height={height}
             material="iso-slab"
           />
         </g>
       ))}
-      {model.rooms.map((rings, index) => {
+      {structure.floor.map((parts, index) => {
         const bath = fixtures.some(
           (fixture) =>
             fixtureCatalog[fixture.template].group === "Bath" &&
             inRoom(rooms[index], fixture.position),
         );
-        const path = outline(rings);
+        const path = parts.map((part) => outline(part)).join(" ");
         return (
           <g
             key={rooms[index].id}
@@ -315,6 +407,20 @@ export const IsometricDrawing = memo(function IsometricDrawing({
       })}
       {scene.map(({ key, item }) => (
         <g key={key}>{item}</g>
+      ))}
+      {structure.roofs.map((roof) => (
+        <g key={roof.id} data-iso-roof={roof.id} className="cad-roof-plan">
+          <path d={ring(roof.points)} vectorEffect="non-scaling-stroke" />
+          {roof.ridge.length === 2 && (
+            <line
+              x1={roof.ridge[0].x}
+              y1={roof.ridge[0].y}
+              x2={roof.ridge[1].x}
+              y2={roof.ridge[1].y}
+              vectorEffect="non-scaling-stroke"
+            />
+          )}
+        </g>
       ))}
     </g>
   );

@@ -5,6 +5,8 @@ const collections = [
   ["wall", "walls"],
   ["storey", "storeys"],
   ["wall_type", "wallTypes"],
+  ["building_element", "buildingElements"],
+  ["building_view", "buildingViews"],
   ["door", "openings"],
   ["window", "windows"],
   ["fixture", "fixtures"],

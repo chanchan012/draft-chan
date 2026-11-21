@@ -360,6 +360,75 @@ export type BlockPlacement = z.infer<typeof blockPlacementInput>;
 export type BlockInstance = z.infer<typeof blockInstanceInput>;
 export type ReusableKind = (typeof reusableKinds)[number];
 
+const buildingIdentity = {
+  id: identifier,
+  name: z.string().trim().min(1).max(80),
+};
+const footprintInput = z.array(modelPointInput).min(3).max(128);
+const elevationOffset = z.int().min(-12_000).max(12_000);
+const plateThickness = z.int().min(10).max(4000);
+export const buildingElements = [
+  z.strictObject({
+    ...buildingIdentity,
+    kind: z.literal("slab"),
+    storeyId: identifier,
+    footprint: footprintInput,
+    thicknessMm: plateThickness,
+    offsetMm: elevationOffset.default(0),
+  }),
+  z.strictObject({
+    ...buildingIdentity,
+    kind: z.literal("opening"),
+    slabId: identifier,
+    footprint: footprintInput,
+  }),
+  z.strictObject({
+    ...buildingIdentity,
+    kind: z.literal("stair"),
+    fromStoreyId: identifier,
+    toStoreyId: identifier,
+    start: modelPointInput,
+    end: modelPointInput,
+    widthMm: z.int().min(300).max(8000),
+    risers: z.int().min(2).max(80),
+    openingSlabId: identifier.optional(),
+  }),
+  z.strictObject({
+    ...buildingIdentity,
+    kind: z.literal("roof"),
+    storeyId: identifier,
+    footprint: footprintInput,
+    profile: z.enum(["flat", "shed", "gable"]),
+    directionDeg: z.number().min(0).lt(360),
+    pitchDeg: z.number().min(0).max(65),
+    thicknessMm: plateThickness,
+    offsetMm: elevationOffset.default(0),
+  }),
+] as const;
+export const buildingElementInput = z.discriminatedUnion(
+  "kind",
+  buildingElements,
+);
+export const buildingViews = [
+  z.strictObject({
+    ...buildingIdentity,
+    kind: z.literal("section"),
+    start: modelPointInput,
+    end: modelPointInput,
+  }),
+  z.strictObject({
+    ...buildingIdentity,
+    kind: z.literal("elevation"),
+    direction: z.enum(["north", "south", "east", "west"]),
+  }),
+] as const;
+export const buildingViewInput = z.discriminatedUnion("kind", buildingViews);
+export type BuildingElement = z.infer<typeof buildingElementInput>;
+export type Slab = Extract<BuildingElement, { kind: "slab" }>;
+export type Stair = Extract<BuildingElement, { kind: "stair" }>;
+export type Roof = Extract<BuildingElement, { kind: "roof" }>;
+export type BuildingView = z.infer<typeof buildingViewInput>;
+
 export const planCommandSchema = z.union([
   z.discriminatedUnion("type", [
     z.strictObject({
@@ -391,6 +460,21 @@ export const planCommandSchema = z.union([
       id: identifier,
       wallTypeId: identifier.nullable(),
       referenceLine: wallReferenceInput,
+    }),
+  ]),
+  z.discriminatedUnion("type", [
+    z.strictObject({
+      type: z.literal("building.write"),
+      item: buildingElementInput,
+    }),
+    z.strictObject({
+      type: z.literal("building.view"),
+      view: buildingViewInput,
+    }),
+    z.strictObject({
+      type: z.literal("building.remove"),
+      id: identifier,
+      collection: z.enum(["elements", "views"]),
     }),
   ]),
   wallCommandSchema,
@@ -466,6 +550,8 @@ export const draftPlanSchema = z.looseObject({
   fixtures: z.array(fixtureSchema),
   utilities: z.array(utilitySchema).default([]),
   dimensions: z.array(z.unknown()),
+  buildingElements: z.array(buildingElementInput).max(256).optional(),
+  buildingViews: z.array(buildingViewInput).max(80).optional(),
   storeys: z.array(storeyInput).max(32).optional(),
   wallTypes: z.array(wallTypeInput).max(128).optional(),
   drawingLayers: z.array(drawingLayerInput).max(64).optional(),
