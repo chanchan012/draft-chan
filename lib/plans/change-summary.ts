@@ -10,6 +10,9 @@ const collections = [
   ["dimension", "annotations"],
   ["sketch", "sketches"],
   ["constraint", "constraints"],
+  ["layer", "drawingLayers"],
+  ["block", "blocks"],
+  ["block_instance", "blockInstances"],
 ] as const;
 
 export function summarizeChanges(

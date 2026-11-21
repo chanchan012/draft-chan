@@ -2,6 +2,9 @@ import { z } from "zod";
 import {
   displayUnits,
   constraintInput,
+  drawingLayerInput,
+  blockInput,
+  blockInstanceInput,
   constraintLimit,
   doorInput,
   fixtureInput,
@@ -25,6 +28,7 @@ import {
   type WindowOpening,
   type DimensionAnnotation,
 } from "./model";
+import { hasOrganization, reconcileOrganization } from "./organization";
 import { loadDraftPlan } from "./plan-state";
 
 export interface StudioDocument {
@@ -46,6 +50,9 @@ export const saveStudioSchema = z.strictObject({
   fixtures: z.array(fixtureInput).max(placementLimit).optional(),
   utilities: z.array(utilityInput).max(placementLimit).optional(),
   windows: z.array(windowInput).max(openingLimit).optional(),
+  drawingLayers: z.array(drawingLayerInput).max(64).optional(),
+  blocks: z.array(blockInput).max(128).optional(),
+  blockInstances: z.array(blockInstanceInput).max(3072).optional(),
   constraints: z.array(constraintInput).max(constraintLimit).optional(),
   sketches: z.array(sketchInput).max(placementLimit).optional(),
   annotations: z.array(annotationInput).max(placementLimit).optional(),
@@ -65,6 +72,13 @@ export function studioSnapshot(plan: DraftPlanState, unit: DisplayUnit) {
     ),
     windows: (plan.windows ?? []).map((opening) =>
       windowInput.strip().parse(opening),
+    ),
+    drawingLayers: (plan.drawingLayers ?? []).map((item) =>
+      drawingLayerInput.parse(item),
+    ),
+    blocks: (plan.blocks ?? []).map((item) => blockInput.parse(item)),
+    blockInstances: (plan.blockInstances ?? []).map((item) =>
+      blockInstanceInput.parse(item),
     ),
     constraints: (plan.constraints ?? []).map((c) => constraintInput.parse(c)),
     sketches: (plan.sketches ?? []).map((item) =>
@@ -174,7 +188,7 @@ export function applyStudioSnapshot(
         sketchInput.strip(),
       ),
     ) ?? previous.sketches;
-  return loadDraftPlan({
+  const next: DraftPlanState = {
     ...previous,
     walls,
     openings,
@@ -184,6 +198,14 @@ export function applyStudioSnapshot(
     annotations,
     sketches,
     constraints: input.constraints ?? previous.constraints,
+    drawingLayers: input.drawingLayers ?? previous.drawingLayers,
+    blocks: input.blocks ?? previous.blocks,
+    blockInstances: input.blockInstances ?? previous.blockInstances,
     rooms: [],
-  });
+  };
+  if (!hasOrganization(previous) && !hasOrganization(next))
+    return loadDraftPlan(next);
+  const candidate = structuredClone(next);
+  reconcileOrganization(previous, candidate, actor);
+  return loadDraftPlan(candidate);
 }

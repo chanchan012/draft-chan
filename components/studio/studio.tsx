@@ -9,6 +9,7 @@ import {
   Link2,
   FileDown,
   Layers3,
+  Component,
   Zap,
   ScanLine,
   Spline,
@@ -30,6 +31,8 @@ import { useStore } from "zustand";
 import { cadEditCommands } from "@/lib/plans/cad-edit";
 import { summarizeChanges } from "@/lib/plans/change-summary";
 import { ConstraintsPanel } from "./constraints-panel";
+import { BlocksPanel, NamedLayersPanel } from "./organization-panel";
+import { visibleDrawing } from "@/lib/plans/organization";
 import { CadEditPanel } from "./cad-edit-panel";
 import { gridSteps, unitFactor } from "@/lib/plans/cad";
 import {
@@ -121,7 +124,7 @@ export function Studio({
   const [ortho, setOrtho] = useState(true);
   const [iso, setIso] = useState(false);
   const [rightPanel, setRightPanel] = useState<RightPanel | null>(null);
-  const [layersOpen, setLayersOpen] = useState(false);
+  const [leftPanel, setLeftPanel] = useState<"layers" | "blocks" | null>(null);
   const [zoomSlot, setZoomSlot] = useState<HTMLDivElement | null>(null);
   const [wall, setWall] = useState<WallSettings>({
     thicknessMm: 120,
@@ -152,14 +155,15 @@ export function Studio({
   const [picked, setSelection] = useState<readonly Selection[]>([]);
   const [multi, setMulti] = useState(false);
   const selection = useMemo(() => {
+    const drawing = visibleDrawing(plan);
     const visible = new Set([
-      ...(plan.sketches ?? []).map(({ id }) => "sketch:" + id),
-      ...plan.walls.map(({ id }) => "wall:" + id),
-      ...plan.openings.map(({ id }) => "door:" + id),
-      ...(plan.windows ?? []).map(({ id }) => "window:" + id),
-      ...(plan.annotations ?? []).map(({ id }) => "dimension:" + id),
-      ...plan.fixtures.map(({ id }) => "fixture:" + id),
-      ...plan.utilities
+      ...(drawing.sketches ?? []).map(({ id }) => "sketch:" + id),
+      ...drawing.walls.map(({ id }) => "wall:" + id),
+      ...drawing.openings.map(({ id }) => "door:" + id),
+      ...(drawing.windows ?? []).map(({ id }) => "window:" + id),
+      ...(drawing.annotations ?? []).map(({ id }) => "dimension:" + id),
+      ...drawing.fixtures.map(({ id }) => "fixture:" + id),
+      ...drawing.utilities
         .filter((item) => layers[utilityCatalog[item.template].layer])
         .map(({ id }) => "utility:" + id),
     ]);
@@ -172,6 +176,7 @@ export function Studio({
   const auditControl = useRef<HTMLButtonElement>(null);
   const inspectorControl = useRef<HTMLButtonElement>(null);
   const exportsControl = useRef<HTMLButtonElement>(null);
+  const blockControl = useRef<HTMLButtonElement>(null);
   const layerControl = useRef<HTMLButtonElement>(null);
 
   const activeWall =
@@ -336,7 +341,7 @@ export function Studio({
   useEffect(() => {
     const layout = window.matchMedia(overlayPanels);
     function resize({ matches }: MediaQueryListEvent) {
-      if (matches && rightPanel) setLayersOpen(false);
+      if (matches && rightPanel) setLeftPanel(null);
     }
     layout.addEventListener("change", resize);
     return () => layout.removeEventListener("change", resize);
@@ -352,7 +357,7 @@ export function Studio({
       closeRightPanel();
       return;
     }
-    if (window.matchMedia(overlayPanels).matches) setLayersOpen(false);
+    if (window.matchMedia(overlayPanels).matches) setLeftPanel(null);
     setFinding(undefined);
     setRightPanel(panel);
     if (panel === "clearance") setIso(false);
@@ -442,29 +447,65 @@ export function Studio({
           <button
             ref={layerControl}
             aria-controls="studio-layers"
-            aria-expanded={layersOpen}
+            aria-expanded={leftPanel === "layers"}
             aria-label="Layers"
             title="Layers"
             onClick={() => {
-              if (!layersOpen && window.matchMedia(overlayPanels).matches)
-                closeRightPanel();
-              setLayersOpen(!layersOpen);
+              if (window.matchMedia(overlayPanels).matches) closeRightPanel();
+              setLeftPanel(leftPanel === "layers" ? null : "layers");
             }}
           >
             <Layers3 size={20} />
+          </button>
+          <button
+            ref={blockControl}
+            aria-controls="studio-layers"
+            aria-expanded={leftPanel === "blocks"}
+            aria-label="Blocks"
+            title="Blocks"
+            onClick={() => {
+              if (window.matchMedia(overlayPanels).matches) closeRightPanel();
+              setLeftPanel(leftPanel === "blocks" ? null : "blocks");
+            }}
+          >
+            <Component size={20} />
           </button>
         </div>
         <StudioPanel
           side="left"
           id="studio-layers"
-          label="Layers"
-          open={layersOpen}
+          label={leftPanel === "blocks" ? "Blocks" : "Layers"}
+          open={Boolean(leftPanel)}
           onClose={() => {
-            setLayersOpen(false);
-            layerControl.current?.focus();
+            setLeftPanel(null);
+            (leftPanel === "blocks"
+              ? blockControl
+              : layerControl
+            ).current?.focus();
           }}
         >
-          <Layers layers={layers} onToggle={toggleLayer} />
+          {leftPanel === "blocks" ? (
+            <BlocksPanel
+              plan={plan}
+              selectedWall={activeWall?.id}
+              onCommand={(input) => {
+                executeBatch([input], actor);
+                setMessage("");
+              }}
+            />
+          ) : (
+            <>
+              <Layers layers={layers} onToggle={toggleLayer} />
+              <NamedLayersPanel
+                plan={plan}
+                selection={selection}
+                onCommand={(input) => {
+                  executeBatch([input], actor);
+                  setMessage("");
+                }}
+              />
+            </>
+          )}
         </StudioPanel>
 
         <div className="studio-stage">

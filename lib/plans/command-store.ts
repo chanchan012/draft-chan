@@ -31,6 +31,12 @@ import {
   solveConstraints,
   validateConstraints,
 } from "./constraints";
+import {
+  hasOrganization,
+  insertBlock,
+  reconcileOrganization,
+  upsertLayer,
+} from "./organization";
 import { initialGraph, loadDraftPlan } from "./plan-state";
 import { validateOpenings } from "./openings";
 import { solveWallTopology } from "./wall-topology";
@@ -105,6 +111,49 @@ function applyEdit(
   actor: DraftActor,
 ) {
   switch (command.type) {
+    case "layer.write": {
+      const layers = draft.drawingLayers ?? [];
+      if (
+        layers.length >= 64 &&
+        !layers.some((item) => item.id === command.layer.id)
+      )
+        throw new Error("The plan has reached the named layer limit.");
+      draft.drawingLayers = upsertLayer(layers, command.layer);
+      return;
+    }
+    case "layer.remove":
+      return editPlacement(draft.drawingLayers ?? [], command.id, actor);
+    case "block.define": {
+      const blocks = (draft.blocks ??= []);
+      if (blocks.length >= 128)
+        throw new Error("The plan has reached the block definition limit.");
+      return addPlacement(blocks, command.definition);
+    }
+    case "block.update": {
+      const definitions = draft.blocks ?? [];
+      const index = definitions.findIndex(
+        (item) => item.id === command.definition.id,
+      );
+      if (index < 0 || definitions[index].kind !== command.definition.kind)
+        throw new Error(
+          "Edit an existing definition without changing its type.",
+        );
+      definitions[index] = command.definition;
+      return;
+    }
+    case "block.link": {
+      const instances = (draft.blockInstances ??= []);
+      if (instances.some((item) => item.id === command.instance.id))
+        throw new Error("A block instance with that ID already exists.");
+      instances.push(command.instance);
+      instances.sort((a, b) => compareText(a.id, b.id));
+      return;
+    }
+    case "block.insert": {
+      const { link, command: native } = insertBlock(draft, command);
+      applyEdit(draft, native, actor);
+      return applyEdit(draft, { type: "block.link", instance: link }, actor);
+    }
     case "constraint.add": {
       const constraints = (draft.constraints ??= []);
       if (constraints.length >= constraintLimit)
@@ -349,8 +398,10 @@ export function createDraftPlanStore(input: unknown = initialGraph()) {
         } else if (wallsChanged) {
           validateConstraints(draft.walls, draft.constraints);
         }
+        reconcileOrganization(plan, draft, actor);
         if (
           wallsChanged ||
+          hasOrganization(draft) ||
           commands.some(
             ({ type }) =>
               type.startsWith("door.") || type.startsWith("window."),

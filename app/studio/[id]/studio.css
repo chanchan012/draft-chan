@@ -1303,3 +1303,53 @@
 .cad-driving line {
   stroke-dasharray: 4 3;
 }
+
+.studio-org-label {
+  display: grid;
+  gap: 5px;
+  font-size: 12px;
+}
+
+.studio-org-label select {
+  width: 100%;
+  min-width: 0;
+  border: 1px solid var(--studio-rule);
+  border-radius: 5px;
+  padding: 5px;
+}
+
+.studio-org-toggle {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 12px;
+}
+
+.studio-parametric button:disabled {
+  opacity: 0.55;
+}
+
+.cad-wall[data-drawing-layer]:not(.is-selected) {
+  --cad-wall-ink: var(--drawing-ink);
+}
+
+.cad-wall[data-drawing-layer] > line {
+  stroke-dasharray: var(--drawing-wall-dash);
+}
+
+:is(.cad-door, .cad-window, .cad-fixture, .cad-sketch)[data-drawing-layer]:not(.is-selected, [data-selected="true"]) {
+  stroke: var(--drawing-ink);
+}
+
+:is(.cad-door, .cad-window, .cad-fixture, .cad-sketch)[data-drawing-layer] {
+  stroke-dasharray: var(--drawing-dash);
+}
+
+:is(.cad-dimension, .cad-utility)[data-drawing-layer]:not(.is-selected) {
+  color: var(--drawing-ink);
+}
+
+.cad-dimension[data-drawing-layer] line,
+.cad-utility[data-drawing-layer] :is(rect, circle) {
+  stroke-dasharray: var(--drawing-dash);
+}
