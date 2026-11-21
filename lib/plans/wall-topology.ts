@@ -304,6 +304,9 @@ export function solveWallTopology(walls: readonly Wall[]) {
   // spans and leave it out of room boundaries.
   const onBoundary = (edge: HalfEdge) => edge.face !== edge.opposite.face;
   const boundary = halfEdges.filter(onBoundary);
+  const bounded = new Set(
+    boundary.map((edge) => edge.from.key + ";" + edge.opposite.from.key),
+  );
   for (const v of vertices.values()) v.edges = v.edges.filter(onBoundary);
   linkFaces();
   const rings = traceFaces(boundary).flatMap(boundaryRings);
@@ -343,5 +346,12 @@ export function solveWallTopology(walls: readonly Wall[]) {
       end: point(end),
       wallIds: wallIds.sort(compareText),
     }));
-  return { rooms, spans };
+  const boundarySpans = [...segmentsByEndpoints.values()]
+    .filter(({ start, end }) => bounded.has(start.key + ";" + end.key))
+    .map(({ start, end, wallIds }) => ({
+      start: point(start),
+      end: point(end),
+      wallIds,
+    }));
+  return { rooms, spans, boundarySpans };
 }

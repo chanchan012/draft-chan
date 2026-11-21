@@ -11,6 +11,7 @@ import { entityKey, validateOrganization } from "./organization";
 import { validateConstraints } from "./constraints";
 import { validateOpenings } from "./openings";
 import { polygonAreaMm2 } from "./polygon";
+import { storeyRooms, validateStoreys } from "./storeys";
 import { solveWallTopology } from "./wall-topology";
 
 function rectangleWalls(corners: Point[], author?: DraftActor): Wall[] {
@@ -108,8 +109,11 @@ export function loadDraftPlan(input: unknown): DraftPlanState {
   }
   for (const layer of state.drawingLayers ?? [])
     layer.members.sort((a, b) => compareText(entityKey(a), entityKey(b)));
+  state.storeys?.sort((a, b) => compareText(a.id, b.id));
+  state.wallTypes?.sort((a, b) => compareText(a.id, b.id));
+  validateStoreys(state);
   validateOrganization(state);
   validateConstraints(state.walls, state.constraints);
-  state.rooms = solveWallTopology(state.walls).rooms;
+  state.rooms = storeyRooms(state.walls);
   return state;
 }

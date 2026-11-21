@@ -364,6 +364,7 @@ it("lays out a two-bedroom plan using all MCP resources and tools over HTTP", as
       "array_entities",
       "calculate_bom",
       "check_clearance_codes",
+      "create_storey",
       "define_block",
       "diff_revisions",
       "draw_arc",
@@ -384,13 +385,16 @@ it("lays out a two-bedroom plan using all MCP resources and tools over HTTP", as
       "place_opening",
       "preview_changes",
       "query_entities",
+      "query_spaces",
       "remove_constraint",
       "resolve_snap",
       "set_driving_dimension",
+      "set_wall_type",
       "split_or_join_wall",
       "transform_entities",
       "trigger_dxf_export",
       "trim_extend",
+      "update_storey",
     ]);
     expect(
       (await client.listResources()).resources.map(({ name }) => name).sort(),
@@ -1040,6 +1044,61 @@ it("updates native block instances and rejects locked changes through MCP and gr
     await client.close();
   }
 });
+it("creates an upper storey and applies an assembly over MCP", async () => {
+  const session = await planWithToken();
+  const client = await connect(createMcpHttp(localWindow(40)), session.token);
+  const call = (name: string, args: Record<string, unknown>) =>
+    client.callTool({ name, arguments: args });
+  try {
+    expect(await call("query_spaces", {})).toMatchObject({
+      isError: false,
+      structuredContent: { storeys: [{ id: "ground" }] },
+    });
+    await call("create_storey", {
+      expectedRevision: 0,
+      storey: {
+        id: "upper",
+        name: "Upper floor",
+        elevationMm: 3000,
+        wallHeightMm: 2700,
+      },
+    });
+    const drawn = await call("draw_wall", {
+      expectedRevision: 1,
+      storeyId: "upper",
+      start: { x: 0, y: 0 },
+      end: { x: 4000, y: 0 },
+      thicknessMm: 120,
+      kind: "exterior",
+    });
+    if (!isCallToolResult(drawn)) throw new Error("Expected wall response");
+    const { wallId } = drawn.structuredContent as { wallId: string };
+    expect(
+      await call("set_wall_type", {
+        expectedRevision: 2,
+        wallIds: [wallId],
+        referenceLine: "negative",
+        wallType: {
+          id: "outer",
+          name: "Exterior",
+          layers: [{ material: "Core", thicknessMm: 250 }],
+        },
+      }),
+    ).toMatchObject({ isError: false, structuredContent: { revision: 3 } });
+    expect(
+      await call("query_entities", { storeyId: "ground", kind: "wall" }),
+    ).toMatchObject({ structuredContent: { total: 0 } });
+    expect(
+      await call("inspect_entity", { kind: "wall", id: wallId }),
+    ).toMatchObject({
+      structuredContent: {
+        entity: { storeyId: "upper", thicknessMm: 250, start: { x: 0, y: 0 } },
+      },
+    });
+  } finally {
+    await client.close();
+  }
+});
 it("bridges stdio to the authenticated HTTP tools without sharing the database connection", async () => {
   const session = await planWithToken();
   const app = createMcpHttp(localWindow());
@@ -1077,7 +1136,7 @@ it("bridges stdio to the authenticated HTTP tools without sharing the database c
         },
       }),
     );
-    expect((await client.listTools()).tools).toHaveLength(33);
+    expect((await client.listTools()).tools).toHaveLength(37);
     expect((await client.listResources()).resources).toHaveLength(3);
     expect(
       (await client.readResource({ uri: "draft://floorplan-graph" })).contents,

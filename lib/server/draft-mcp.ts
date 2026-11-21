@@ -39,6 +39,10 @@ import {
   utilityInput,
   annotationInput,
   constraintInput,
+  storeyInput,
+  storeyIdInput,
+  wallTypeInput,
+  wallReferenceInput,
   drawingLayerInput,
   blockInput,
   blockPlacementInput,
@@ -49,6 +53,8 @@ import {
   type PlanCommand,
   type Point,
 } from "../plans/model";
+import { querySpaces } from "../plans/spaces";
+import { planStoreys, storeyPlan, storeyById } from "../plans/storeys";
 import { pointAlong } from "../plans/openings";
 import {
   entityKinds,
@@ -102,13 +108,23 @@ const catalog = {
   utilities: utilityCatalog,
   roomPresets,
 };
-type AgentEdit = { plan: DraftPlanState; cursor?: Point; result?: object };
+type AgentEdit = {
+  plan: DraftPlanState;
+  cursor?: Point;
+  cursorStoreyId?: string;
+  result?: object;
+};
 
 export interface DraftMcpBackend {
   get: typeof plans.getStudio;
   transactions?: typeof revisionStore;
   save: typeof plans.saveStudio;
-  publish(scope: AgentScope, revision: number, cursor?: Point): Promise<void>;
+  publish(
+    scope: AgentScope,
+    revision: number,
+    cursor?: Point,
+    storeyId?: string,
+  ): Promise<void>;
   exportDxf(scope: AgentScope, revision: number): Promise<object>;
 }
 
@@ -116,7 +132,7 @@ export const draftMcpBackend: DraftMcpBackend = {
   get: plans.getStudio,
   transactions: revisionStore,
   save: plans.saveStudio,
-  async publish(scope, revision, cursor) {
+  async publish(scope, revision, cursor, storeyId) {
     const { owner, planId, agentId } = scope;
     const work = [
       liveBus.publish(planChannel(owner, planId), {
@@ -131,7 +147,7 @@ export const draftMcpBackend: DraftMcpBackend = {
           owner,
           planId,
           { kind: "ai", id: agentId },
-          { clientId: agentId, cursor },
+          { clientId: agentId, cursor, storeyId },
         ),
       );
     await Promise.allSettled(work);
@@ -301,7 +317,7 @@ export function createDraftMcp(scope: AgentScope, backend = draftMcpBackend) {
       if (saved.status === "invalid")
         throw new ToolFailure("invalid_geometry", saved.error);
       await backend
-        .publish(scope, saved.revision, changed.cursor)
+        .publish(scope, saved.revision, changed.cursor, changed.cursorStoreyId)
         .catch(() => {});
       return { planId, revision: saved.revision, ...changed.result };
     });
@@ -326,11 +342,93 @@ export function createDraftMcp(scope: AgentScope, backend = draftMcpBackend) {
     async () => catalog,
   );
 
+  edit(
+    "create_storey",
+    "Add a named storey with a distinct elevation and wall height in millimeters. Legacy plans have a ground storey named Ground floor.",
+    z.strictObject({
+      ...revision,
+      storey: storeyInput,
+    }),
+    (doc, { storey }) => {
+      if (planStoreys(doc.graph).some((level) => level.id === storey.id))
+        throw new Error("That storey ID already exists.");
+      return {
+        plan: commands(doc, [{ type: "storey.write", storey }]),
+        result: { storeyId: storey.id },
+      };
+    },
+  );
+  edit(
+    "update_storey",
+    "Set the name, elevation and wall height of an existing storey.",
+    z.strictObject({
+      ...revision,
+      storey: storeyInput,
+    }),
+    (doc, { storey }) => {
+      storeyById(doc.graph, storey.id);
+      return {
+        plan: commands(doc, [{ type: "storey.write", storey }]),
+        result: { storeyId: storey.id },
+      };
+    },
+  );
+  edit(
+    "set_wall_type",
+    "Define or update an assembly and optionally assign it to walls. A positive or negative reference is the matching face, and its authored coordinates stay fixed.",
+    z
+      .strictObject({
+        ...revision,
+        wallType: wallTypeInput.optional(),
+        wallTypeId: objectId.nullable().optional(),
+        wallIds: z.array(objectId).min(1).max(128).optional(),
+        referenceLine: wallReferenceInput.optional(),
+      })
+      .refine((input) => Boolean(input.wallType || input.wallIds)),
+    (doc, input) => {
+      const batch: PlanCommand[] = [];
+      if (input.wallType)
+        batch.push({ type: "wall_type.write", wallType: input.wallType });
+      for (const id of input.wallIds ?? []) {
+        const wall = wallById(doc.graph, id);
+        batch.push({
+          type: "wall.assembly",
+          id,
+          wallTypeId:
+            input.wallTypeId === undefined
+              ? (input.wallType?.id ?? wall.wallTypeId ?? null)
+              : input.wallTypeId,
+          referenceLine: input.referenceLine ?? wall.referenceLine ?? "center",
+        });
+      }
+      const plan = commands(doc, batch);
+      return { plan, result: summarizeChanges(doc.graph, plan) };
+    },
+  );
+  tool(
+    "query_spaces",
+    "Read storeys, enclosed reference boundaries, usable net polygons and gross enclosed floor areas. Optionally select one storey.",
+    z.strictObject({
+      storeyId: storeyIdInput,
+    }),
+    true,
+    async ({ storeyId }) => {
+      const doc = await current();
+      if (storeyId) storeyById(doc.graph, storeyId);
+      return {
+        planId,
+        revision: doc.revision,
+        storeys: querySpaces(doc.graph, storeyId),
+      };
+    },
+  );
+
   tool(
     "query_entities",
     "List entities at the saved revision. Bounds select overlapping envelopes in millimeters. Page with nextOffset on the same revision.",
     z.strictObject({
       kind: z.enum(entityKinds).optional(),
+      storeyId: storeyIdInput,
       layer: objectId.optional(),
       bounds: z
         .strictObject({
@@ -352,7 +450,12 @@ export function createDraftMcp(scope: AgentScope, backend = draftMcpBackend) {
       return {
         planId,
         revision: doc.revision,
-        ...queryEntities(doc.graph, input),
+        ...queryEntities(
+          input.storeyId
+            ? storeyPlan(doc.graph, storeyById(doc.graph, input.storeyId).id)
+            : doc.graph,
+          input,
+        ),
       };
     },
   );
@@ -380,15 +483,20 @@ export function createDraftMcp(scope: AgentScope, backend = draftMcpBackend) {
     "Find a wall endpoint, midpoint, centerline intersection, perpendicular foot or finished face near a point in millimeters. Include an anchor for perpendicular snaps. Returns the exact point and integer model point for subsequent edits.",
     z.strictObject({
       point: precisePoint,
+      storeyId: storeyIdInput,
       radiusMm: z.number().positive().max(2_000_000),
       modes: z.array(z.enum(snapKinds)).min(1).max(5).optional(),
       anchor: precisePoint.optional(),
       ortho: z.boolean().optional(),
     }),
     true,
-    async ({ point, ...options }) => {
+    async ({ point, storeyId, ...options }) => {
       const doc = await current();
-      const snap = resolveSnap(doc.graph.walls, point, options);
+      const snap = resolveSnap(
+        storeyPlan(doc.graph, storeyById(doc.graph, storeyId).id).walls,
+        point,
+        options,
+      );
       return {
         planId,
         revision: doc.revision,
@@ -809,46 +917,61 @@ export function createDraftMcp(scope: AgentScope, backend = draftMcpBackend) {
     },
   );
 
-  function addSketch(doc: StudioDocument, geometry: SketchGeometry): AgentEdit {
+  function addSketch(
+    doc: StudioDocument,
+    geometry: SketchGeometry,
+    storeyId?: string,
+  ): AgentEdit {
     const id = crypto.randomUUID();
     return {
-      plan: commands(doc, [{ type: "sketch.add", sketch: { id, geometry } }]),
+      plan: commands(doc, [
+        { type: "sketch.add", sketch: { id, geometry, storeyId } },
+      ]),
       cursor:
         geometry.kind === "polyline"
           ? geometry.points.at(-1)
           : geometry.kind === "construction"
             ? geometry.end
             : geometry.center,
+      cursorStoreyId: storeyId,
       result: { sketchId: id, kind: geometry.kind },
     };
   }
   edit(
     "draw_construction_line",
     "Add a two-point guide in model millimeters.",
-    sketchFields[0].omit({ kind: true }).extend(revision),
-    (doc, { expectedRevision: _, ...geometry }) =>
-      addSketch(doc, { kind: "construction", ...geometry }),
+    sketchFields[0]
+      .omit({ kind: true })
+      .extend({ ...revision, storeyId: storeyIdInput }),
+    (doc, { expectedRevision: _, storeyId, ...geometry }) =>
+      addSketch(doc, { kind: "construction", ...geometry }, storeyId),
   );
   edit(
     "draw_polyline",
     "Add an open or closed polyline in model millimeters. Omit the duplicate closing point.",
-    sketchFields[1].omit({ kind: true }).extend(revision),
-    (doc, { expectedRevision: _, ...geometry }) =>
-      addSketch(doc, { kind: "polyline", ...geometry }),
+    sketchFields[1]
+      .omit({ kind: true })
+      .extend({ ...revision, storeyId: storeyIdInput }),
+    (doc, { expectedRevision: _, storeyId, ...geometry }) =>
+      addSketch(doc, { kind: "polyline", ...geometry }, storeyId),
   );
   edit(
     "draw_circle",
     "Add a circle with a center and radius in model millimeters.",
-    sketchFields[2].omit({ kind: true }).extend(revision),
-    (doc, { expectedRevision: _, ...geometry }) =>
-      addSketch(doc, { kind: "circle", ...geometry }),
+    sketchFields[2]
+      .omit({ kind: true })
+      .extend({ ...revision, storeyId: storeyIdInput }),
+    (doc, { expectedRevision: _, storeyId, ...geometry }) =>
+      addSketch(doc, { kind: "circle", ...geometry }, storeyId),
   );
   edit(
     "draw_arc",
     "Add an arc with a center and radius in model millimeters. Angles are clockwise degrees from right in Draft's Y-down model.",
-    sketchFields[3].omit({ kind: true }).extend(revision),
-    (doc, { expectedRevision: _, ...geometry }) =>
-      addSketch(doc, { kind: "arc", ...geometry }),
+    sketchFields[3]
+      .omit({ kind: true })
+      .extend({ ...revision, storeyId: storeyIdInput }),
+    (doc, { expectedRevision: _, storeyId, ...geometry }) =>
+      addSketch(doc, { kind: "arc", ...geometry }, storeyId),
   );
 
   edit(
@@ -860,6 +983,7 @@ export function createDraftMcp(scope: AgentScope, backend = draftMcpBackend) {
       return {
         plan: commands(doc, [{ type: "wall.add", wall: { id, ...wall } }]),
         cursor: wall.end,
+        cursorStoreyId: wall.storeyId,
         result: { wallId: id },
       };
     },
@@ -935,6 +1059,7 @@ export function createDraftMcp(scope: AgentScope, backend = draftMcpBackend) {
       return {
         plan: commands(doc, [command]),
         cursor,
+        cursorStoreyId: wallById(doc.graph, fields.wallId).storeyId,
         result: { openingId, kind },
       };
     },
@@ -947,6 +1072,7 @@ export function createDraftMcp(scope: AgentScope, backend = draftMcpBackend) {
         ...revision,
         kind: z.literal("furniture"),
         position: modelPointInput,
+        storeyId: storeyIdInput,
         template: z.enum(fixtureKinds),
         ...fixtureInput
           .pick({
@@ -970,7 +1096,12 @@ export function createDraftMcp(scope: AgentScope, backend = draftMcpBackend) {
         input.kind === "utility"
           ? {
               type: "utility.add",
-              utility: { id, template: input.template, position },
+              utility: {
+                id,
+                template: input.template,
+                position,
+                storeyId: input.storeyId,
+              },
             }
           : {
               type: "fixture.add",
@@ -978,6 +1109,7 @@ export function createDraftMcp(scope: AgentScope, backend = draftMcpBackend) {
                 id,
                 template: input.template,
                 position,
+                storeyId: input.storeyId,
                 widthMm:
                   input.widthMm ?? fixtureCatalog[input.template].widthMm,
                 depthMm:
@@ -990,6 +1122,7 @@ export function createDraftMcp(scope: AgentScope, backend = draftMcpBackend) {
       return {
         plan: commands(doc, [command]),
         cursor: position,
+        cursorStoreyId: input.storeyId,
         result: { fixtureId: id, template },
       };
     },
@@ -1010,6 +1143,7 @@ export function createDraftMcp(scope: AgentScope, backend = draftMcpBackend) {
           fixtures.map((fixture) => ({ type: "fixture.add", fixture })),
         ),
         cursor: fixtures[0].position,
+        cursorStoreyId: fixtures[0].storeyId,
         result: { roomId, fixtureIds: fixtures.map(({ id }) => id) },
       };
     },
@@ -1018,16 +1152,17 @@ export function createDraftMcp(scope: AgentScope, backend = draftMcpBackend) {
     "add_dimension_annotation",
     "Add a measured dimension line between two integer millimeter coordinates.",
     annotationInput.omit({ id: true }).extend(revision),
-    (doc, { start, end }) => {
+    (doc, { start, end, storeyId }) => {
       const annotationId = crypto.randomUUID();
       return {
         plan: commands(doc, [
           {
             type: "dimension.add",
-            annotation: { id: annotationId, start, end },
+            annotation: { id: annotationId, start, end, storeyId },
           },
         ]),
         cursor: end,
+        cursorStoreyId: storeyId,
         result: {
           annotationId,
           lengthMm: Math.hypot(end.x - start.x, end.y - start.y),
@@ -1038,11 +1173,17 @@ export function createDraftMcp(scope: AgentScope, backend = draftMcpBackend) {
   tool(
     "check_clearance_codes",
     "Check modeled ADA doorway and walkway widths, swing obstructions, and footprint collisions.",
-    z.strictObject({}),
+    z.strictObject({ storeyId: storeyIdInput }),
     true,
-    async () => {
+    async ({ storeyId }) => {
       const doc = await current();
-      return { planId, revision: doc.revision, ...checkClearances(doc.graph) };
+      return {
+        planId,
+        revision: doc.revision,
+        ...checkClearances(
+          storeyPlan(doc.graph, storeyById(doc.graph, storeyId).id),
+        ),
+      };
     },
   );
   tool(

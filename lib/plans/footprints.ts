@@ -68,3 +68,44 @@ export function boundsMeet(a: Bounds, b: Bounds, pad = 0) {
     b.bottom + pad >= a.top
   );
 }
+
+export function wallMaterialOffsets(wall: {
+  thicknessMm: number;
+  referenceLine?: "center" | "positive" | "negative";
+}) {
+  switch (wall.referenceLine) {
+    case "positive":
+      return { negative: wall.thicknessMm, positive: 0 };
+    case "negative":
+      return { negative: 0, positive: wall.thicknessMm };
+    default:
+      return { negative: wall.thicknessMm / 2, positive: wall.thicknessMm / 2 };
+  }
+}
+
+export function wallMaterialCenter<
+  T extends {
+    start: Point;
+    end: Point;
+    thicknessMm: number;
+    referenceLine?: "center" | "positive" | "negative";
+  },
+>(wall: T, segment: { start: Point; end: Point } = wall) {
+  if (!wall.referenceLine || wall.referenceLine === "center") return segment;
+  const direction = subtract(wall.end, wall.start);
+  const { positive, negative } = wallMaterialOffsets(wall);
+  const offset = (positive - negative) / (2 * length(direction));
+  const shift = (p: Point) => ({
+    x: p.x - offset * direction.y,
+    y: p.y + offset * direction.x,
+  });
+  return { start: shift(segment.start), end: shift(segment.end) };
+}
+
+export function wallMaterialFootprint(
+  wall: Parameters<typeof wallMaterialCenter>[0],
+  segment = wall as { start: Point; end: Point },
+) {
+  const { start, end } = wallMaterialCenter(wall, segment);
+  return wallFootprint(start, end, wall.thicknessMm);
+}

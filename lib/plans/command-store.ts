@@ -39,7 +39,12 @@ import {
 } from "./organization";
 import { initialGraph, loadDraftPlan } from "./plan-state";
 import { validateOpenings } from "./openings";
-import { solveWallTopology } from "./wall-topology";
+import {
+  groundStorey,
+  resolveWallTypes,
+  storeyRooms,
+  validateStoreys,
+} from "./storeys";
 
 enablePatches();
 
@@ -72,7 +77,10 @@ function sameParameters(a: Wall, b: Wall) {
     a.end.x === b.end.x &&
     a.end.y === b.end.y &&
     a.thicknessMm === b.thicknessMm &&
-    a.kind === b.kind
+    a.kind === b.kind &&
+    a.storeyId === b.storeyId &&
+    a.wallTypeId === b.wallTypeId &&
+    a.referenceLine === b.referenceLine
   );
 }
 
@@ -111,6 +119,39 @@ function applyEdit(
   actor: DraftActor,
 ) {
   switch (command.type) {
+    case "storey.write": {
+      const levels = (draft.storeys ??= [{ ...groundStorey }]);
+      const i = levels.findIndex((item) => item.id === command.storey.id);
+      if (i >= 0) levels[i] = command.storey;
+      else {
+        if (levels.length >= 32)
+          throw new Error("The plan has reached the storey limit.");
+        levels.push(command.storey);
+      }
+      levels.sort((a, b) => compareText(a.id, b.id));
+      return;
+    }
+    case "wall_type.write": {
+      const types = (draft.wallTypes ??= []);
+      const i = types.findIndex((item) => item.id === command.wallType.id);
+      if (i >= 0) types[i] = command.wallType;
+      else {
+        if (types.length >= 128)
+          throw new Error("The plan has reached the assembly limit.");
+        types.push(command.wallType);
+        types.sort((a, b) => compareText(a.id, b.id));
+      }
+      return;
+    }
+    case "wall.assembly": {
+      const wall = draft.walls.find((item) => item.id === command.id);
+      if (!wall) throw new Error("Wall not found.");
+      if (command.wallTypeId) wall.wallTypeId = command.wallTypeId;
+      else delete wall.wallTypeId;
+      wall.referenceLine = command.referenceLine;
+      wall.updatedBy = actor;
+      return;
+    }
     case "layer.write": {
       const layers = draft.drawingLayers ?? [];
       if (
@@ -398,7 +439,9 @@ export function createDraftPlanStore(input: unknown = initialGraph()) {
         } else if (wallsChanged) {
           validateConstraints(draft.walls, draft.constraints);
         }
+        resolveWallTypes(draft, actor);
         reconcileOrganization(plan, draft, actor);
+        validateStoreys(draft);
         if (
           wallsChanged ||
           hasOrganization(draft) ||
@@ -439,7 +482,7 @@ export function createDraftPlanStore(input: unknown = initialGraph()) {
             );
           }
         }
-        if (wallsChanged) draft.rooms = solveWallTopology(draft.walls).rooms;
+        if (wallsChanged) draft.rooms = storeyRooms(draft.walls);
       });
       if (!patches.length) return false;
       set({

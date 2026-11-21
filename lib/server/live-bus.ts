@@ -33,6 +33,7 @@ export function livePeer(actor: DraftActor, input: PresenceInput): LivePeer {
         : "ai-" + digest([actor.id, input.clientId]),
     kind: actor.kind,
     cursor: input.cursor,
+    ...(input.storeyId ? { storeyId: input.storeyId } : {}),
     expiresAt: Date.now() + peerLifetime,
   };
 }

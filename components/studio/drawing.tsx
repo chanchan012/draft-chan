@@ -8,7 +8,10 @@ import {
   utilityCatalog,
   type UtilityLayer,
 } from "@/lib/plans/catalog";
-import { wallFootprint } from "@/lib/plans/footprints";
+import {
+  wallMaterialFootprint,
+  wallMaterialCenter,
+} from "@/lib/plans/footprints";
 import type { ClearanceIssue } from "@/lib/plans/clearance";
 import { unitFactor } from "@/lib/plans/cad";
 import {
@@ -243,16 +246,19 @@ export function PlanDrawing({
               : "")
           }
         >
-          {mesh.runs.get(wall.id)!.map(({ start, end }, i) => (
-            <line
-              key={i}
-              x1={start.x}
-              y1={start.y}
-              x2={end.x}
-              y2={end.y}
-              strokeWidth={wall.thicknessMm}
-            />
-          ))}
+          {mesh.runs.get(wall.id)!.map((run, i) => {
+            const { start, end } = wallMaterialCenter(wall, run);
+            return (
+              <line
+                key={i}
+                x1={start.x}
+                y1={start.y}
+                x2={end.x}
+                y2={end.y}
+                strokeWidth={wall.thicknessMm}
+              />
+            );
+          })}
         </g>
       ))}
       {plan.fixtures.map((fixture) => (
@@ -277,6 +283,7 @@ export function PlanDrawing({
         const [start, end] = doorBounds(window).map((offset) =>
           pointAlong(wall, offset),
         );
+        const center = wallMaterialCenter(wall, { start, end });
         return (
           <path
             key={window.id}
@@ -290,11 +297,11 @@ export function PlanDrawing({
                 : "")
             }
             d={
-              ring(wallFootprint(start, end, wall.thicknessMm)) +
+              ring(wallMaterialFootprint(wall, { start, end })) +
               " M" +
-              pair(start) +
+              pair(center.start) +
               "L" +
-              pair(end)
+              pair(center.end)
             }
           />
         );

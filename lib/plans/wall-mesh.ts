@@ -1,8 +1,13 @@
-import { length, subtract, wallFootprint } from "./footprints";
+import {
+  length,
+  subtract,
+  wallMaterialFootprint,
+  wallMaterialOffsets,
+} from "./footprints";
 import { wallRuns } from "./openings";
 import { compareText, type Point, type Wall } from "./model";
 
-type WallEnd = { wall: Wall; direction: Point; angle: number };
+type WallEnd = { wall: Wall; direction: Point; angle: number; sign: number };
 const turn = Math.PI * 2;
 const cross = (a: Point, b: Point) => a.x * b.y - a.y * b.x;
 const add = (p: Point, v: Point, scale = 1): Point => ({
@@ -33,7 +38,10 @@ export function wallMesh(
         [start, 1],
         [end, -1],
       ] as const) {
-        const id = `${point.x},${point.y}`;
+        const id =
+          (wall.storeyId && wall.storeyId !== "ground"
+            ? wall.storeyId + ":"
+            : "") + `${point.x},${point.y}`;
         const vertex = vertices.get(id) ?? { point, arms: [] };
         const unit = {
           x: (direction.x * sign) / magnitude,
@@ -43,6 +51,7 @@ export function wallMesh(
           wall,
           direction: unit,
           angle: Math.atan2(unit.y, unit.x),
+          sign,
         });
         vertices.set(id, vertex);
       }
@@ -62,12 +71,26 @@ export function wallMesh(
       const b = arms[i];
       const a = arms[(i + 1) % arms.length];
       const gap = a.angle - b.angle + (i + 1 === arms.length ? turn : 0);
-      if (gap <= Math.PI + 1e-9 || gap >= turn - 1e-9) continue;
+      const directional =
+        (a.wall.referenceLine && a.wall.referenceLine !== "center") ||
+        (b.wall.referenceLine && b.wall.referenceLine !== "center");
+      if (
+        gap <= 1e-9 ||
+        Math.abs(gap - Math.PI) <= 1e-9 ||
+        gap >= turn - 1e-9 ||
+        (!directional && gap <= Math.PI)
+      )
+        continue;
 
       // The straight runs cover the inside of the corner. Bridge their outer
       // edges, beveling acute joins before a miter can form a long spike.
-      const ra = a.wall.thicknessMm / 2;
-      const rb = b.wall.thicknessMm / 2;
+      const ra = wallMaterialOffsets(a.wall)[
+        a.sign === 1 ? "negative" : "positive"
+      ];
+      const rb = wallMaterialOffsets(b.wall)[
+        b.sign === 1 ? "positive" : "negative"
+      ];
+      if (!ra && !rb) continue;
       const first = add(point, { x: a.direction.y, y: -a.direction.x }, ra);
       const last = add(point, { x: -b.direction.y, y: b.direction.x }, rb);
       const distance =
@@ -91,9 +114,7 @@ export function wallOutline(
   const { runs, joints } = wallMesh(walls, openings);
   return [
     ...walls.flatMap((wall) =>
-      runs
-        .get(wall.id)!
-        .map(({ start, end }) => wallFootprint(start, end, wall.thicknessMm)),
+      runs.get(wall.id)!.map((run) => wallMaterialFootprint(wall, run)),
     ),
     ...joints.map(({ footprint }) => footprint),
   ];

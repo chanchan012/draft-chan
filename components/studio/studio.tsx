@@ -10,6 +10,7 @@ import {
   FileDown,
   Layers3,
   Component,
+  Building2,
   Zap,
   ScanLine,
   Spline,
@@ -32,6 +33,13 @@ import { cadEditCommands } from "@/lib/plans/cad-edit";
 import { summarizeChanges } from "@/lib/plans/change-summary";
 import { ConstraintsPanel } from "./constraints-panel";
 import { BlocksPanel, NamedLayersPanel } from "./organization-panel";
+import { BuildingPanel } from "./building-panel";
+import {
+  groundStorey,
+  onStorey,
+  planStoreys,
+  storeyPlan,
+} from "@/lib/plans/storeys";
 import { visibleDrawing } from "@/lib/plans/organization";
 import { CadEditPanel } from "./cad-edit-panel";
 import { gridSteps, unitFactor } from "@/lib/plans/cad";
@@ -98,7 +106,22 @@ export function Studio({
   actor: DraftActor;
 }) {
   const [store] = useState(() => createDraftPlanStore(initial.graph));
-  const { plan, past, future, undo, redo, executeBatch } = useStore(store);
+  const {
+    plan: building,
+    past,
+    future,
+    undo,
+    redo,
+    executeBatch,
+  } = useStore(store);
+  const [activeStorey, setActiveStorey] = useState(groundStorey.id);
+  const level =
+    planStoreys(building).find((item) => item.id === activeStorey) ??
+    groundStorey;
+  const plan = useMemo(
+    () => storeyPlan(building, level.id),
+    [building, level.id],
+  );
   const {
     unit,
     setUnit,
@@ -118,13 +141,16 @@ export function Studio({
     block === "auth" || block === "deleted",
     observeRevision,
     halt,
+    level.id === groundStorey.id ? undefined : level.id,
   );
   const [gridIndex, setGridIndex] = useState(1);
   const [tool, setTool] = useState<Tool>("select");
   const [ortho, setOrtho] = useState(true);
   const [iso, setIso] = useState(false);
   const [rightPanel, setRightPanel] = useState<RightPanel | null>(null);
-  const [leftPanel, setLeftPanel] = useState<"layers" | "blocks" | null>(null);
+  const [leftPanel, setLeftPanel] = useState<
+    "layers" | "blocks" | "building" | null
+  >(null);
   const [zoomSlot, setZoomSlot] = useState<HTMLDivElement | null>(null);
   const [wall, setWall] = useState<WallSettings>({
     thicknessMm: 120,
@@ -176,6 +202,7 @@ export function Studio({
   const auditControl = useRef<HTMLButtonElement>(null);
   const inspectorControl = useRef<HTMLButtonElement>(null);
   const exportsControl = useRef<HTMLButtonElement>(null);
+  const buildingControl = useRef<HTMLButtonElement>(null);
   const blockControl = useRef<HTMLButtonElement>(null);
   const layerControl = useRef<HTMLButtonElement>(null);
 
@@ -223,7 +250,10 @@ export function Studio({
   const edit = useCallback(
     (commands: readonly PlanCommand[]) => {
       try {
-        const changed = executeBatch(commands, actor);
+        const changed = executeBatch(
+          commands.map((command) => onStorey(command, level.id)),
+          actor,
+        );
         setMessage("");
         return changed;
       } catch (error) {
@@ -235,7 +265,7 @@ export function Studio({
         return false;
       }
     },
-    [executeBatch, actor],
+    [executeBatch, actor, level.id],
   );
   function command(input: PlanCommand) {
     return edit([input]);
@@ -470,11 +500,30 @@ export function Studio({
           >
             <Component size={20} />
           </button>
+          <button
+            ref={buildingControl}
+            aria-controls="studio-layers"
+            aria-label="Building"
+            title="Building"
+            aria-expanded={leftPanel === "building"}
+            onClick={() => {
+              if (window.matchMedia(overlayPanels).matches) closeRightPanel();
+              setLeftPanel(leftPanel === "building" ? null : "building");
+            }}
+          >
+            <Building2 size={20} />
+          </button>
         </div>
         <StudioPanel
           side="left"
           id="studio-layers"
-          label={leftPanel === "blocks" ? "Blocks" : "Layers"}
+          label={
+            leftPanel === "building"
+              ? "Building"
+              : leftPanel === "blocks"
+                ? "Blocks"
+                : "Layers"
+          }
           open={Boolean(leftPanel)}
           onClose={() => {
             setLeftPanel(null);
@@ -484,12 +533,29 @@ export function Studio({
             ).current?.focus();
           }}
         >
-          {leftPanel === "blocks" ? (
+          {leftPanel === "building" ? (
+            <BuildingPanel
+              building={building}
+              storey={level}
+              wallIds={selection
+                .filter((item) => item.kind === "wall")
+                .map((item) => item.id)}
+              onStorey={(id) => {
+                setActiveStorey(id);
+                setSelection([]);
+                setFinding(undefined);
+              }}
+              onEdit={(inputs) => {
+                executeBatch(inputs, actor);
+                setMessage("");
+              }}
+            />
+          ) : leftPanel === "blocks" ? (
             <BlocksPanel
               plan={plan}
               selectedWall={activeWall?.id}
               onCommand={(input) => {
-                executeBatch([input], actor);
+                executeBatch([onStorey(input, level.id)], actor);
                 setMessage("");
               }}
             />
@@ -585,7 +651,9 @@ export function Studio({
           </div>
 
           <Surface
+            key={level.id}
             plan={plan}
+            wallHeightMm={level.wallHeightMm}
             tool={tool}
             iso={iso}
             ortho={ortho}
@@ -597,7 +665,9 @@ export function Studio({
             layers={layers}
             issue={issue}
             zoomSlot={zoomSlot}
-            peers={live.peers}
+            peers={live.peers.filter(
+              (peer) => (peer.storeyId ?? groundStorey.id) === level.id,
+            )}
             onPresence={live.moveCursor}
             onPlace={place}
             onSelect={choose}

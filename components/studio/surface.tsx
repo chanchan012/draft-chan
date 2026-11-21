@@ -76,6 +76,7 @@ type SurfaceProps = {
   grid: number;
   unit: DisplayUnit;
   thicknessMm: number;
+  wallHeightMm?: number;
   selection: readonly Selection[];
   multi: boolean;
   layers: Record<UtilityLayer, boolean>;
@@ -118,6 +119,7 @@ export function Surface({
   grid,
   unit,
   thicknessMm,
+  wallHeightMm,
   selection,
   multi,
   layers,
@@ -176,6 +178,7 @@ export function Surface({
       ),
       geometry.annotations,
       geometry.sketches,
+      wallHeightMm,
     );
   const center = { x: size.width / 2, y: size.height / 2 };
   const origin = {
@@ -759,7 +762,7 @@ export function Surface({
           transform={`translate(${origin.x} ${origin.y}) scale(${camera.scale})`}
         >
           {iso ? (
-            <IsometricDrawing plan={plan} />
+            <IsometricDrawing plan={plan} heightMm={wallHeightMm} />
           ) : (
             <PlanDrawing
               plan={rendered}
@@ -1082,6 +1085,7 @@ export function Surface({
                     ),
                     plan.annotations,
                     plan.sketches,
+                    wallHeightMm,
                   ),
                 )
               }

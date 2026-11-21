@@ -361,6 +361,7 @@ export function insertBlock(
           id,
           position: placement.position,
           rotation: placement.rotation,
+          storeyId: placement.storeyId,
           ...definition.parameters,
           ...placement.overrides,
         },

@@ -123,6 +123,8 @@ async function studio(
         annotations: input.annotations ?? current.graph.annotations,
         sketches: input.sketches ?? current.graph.sketches,
         constraints: input.constraints ?? current.graph.constraints,
+        storeys: input.storeys ?? current.graph.storeys,
+        wallTypes: input.wallTypes ?? current.graph.wallTypes,
         drawingLayers: input.drawingLayers ?? current.graph.drawingLayers,
         blocks: input.blocks ?? current.graph.blocks,
         blockInstances: input.blockInstances ?? current.graph.blockInstances,
@@ -778,6 +780,39 @@ test("updates a door block and saves its linked drawing layer", async ({
   await page.reload();
   await expect(page.locator("[data-door]")).toHaveCount(0);
   await viewportFits(page);
+});
+
+test("adds an upper storey and keeps its drawing separate", async ({
+  page,
+}) => {
+  const workspace = studioWorkspace();
+  workspace.document.graph = initialGraph({ width: 4000, depth: 3000 });
+  await studio(page, false, workspace);
+  await page.getByRole("button", { name: "Building", exact: true }).click();
+  const panel = page.getByRole("complementary", { name: "Building" });
+  await panel.getByRole("button", { name: "New storey" }).click();
+  await panel.getByLabel("Storey name").fill("Upper floor");
+  await panel.getByRole("button", { name: "Create storey" }).click();
+  await expect(panel.getByLabel("Active storey")).toContainText("Upper floor");
+  await expect(page.locator("[data-wall]")).toHaveCount(0);
+  await panel.getByRole("button", { name: "Close building" }).click();
+  await page.getByRole("button", { name: "Wall", exact: true }).click();
+  await point(page, 0.2, 0.48);
+  await point(page, 0.8, 0.48);
+  await expect(page.locator("[data-wall]")).toHaveCount(1);
+  await saveIfNeeded(page);
+  const level = workspace.document.graph.storeys?.find(
+    (item) => item.name === "Upper floor",
+  );
+  expect(level).toBeDefined();
+  expect(
+    workspace.document.graph.walls.filter(
+      (item) => item.storeyId === level?.id,
+    ),
+  ).toHaveLength(1);
+  await page.reload();
+  await expect(page.locator("[data-wall]")).toHaveCount(4);
+  await frame(page);
 });
 
 test("keeps unsaved drawing after a revision conflict", async ({ page }) => {

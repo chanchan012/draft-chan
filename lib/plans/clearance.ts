@@ -7,6 +7,7 @@ import {
   length,
   subtract,
   wallFootprint,
+  wallMaterialFootprint,
 } from "./footprints";
 import { doorSwing, wallRuns } from "./openings";
 import type { DraftPlanState, Point } from "./model";
@@ -195,7 +196,7 @@ export function checkClearances(plan: DraftPlanState): {
           "wall:" + wall.id + ":" + i,
           "wall:" + wall.id,
           "wall",
-          wallFootprint(start, end, wall.thicknessMm),
+          wallMaterialFootprint(wall, { start, end }),
         ),
       ),
     ),
