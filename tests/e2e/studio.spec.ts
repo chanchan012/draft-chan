@@ -114,6 +114,7 @@ async function studio(
       ...current,
       revision: input.revision + 1,
       unit: input.unit,
+      agentBatch: undefined,
       graph: {
         ...current.graph,
         walls: input.walls,
@@ -669,6 +670,37 @@ test("offsets a selected wall with its hosted door and undoes the edit together"
   await page.getByRole("button", { name: "Undo", exact: true }).click();
   await expect(wall.locator("line").first()).toHaveAttribute("y1", "0");
   await viewportFits(page);
+});
+
+test("undoes one adjacent agent transaction in a clean Studio", async ({
+  page,
+}) => {
+  const workspace = studioWorkspace();
+  workspace.document.graph = initialGraph({ width: 4200, depth: 3200 });
+  await studio(page, false, workspace);
+  const north = page.locator('[data-wall="starter-wall-1"] line');
+  const east = page.locator('[data-wall="starter-wall-2"] line');
+  await expect(north.first()).toHaveAttribute("y1", "0");
+  const edited = structuredClone(workspace.document.graph);
+  edited.walls[0].start.y = 100;
+  edited.walls[0].end.y = 100;
+  edited.walls[1].start.x = 4500;
+  edited.walls[1].end.x = 4500;
+  workspace.document = {
+    ...workspace.document,
+    graph: edited,
+    revision: 1,
+    agentBatch: { id: "test-batch", agentId: "test-agent" },
+  };
+  await expect(north.first()).toHaveAttribute("y1", "100", { timeout: 16000 });
+  await expect(east.first()).toHaveAttribute("x1", "4500");
+  await page.getByRole("button", { name: "Undo", exact: true }).click();
+  await expect(north.first()).toHaveAttribute("y1", "0");
+  await expect(east.first()).toHaveAttribute("x1", "4200");
+  await expect(
+    page.getByRole("button", { name: "Undo", exact: true }),
+  ).toBeDisabled();
+  await frame(page);
 });
 
 test("keeps unsaved drawing after a revision conflict", async ({ page }) => {

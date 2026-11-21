@@ -217,7 +217,17 @@ export function useStudioSync(
                     }),
                     actor,
                   );
-            store.getState().adoptRemote(document.graph, actor, draft);
+            const agentBatch = document.agentBatch;
+            const undoRemote: DraftActor | undefined =
+              agentBatch &&
+              document.revision === before.revision + 1 &&
+              localText === before.encoded &&
+              !draft
+                ? { kind: "ai", id: agentBatch.agentId }
+                : undefined;
+            store
+              .getState()
+              .adoptRemote(document.graph, actor, draft, undoRemote);
             setUnit(merged.unit);
           } catch {
             halt("conflict");

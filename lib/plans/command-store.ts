@@ -47,6 +47,7 @@ type DraftStore = {
     saved: DraftPlanState,
     actor: DraftActor,
     draft?: DraftPlanState,
+    undoRemote?: DraftActor,
   ): void;
   undo(): boolean;
   redo(): boolean;
@@ -282,15 +283,25 @@ export function createDraftPlanStore(input: unknown = initialGraph()) {
     execute(input, author) {
       return get().executeBatch([input], author);
     },
-    adoptRemote(saved, actor, draft) {
-      const [plan, patches, inverse] = produceWithPatches(
-        saved,
-        () => draft ?? saved,
-      );
-      // Rebased local geometry is one undo step on the new baseline.
-      const past = patches.length
-        ? [freeze({ actor, commands: [], patches, inverse }, true)]
-        : [];
+    adoptRemote(saved, actor, draft, undoRemote) {
+      const current = get();
+      const [plan, patches, inverse] = undoRemote
+        ? produceWithPatches(current.plan, () => saved)
+        : produceWithPatches(saved, () => draft ?? saved);
+      // Rebased local edits and an adjacent remote batch each use one history entry.
+      const entry = patches.length
+        ? freeze(
+            { actor: undoRemote ?? actor, commands: [], patches, inverse },
+            true,
+          )
+        : undefined;
+      const past = undoRemote
+        ? entry
+          ? [...current.past, entry]
+          : current.past
+        : entry
+          ? [entry]
+          : [];
       set({ plan: freeze(plan, true), past, future: [] });
     },
     executeBatch(inputs, author) {

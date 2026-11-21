@@ -31,6 +31,7 @@ export interface StudioDocument {
   revision: number;
   unit: DisplayUnit;
   graph: DraftPlanState;
+  agentBatch?: { id: string; agentId: string };
 }
 
 export const saveStudioSchema = z.strictObject({

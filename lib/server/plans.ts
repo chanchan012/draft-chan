@@ -1,6 +1,6 @@
 import { and, desc, eq, sql } from "drizzle-orm";
 import { openDatabase } from "../../db/client";
-import { floorplans } from "../../db/schema";
+import { floorplanEditBatches, floorplans } from "../../db/schema";
 import {
   areaM2,
   initialGraph,
@@ -55,12 +55,33 @@ export const plans = {
   },
   async getStudio(owner: string, id: string): Promise<StudioDocument | null> {
     const [row] = await openDatabase()
-      .select()
+      .select({
+        name: floorplans.name,
+        revision: floorplans.revision,
+        unit: floorplans.unit,
+        graph: floorplans.graph,
+        batchId: floorplanEditBatches.id,
+        agentId: floorplanEditBatches.agentId,
+      })
       .from(floorplans)
+      .leftJoin(
+        floorplanEditBatches,
+        and(
+          eq(floorplanEditBatches.floorplanId, floorplans.id),
+          eq(floorplanEditBatches.revision, floorplans.revision),
+        ),
+      )
       .where(owned(owner, id));
     if (!row) return null;
-    const { name, revision, unit } = row;
-    return { id, name, revision, unit, graph: loadDraftPlan(row.graph) };
+    const { name, revision, unit, agentId, batchId } = row;
+    return {
+      id,
+      name,
+      revision,
+      unit,
+      graph: loadDraftPlan(row.graph),
+      ...(batchId && agentId ? { agentBatch: { id: batchId, agentId } } : {}),
+    };
   },
   async saveStudio(
     owner: string,
