@@ -13,6 +13,7 @@ import { validateOpenings } from "./openings";
 import { polygonAreaMm2 } from "./polygon";
 import { validateDrawingReferences } from "./drawing-references";
 import { validateUnderlays } from "./underlays";
+import { validateCoordination } from "./coordination";
 import { validateDocuments } from "./drawing-documents";
 import { validateBuilding } from "./building";
 import { storeyRooms, validateStoreys } from "./storeys";
@@ -105,6 +106,7 @@ export function loadDraftPlan(input: unknown): DraftPlanState {
     state.buildingElements ?? [],
     state.buildingViews ?? [],
     state.documentItems ?? [],
+    state.coordination ?? [],
     state.underlays ?? [],
     state.drawingReferences ?? [],
     state.drawingLayers ?? [],
@@ -123,6 +125,7 @@ export function loadDraftPlan(input: unknown): DraftPlanState {
   validateStoreys(state);
   validateBuilding(state);
   validateDocuments(state);
+  validateCoordination(state);
   validateUnderlays(state);
   validateDrawingReferences(state);
   validateOrganization(state);

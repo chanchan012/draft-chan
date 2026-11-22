@@ -1,5 +1,6 @@
 import { test, expect, type Page } from "@playwright/test";
 import { PDFDocument, rgb } from "pdf-lib";
+import { coordinationFixture } from "../coordination-fixture";
 import { dxfFixture } from "../dxf-fixture";
 import { readFileSync } from "node:fs";
 import {
@@ -131,6 +132,7 @@ async function studio(
           input.buildingElements ?? current.graph.buildingElements,
         buildingViews: input.buildingViews ?? current.graph.buildingViews,
         documentItems: input.documentItems ?? current.graph.documentItems,
+        coordination: input.coordination ?? current.graph.coordination,
         underlays: input.underlays ?? current.graph.underlays,
         drawingReferences:
           input.drawingReferences ?? current.graph.drawingReferences,
@@ -1103,6 +1105,47 @@ test("refreshes a read-only drawing reference and opens saved CAD exports", asyn
   await panel.getByRole("button", { name: "Close interchange" }).click();
   await page.reload();
   await expect(drawing).toHaveAttribute("data-source-version", "2");
+  await frame(page);
+});
+
+test("highlights a slab clash and tracks its issue against the saved revision", async ({
+  page,
+}) => {
+  const workspace = studioWorkspace();
+  workspace.document.graph = coordinationFixture();
+  workspace.document.revision = 4;
+  await studio(page, false, workspace);
+  const rail = page.getByRole("button", { name: "Coordination", exact: true });
+  const panel = page.getByRole("complementary", { name: "Coordination" });
+  await rail.click();
+  await panel.getByRole("button", { name: "Clashes", exact: true }).click();
+  await expect(
+    panel.getByText("Plumbing riser intersects Upper slab"),
+  ).toBeVisible();
+  await panel.getByRole("button", { name: "Show clash" }).click();
+  await expect(
+    page.locator('[data-coordination-finding="service-slab"]'),
+  ).toHaveCount(1);
+  if (!(await panel.isVisible())) {
+    await rail.click();
+    await panel.getByRole("button", { name: "Clashes", exact: true }).click();
+  }
+  await panel
+    .getByRole("button", { name: "Create issue", exact: true })
+    .click();
+  await saveIfNeeded(page);
+  await panel.getByRole("button", { name: "Issues", exact: true }).click();
+  await expect(panel.getByText("Revision 4 · open")).toBeVisible();
+  await panel
+    .getByRole("button", { name: "Resolve issue", exact: true })
+    .click();
+  await saveIfNeeded(page);
+  await expect(panel.getByText("Revision 4 · resolved")).toBeVisible();
+  expect(
+    workspace.document.graph.coordination?.find(
+      (item) => item.kind === "issue",
+    ),
+  ).toMatchObject({ sourceRevision: 4, status: "resolved" });
   await frame(page);
 });
 

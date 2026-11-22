@@ -1633,3 +1633,11 @@
 .interchange-report summary { font-size: 12px; font-weight: 650; cursor: pointer; }
 .interchange-report ul { margin: 6px 0 0; padding-left: 13px; font-size: 11px; overflow-wrap: anywhere; }
 .interchange-calibration output { font-size: 12px; font-family: var(--font-mono), monospace; }
+
+.coordination-panel { border: 0; padding: 0; }
+.coordination-panel .coordination-error { color: #a12d20; }
+.coordination-card { border: 1px solid var(--studio-rule); border-radius: 7px; padding: 8px; display: grid; gap: 7px; min-width: 0; }
+.coordination-card strong { overflow-wrap: anywhere; font-size: 13px; }
+.cad-equipment-zone { fill: #ab683226; stroke: #955c34; stroke-width: 1.4; stroke-dasharray: 6 4; }
+.cad-coordination-finding { fill: #c6333026; stroke: #b12725; stroke-width: 2; }
+.cad-coordination-finding circle:last-child { fill: #b12725; }

@@ -3,6 +3,11 @@
 import { referencePoints } from "@/lib/plans/drawing-references";
 import { ReferenceDrawing, UnderlayDrawing } from "./source-drawing";
 import { underlayPoint } from "@/lib/plans/underlays";
+import {
+  CoordinationDrawing,
+  coordinationExtent,
+} from "./coordination-drawing";
+import type { CoordinationFinding } from "@/lib/plans/model";
 import { PlanMarks } from "./sheet-drawing";
 import { Crosshair, Focus, Minus, Plus } from "lucide-react";
 import {
@@ -82,6 +87,9 @@ export type Tool =
   | "pan";
 type SurfaceProps = {
   plan: DraftPlanState;
+  coordinationPlan?: DraftPlanState;
+  coordinationFinding?: CoordinationFinding;
+  equipmentZones?: boolean;
   tool: Tool;
   iso: boolean;
   ortho: boolean;
@@ -126,6 +134,9 @@ const humanColors = ["#2d655d", "#395888", "#86465f", "#68509b"];
 
 export function Surface({
   plan: authored,
+  coordinationPlan = authored,
+  coordinationFinding,
+  equipmentZones = false,
   tool,
   iso,
   ortho,
@@ -200,6 +211,7 @@ export function Surface({
     if (iso) return points;
     return [
       ...points,
+      ...coordinationExtent(coordinationPlan, storeyId),
       ...referencePoints(plan, storeyId),
       ...(plan.underlays ?? [])
         .filter((item) => item.visible && item.storeyId === storeyId)
@@ -212,7 +224,7 @@ export function Surface({
           ].map((point) => underlayPoint(item.calibration, point)),
         ),
     ];
-  }, [iso, plan, storeyId]);
+  }, [coordinationPlan, iso, plan, storeyId]);
   const camera =
     (iso ? isoCamera : planCamera) ??
     fitCamera(
@@ -829,6 +841,16 @@ export function Surface({
             />
           )}
           {!iso && <BuildingPlanDrawing plan={plan} storeyId={storeyId} />}
+          {!iso && (
+            <CoordinationDrawing
+              plan={coordinationPlan}
+              storeyId={storeyId}
+              scale={camera.scale}
+              layers={layers}
+              finding={coordinationFinding}
+              zones={equipmentZones}
+            />
+          )}
           {!iso && (
             <PlanMarks
               plan={plan}

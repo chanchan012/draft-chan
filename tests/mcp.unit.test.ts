@@ -375,6 +375,7 @@ it("lays out a two-bedroom plan using all MCP resources and tools over HTTP", as
       "check_clearance_codes",
       "create_elevation",
       "create_floor_opening",
+      "create_issue",
       "create_roof",
       "create_section",
       "create_sheet",
@@ -394,6 +395,7 @@ it("lays out a two-bedroom plan using all MCP resources and tools over HTTP", as
       "explain_constraints",
       "export_ifc",
       "export_typed_dxf",
+      "find_clashes",
       "furnish_room_preset",
       "generate_schedule",
       "get_job_status",
@@ -401,6 +403,7 @@ it("lays out a two-bedroom plan using all MCP resources and tools over HTTP", as
       "insert_block",
       "inspect_entity",
       "inspect_import",
+      "list_coordination",
       "list_references",
       "list_sheet_issues",
       "list_underlays",
@@ -421,9 +424,12 @@ it("lays out a two-bedroom plan using all MCP resources and tools over HTTP", as
       "refresh_reference",
       "remove_building_item",
       "remove_constraint",
+      "remove_coordination_item",
       "remove_document_items",
       "remove_underlay",
+      "resolve_issue",
       "resolve_snap",
+      "route_service",
       "save_named_view",
       "set_driving_dimension",
       "set_room_finish",
@@ -434,6 +440,7 @@ it("lays out a two-bedroom plan using all MCP resources and tools over HTTP", as
       "trigger_dxf_export",
       "trim_extend",
       "update_storey",
+      "write_equipment_zone",
     ]);
     expect(
       (await client.listResources()).resources.map(({ name }) => name).sort(),
@@ -1291,7 +1298,7 @@ it("bridges stdio to the authenticated HTTP tools without sharing the database c
         },
       }),
     );
-    expect((await client.listTools()).tools).toHaveLength(72);
+    expect((await client.listTools()).tools).toHaveLength(79);
     expect((await client.listResources()).resources).toHaveLength(3);
     expect(
       (await client.readResource({ uri: "draft://floorplan-graph" })).contents,
@@ -1603,6 +1610,73 @@ it("attaches, refreshes and exports read-only CAD references through MCP", async
         revision: 3,
         content: expect.stringContaining("$INSUNITS"),
       },
+    });
+  } finally {
+    await client.close();
+  }
+});
+
+it("detects and reviews a saved multi-storey service clash through MCP", async () => {
+  const { coordinationFixture } = await import("./coordination-fixture");
+  const session = await planWithToken();
+  const original = coordinationFixture();
+  const route = original.coordination!.find((item) => item.kind === "route")!;
+  original.coordination = [];
+  const saved = await session.api.request(
+    session.path + "/graph",
+    payload("PATCH", {
+      revision: 0,
+      ...studioSnapshot(original, "mm"),
+    }),
+  );
+  expect(await saved.json()).toEqual({ revision: 1 });
+  const client = await connect(createMcpHttp(localWindow(100)), session.token);
+  const call = (name: string, args: Record<string, unknown>) =>
+    client.callTool({ name, arguments: args });
+  try {
+    const { kind: _kind, ...input } = route;
+    expect(
+      await call("route_service", { expectedRevision: 1, route: input }),
+    ).toMatchObject({ isError: false, structuredContent: { revision: 2 } });
+    const result = await call("find_clashes", { storeyId: "upper" });
+    expect(result).toMatchObject({
+      isError: false,
+      structuredContent: {
+        revision: 2,
+        findings: [
+          {
+            rule: "service-slab",
+            subjects: [
+              { kind: "route", id: "riser" },
+              { kind: "slab", id: "upper-slab" },
+            ],
+          },
+        ],
+      },
+    });
+    if (!isCallToolResult(result)) throw new Error("Expected clash response");
+    const { findings } = result.structuredContent as {
+      findings: { key: string }[];
+    };
+    const created = await call("create_issue", {
+      expectedRevision: 2,
+      findingKey: findings[0].key,
+    });
+    expect(created).toMatchObject({
+      isError: false,
+      structuredContent: { revision: 3, issue: { sourceRevision: 2 } },
+    });
+    if (!isCallToolResult(created)) throw new Error("Expected issue response");
+    const { issue } = created.structuredContent as { issue: { id: string } };
+    expect(
+      await call("resolve_issue", { expectedRevision: 3, id: issue.id }),
+    ).toMatchObject({
+      isError: false,
+      structuredContent: { revision: 4, status: "resolved" },
+    });
+    expect(await call("find_clashes", { sourceRevision: 2 })).toMatchObject({
+      isError: false,
+      structuredContent: { revision: 2, findings: [{ key: findings[0].key }] },
     });
   } finally {
     await client.close();
