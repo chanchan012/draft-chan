@@ -68,7 +68,13 @@ TypeScript, the Next.js build, 88 Vitest tests and 130 Playwright checks passed.
 
 Application merge `084e5c556709591e41773a29f028a160b5368ed3`. Studio’s Sheets panel edits title block details, assigns room finishes and shows door, window and finish schedules. Inngest publishes a vector PDF set from the chosen saved revision. Owners can see previous issues, retry failed jobs and download the original PDF after further model edits. Draft exposes 59 MCP tools and three resources. Graph v1 adds `finish` records. Neon database draft has verified migration 0006 at journal timestamp 1795248628468 with SHA-256 054e52b2ea01a1ecd15ecda03a0964fbdd791d048ee00a61aeadb8700b304814.
 
-TypeScript, the Next.js production build, 92 Vitest tests and 135 Playwright cases passed. The broad browser run passed 130 cases, and all five PDF issue cases passed after correcting their test fixture to use the API's canonical graph ordering. The PDF checks measured a 5 m wall at 100 mm on A3 at 1:50, matched opening tags to schedule rows and compared the issued file after an edit. Poppler independently opened and rendered the four-page sample. Vercel declined the M9.2 production request with HTTP 402 (api-deployments-free-per-day, Retry-After 86400 seconds). No preview or production deployment was registered for M9.2. The live site still serves M8. Retry the preview for feat/m9-2-issued-sheet-sets and production from main after the Vercel quota resets.
+TypeScript, the Next.js production build, 92 Vitest tests and 135 Playwright cases passed. The broad browser run passed 130 cases, and all five PDF issue cases passed after correcting their test fixture to use the API's canonical graph ordering. The PDF checks measured a 5 m wall at 100 mm on A3 at 1:50, matched opening tags to schedule rows and compared the issued file after an edit. Poppler independently opened and rendered the four-page sample. The Vercel quota cleared. M9.2 preview `dpl_BYT7KgMT3rWQC3vgvLKRxxD2uTV7` and production `dpl_H1g3Fa3WiTnGK2eUiRJTDvhXUEnF` reached Ready. The public URL served the tested M9 commit and passed landing, signed-out Studio and MCP OAuth smoke checks.
+
+## M10.1 · Staged DXF and calibrated underlays
+
+Application merge `044b268caa129d334b84ba6ab948f6d9c11b2884`. Studio previews ASCII DXF geometry, source units, layer styles and unsupported entities. Confirmed imports create typed sketches and layer membership in one undo step. Two corresponding points align JPEG, PNG, WebP and individual PDF pages to a storey, with an optional third check point.
+
+TypeScript, Next.js build, 96 Vitest tests and 140 Playwright checks passed. MCP exposes 65 tools. Graph v1 adds optional `underlays`; existing Neon migrations through 0006 suffice. Vercel preview `dpl_JAGn8aFhmepsEd72TqehyMBzyFGJ` is Ready. Production `dpl_9AsXAjbRsVjGvMx6TN1FGaTqHSsn` was accepted and is building from the tested feature commit.
 
 ## M1.1 · Foundation and shell
 

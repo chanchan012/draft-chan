@@ -218,3 +218,9 @@ Door and window schedules reuse authored tags and dimensions from the graph. Unt
 One PDF job per floorplan and source revision uses the existing `floorplan_exports` table, Inngest worker, recovery schedule and owner-scoped download route. Migration 0006 adds the `pdf` enum value. The issue request captures an owned current or archived revision and queues it once. Successful render stores the binary PDF encoded as base64 in the existing artifact field. The immutable artifact is served as an attachment and remains available alongside new issues. The revision archive also retains the source graph. The Inngest step returns a completion flag and keeps the PDF in Neon.
 
 MCP adds `set_room_finish`, `generate_schedule`, `publish_sheet_set`, `get_job_status` and `list_sheet_issues`. Agent scopes restrict schedule and job reads to the connected floorplan. Downloads require the existing app sign-in.
+
+## M10.1 Staged DXF and calibrated underlays
+
+`lib/plans/dxf-import.ts` reads ASCII-style group records with model-space LINE, straight LWPOLYLINE, CIRCLE and ARC. Supported header units are mm, cm, m, inches and feet. The user can override source units. DXF Y is inverted and coordinates are rounded to 1 mm. The stage reports unsupported entities, paper space, unsupported bulges or widths, extrusion and defined model limits. Studio handles files up to 2 MB. Import applies typed sketches and layer membership atomically.
+
+Studio converts image files and selected PDF.js pages to bounded JPEG previews. Up to four underlays are stored in the existing graph. A two-point similarity transform determines the preview’s uniform scale, translation and rotation. Underlays appear behind 2D geometry on their storey. `inspect_import`, `import_dxf`, `attach_underlay`, `calibrate_underlay`, `list_underlays` and `remove_underlay` use the existing scoped MCP revision contract. Read responses omit raster bytes.

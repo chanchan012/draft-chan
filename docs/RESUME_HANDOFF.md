@@ -1,8 +1,14 @@
 # Resume handoff
 
+## M10.1 implementation checkpoint
+
+Feature `4961452fdd238d63985f6da07470ef478ec29ca2` and merge `044b268caa129d334b84ba6ab948f6d9c11b2884`. Vercel preview `dpl_JAGn8aFhmepsEd72TqehyMBzyFGJ` is Ready. Production `dpl_9AsXAjbRsVjGvMx6TN1FGaTqHSsn` is building. Run `npm test -- tests/interchange.unit.test.ts tests/mcp.unit.test.ts`, `npm run test:e2e -- --grep 'stages a DXF'` and `npm run build`. Graph v1 adds `underlays` without a schema migration.
+
+M10.2 adds read-only DXF snapshots, typed DXF per-storey export and IFC4 building export.
+
 ## M9.2 implementation checkpoint
 
-Feature `c818e606f4d2022a7bf316bc7b215f15c35100a2`. Application merge `084e5c556709591e41773a29f028a160b5368ed3`. Vercel declined the M9.2 production request with HTTP 402 (api-deployments-free-per-day, Retry-After 86400 seconds). No preview or production deployment was registered for M9.2. The live site still serves M8. Retry the preview for feat/m9-2-issued-sheet-sets and production from main after the Vercel quota resets. Neon database draft has verified migration 0006 at journal timestamp 1795248628468 with SHA-256 054e52b2ea01a1ecd15ecda03a0964fbdd791d048ee00a61aeadb8700b304814. No new environment variables. The MCP endpoint contains 59 tools and three resources at this commit.
+Feature `c818e606f4d2022a7bf316bc7b215f15c35100a2`. Application merge `084e5c556709591e41773a29f028a160b5368ed3`. The Vercel quota cleared. M9.2 preview `dpl_BYT7KgMT3rWQC3vgvLKRxxD2uTV7` and production `dpl_H1g3Fa3WiTnGK2eUiRJTDvhXUEnF` reached Ready. The public URL served the tested M9 commit and passed landing, signed-out Studio and MCP OAuth smoke checks. Neon database draft has verified migration 0006 at journal timestamp 1795248628468 with SHA-256 054e52b2ea01a1ecd15ecda03a0964fbdd791d048ee00a61aeadb8700b304814. No new environment variables. The MCP endpoint contains 59 tools and three resources at this commit.
 
 Verify the saved issue workflow using these commands from the repository root.
 

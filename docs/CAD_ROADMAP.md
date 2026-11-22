@@ -1,6 +1,6 @@
 # Architectural CAD and agent roadmap
 
-Draft supports floorplans, hosted openings, furnishing, an isometric cutaway, clearance screening, quantities, blueprint exports and the precision tools shipped in M5. Its authenticated MCP server exposes 59 tools and three resources on main. M10–M17 describe planned additions. The product focus is architectural drafting from measured survey through an issued drawing set.
+Draft supports floorplans, hosted openings, furnishing, an isometric cutaway, clearance screening, quantities, blueprint exports and the precision tools shipped in M5. Its authenticated MCP server exposes 65 tools and three resources at the M10.1 checkpoint. M10–M17 describe planned additions. The product focus is architectural drafting from measured survey through an issued drawing set.
 
 M5.1 and M5.2 shipped precision measurements, object snaps, exact entry and 2D sketch primitives. M6.1 and M6.2 shipped Studio editing commands and agent transactions. M7 is shipped with driving wall dimensions, layers and reusable blocks. M8 shipped multi-storey plans, wall assemblies, slabs, stairs, floor openings, roofs, sections and elevations. M9 implements drawing annotations, paper space, construction schedules and vector PDF issues. M10.1 is the next drafting subgoal. M13.1 is the next visual milestone. The sequence below identifies dependencies and suggested release order.
 
@@ -53,7 +53,7 @@ Implemented MCP tools include `tag_entities`, `dimension_chain`, `create_sheet`,
 
 ### M10 · CAD interchange and references
 
-- **10.1** Import a documented DXF subset into a staging view with unit, layer and unsupported-entity reports. Support calibrated PDF/image underlays.
+- **10.1 (implemented)** Import a documented DXF subset into a staging view with unit, layer and unsupported-entity reports. Support calibrated PDF/image underlays.
 - **10.2** Add read-only external drawing references, typed DXF round trips and IFC exchange for a declared set of architectural elements.
 
 Proposed MCP tools include `inspect_import`, `import_dxf`, `calibrate_underlay`, `attach_reference`, `refresh_reference`, `export_ifc`.
