@@ -2,7 +2,7 @@
 
 ## CAD roadmap
 
-The [architectural CAD roadmap](docs/CAD_ROADMAP.md) tracks the completed M5–M10 implementation and planned M11–M17, with candidate MCP tools and release checks. M11.1 is next in the drafting track. M13.1 is the next visual milestone. Later milestones cover move-in rehearsals, client briefs, renovation and owner handover. The release history below records shipped work.
+The [architectural CAD roadmap](docs/CAD_ROADMAP.md) tracks the completed M5–M11 implementation and planned M12–M17, with candidate MCP tools and release checks. M12.1 is next in the drafting track. M13.1 is the next visual milestone. Later milestones cover move-in rehearsals, client briefs, renovation and owner handover. The release history below records shipped work.
 
 ## M5.1 · Precision drafting
 
@@ -306,6 +306,16 @@ The user reported a successful MCP connection. Release verification used fixture
 
 [Dashboard](https://draft-chan.vercel.app/dashboard) · [Application merge](https://github.com/chanchan012/draft-chan/commit/e45eee8cebeffce978c81516df87f6a3ae22f9d8) · [Feature preview](https://draft-chan-kmmyrjui2-chanchans-projects-aada625f.vercel.app)
 
-## M11.1 coordination checkpoint
+## M11.1 · Service coordination
 
-Routes, equipment zones and revision-linked clash issues passed 105 Vitest and 150 Playwright checks. Local merge d6de598. GitHub and Vercel were pending after the push was interrupted. Graph v1 adds optional coordination records. Neon remains through 0006.
+Feature `364ebf845c2043ef59666f908782e9e639845041` merged as `d6de598cd5ea21957380de1c30fbc2e20b4696a4`. The Studio Coordination panel edits electrical and plumbing routes and equipment zones, highlights modeled clashes and tracks open or resolved issues against a saved revision.
+
+Type checking, 105 Vitest tests, 150 Playwright checks and the optimized Next build passed. Vercel Preview `dpl_ESuzgBDGF7RZZyKmi9km1gcnSHUu` and Production `dpl_H14kpBPEUT2SCoap7cWnKjmvxT6J` reached Ready. Production returned 200 for the landing page, 307 for signed-out Studio and 401 with the MCP OAuth challenge. Graph v1 adds optional `coordination`. Neon remains at migration 0006. MCP exposes 79 tools and three resources at this release.
+
+## M11.2 · Versioned code review
+
+Feature `36e6a7e35ad74cd3b6dea718498cf58507bfe3b6` merged as `1351c2fb66923c30288a1c1deff08e392dbdbab0`. Studio adds storey-level rule profiles, authored egress paths, door approach and turning-circle screens, and historical issue replay. Reports include the rule edition, inputs, affected objects and unresolved conditions. The checks cover selected 2021 IBC travel-distance and 2010 ADA accessibility provisions.
+
+The optimized Next build, 109 Vitest tests and 155 Playwright checks across five viewport sizes passed. Coverage includes the slab clash, blocked door approach, missing occupancy and historical issue replay through Studio, MCP and Hono. MCP exposes 85 tools and three resources. Graph v1 extends optional `coordination` without a database migration or new environment variables.
+
+Vercel Preview `dpl_2TNV8Jk52opb5JZofZaehMkpBP86` and Production `dpl_HKVdgDq5BRwxVWmcAk5eNGEgBEBU` reached Ready. Public production returned 200 for landing, 307 for signed-out Studio and 401 for both issue replay and MCP. The MCP response included the OAuth discovery challenge. Signed-in review and replay were verified with the browser and integration fixtures. [Production](https://draft-chan.vercel.app) · [Application merge](https://github.com/chanchan012/draft-chan/commit/1351c2fb66923c30288a1c1deff08e392dbdbab0)

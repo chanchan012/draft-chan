@@ -1,8 +1,8 @@
 # Architectural CAD and agent roadmap
 
-Draft supports floorplans, hosted openings, furnishing, an isometric cutaway, clearance screening, quantities, blueprint exports and the precision tools shipped in M5. Its authenticated MCP server exposes 72 tools and three resources. M11–M17 describe planned additions. The product focus is architectural drafting from measured survey through an issued drawing set.
+Draft supports floorplans, hosted openings, furnishing, an isometric cutaway, clearance screening, quantities, blueprint exports and the precision tools shipped in M5. Its authenticated MCP server exposes 85 tools and three resources. M12–M17 describe planned additions. The product focus is architectural drafting from measured survey through an issued drawing set.
 
-M5.1 and M5.2 shipped precision measurements, object snaps, exact entry and 2D sketch primitives. M6.1 and M6.2 shipped Studio editing commands and agent transactions. M7 is shipped with driving wall dimensions, layers and reusable blocks. M8 shipped multi-storey plans, wall assemblies, slabs, stairs, floor openings, roofs, sections and elevations. M9 implements drawing annotations, paper space, construction schedules and vector PDF issues. M10 shipped CAD interchange. M11.1 is the next drafting subgoal. M13.1 is the next visual milestone. The sequence below identifies dependencies and suggested release order.
+M5.1 and M5.2 shipped precision measurements, object snaps, exact entry and 2D sketch primitives. M6.1 and M6.2 shipped Studio editing commands and agent transactions. M7 shipped driving wall dimensions, layers and reusable blocks. M8 shipped multi-storey plans, wall assemblies, slabs, stairs, floor openings, roofs, sections and elevations. M9 implements drawing annotations, paper space, construction schedules and vector PDF issues. M10 shipped CAD interchange. M11 shipped service coordination and versioned code review. M12.1 is the next drafting subgoal. M13.1 is the next visual milestone.
 
 ## Milestones
 
@@ -60,12 +60,12 @@ Shipped MCP tools include `inspect_import`, `import_dxf`, `calibrate_underlay`, 
 
 **Acceptance.** Round-trip a known DXF through an independent reader and compare coordinates, units and layers within the stated tolerance. A two-point underlay calibration reproduces a third check dimension. An IFC viewer opens both storeys and reports the expected wall types.
 
-### M11 · Coordination and design review
+### M11 · Coordination and design review · Shipped
 
-- **11.1** Extend electrical/plumbing symbols into connected routes, add equipment zones and object-linked clash issues.
-- **11.2** Add versioned jurisdiction and occupancy profiles, egress paths and accessible turning/approach checks. Return inputs, rule references, affected IDs and unresolved conditions.
+- **11.1** Connect electrical and plumbing symbols through service routes, define equipment zones and track object-linked clash issues.
+- **11.2** Save versioned occupancy profiles and authored egress, front approach and turning-circle checks. Return inputs, rule references, affected IDs and unresolved conditions.
 
-Proposed MCP tools include `route_service`, `find_clashes`, `trace_egress`, `evaluate_rule_set`, `create_issue`, `resolve_issue`.
+MCP tools include `route_service`, `find_clashes`, `trace_egress`, `evaluate_rule_set`, `create_issue`, `resolve_issue` and `reproduce_issue`.
 
 **Acceptance.** Detect an obstructed door approach and a pipe crossing a slab. Highlight both in Studio. For a rule that needs an unspecified occupancy, return “needs input.” A reviewer can reproduce each finding against the saved revision and rule edition.
 

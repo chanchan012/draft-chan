@@ -1,5 +1,23 @@
 # Resume handoff
 
+## M11.2 release checkpoint
+
+Feature branch `feat/m11-2-code-review` at `36e6a7e35ad74cd3b6dea718498cf58507bfe3b6` merged as `1351c2fb66923c30288a1c1deff08e392dbdbab0`. The optimized Next build, 109 Vitest tests and 155 Playwright checks passed. MCP exposes 85 tools and three resources. Graph v1 adds profile, egress, approach and turning records to optional `coordination`. Neon stays at migration 0006 and the existing environment variables are sufficient.
+
+Vercel Preview `dpl_2TNV8Jk52opb5JZofZaehMkpBP86` and Production `dpl_HKVdgDq5BRwxVWmcAk5eNGEgBEBU` reached Ready. The production alias served the application merge. Public smoke checks passed for landing, the Studio sign-in redirect, the protected replay endpoint and the MCP OAuth challenge. [Production](https://draft-chan.vercel.app) · [Preview](https://draft-chan-79zk3pb10-chanchans-projects-aada625f.vercel.app)
+
+To reproduce in Studio, open Coordination → Rules, add an approach to a hosted door and place a fixture in the front clearance. Show the finding and save it as an issue. In Coordination → Issues, use Reproduce issue after moving the obstruction. The replay evaluates the issue’s original revision. Use the `tests/review-fixture.ts` plan to reproduce the same obstruction and egress path. From the repository root run:
+
+```sh
+git switch main
+git pull --ff-only
+npm ci
+npm run typecheck
+npm test -- tests/coordination.unit.test.ts tests/review-rules.unit.test.ts tests/mcp.unit.test.ts
+npm run test:e2e -- --grep 'highlights a slab clash|screens code inputs'
+npm run build
+```
+
 ## M10.2 release checkpoint
 
 Feature `7978a420d6e9171503a3659692e25cf285854b46`; application merge `44a4785cacce1ea96974f0ddcb33b91b119f0f6f`. Vercel preview `dpl_BvZs8xX1JWzFc3AmoRTTw3KycpM6` and production `dpl_GaScGc7jvCPc2D9PMLWxAG9LP26j` reached Ready. 101 Vitest tests, 145 Playwright checks and the Next.js build passed. The independent export checks used ezdxf and IfcOpenShell. MCP exposes 72 tools and three resources. Graph v1 adds `drawingReferences`; Neon remains at 0006 with no new environment variables.
@@ -55,7 +73,7 @@ The release passed all 85 Vitest tests and 125 Playwright checks. Playwright use
 
 ## Next proposed subgoal
 
-M11.1 adds connected electrical and plumbing routes, equipment zones, and object-linked clash issues. Start from the [CAD roadmap](CAD_ROADMAP.md) and existing utility and clearance models.
+M12.1 covers project membership, viewer/editor/reviewer roles, per-client grants, named alternatives, review comments and revision restore. Start from the [CAD roadmap](CAD_ROADMAP.md), the owner-scoped plan repository, the MCP grants and the revision store.
 
 The visual track starts at M13.1 in the [CAD roadmap](CAD_ROADMAP.md). Inspect the current renderer with `rg --files components/studio lib/plans | rg "isometric|wall-mesh"`. Use the MCP-furnished apartment in `tests/e2e/studio.spec.ts` as the first reference scene.
 
@@ -325,6 +343,16 @@ M6.2 application merge `1bcb64c0354c0a1e78041fec49bf55e08ff7c234` exposes 25 MCP
 
 The shared `draft` database has migration `0005_agent_transactions.sql` recorded at `1795225128431` with SHA-256 `0249738f5c5d0d2dbe536f2154d728ffa12ebf07e250d171224e0ab85fa0a18f`. For a fresh database, run `npm run db:migrate` as the owner. Migration 0005 grants the runtime role access when `draft_app` already exists. If the role is created later, grant SELECT on `public.floorplan_revisions` and SELECT and INSERT on `public.floorplan_edit_batches`. Graph version 1 and existing environment variables are sufficient.
 
-## M11.1 coordination checkpoint
+## M11.1 release checkpoint
 
-Routes, equipment zones and revision-linked clash issues passed 105 Vitest and 150 Playwright checks. Local merge d6de598. GitHub and Vercel were pending after the push was interrupted. Graph v1 adds optional coordination records. Neon remains through 0006.
+Feature branch `feat/m11-1-service-coordination` at `364ebf845c2043ef59666f908782e9e639845041` merged as `d6de598cd5ea21957380de1c30fbc2e20b4696a4`. Vercel Preview `dpl_ESuzgBDGF7RZZyKmi9km1gcnSHUu` and Production `dpl_H14kpBPEUT2SCoap7cWnKjmvxT6J` reached Ready. The production build used main commit `dc4c351d7a19a68153db5eb1f642b173de494d8c`. Type checking, 105 Vitest tests and 150 Playwright checks passed.
+
+Use Studio’s Coordination panel to add a plumbing riser across a modeled slab and show the slab clash before recording an issue. The fixture in `tests/coordination-fixture.ts` defines the riser, its upper storey and its slab. Verify from the repository root.
+
+```sh
+npm test -- tests/coordination.unit.test.ts tests/mcp.unit.test.ts
+npm run test:e2e -- --grep 'highlights a slab clash'
+npm run build
+```
+
+Graph v1 adds optional `coordination` records. No new database migration or environment variables are required.

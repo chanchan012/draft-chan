@@ -233,6 +233,20 @@ The owner-scoped Hono route `GET /api/floorplans/:id/interchange` reads a saved 
 
 MCP adds `attach_reference`, `refresh_reference`, `place_reference`, `detach_reference`, `list_references`, `export_typed_dxf` and `export_ifc`. Reference reads expose metadata. Export tools return authenticated download links and can return text for small files. Operations retain Clerk and the existing floorplan OAuth grant contract.
 
-## M11.1 coordination checkpoint
+## M11.1 Service coordination
 
-Routes, equipment zones and revision-linked clash issues passed 105 Vitest and 150 Playwright checks. Local merge d6de598. GitHub and Vercel were pending after the push was interrupted. Graph v1 adds optional coordination records. Neon remains through 0006.
+Graph v1 adds an optional `coordination` array. A service route stores its system, diameter, owner storey and 2–32 waypoints in millimeters. Waypoints can follow electrical or plumbing symbols. A linked waypoint resolves to the symbol’s current X/Y and storey elevation plus its own Z offset. Equipment zones store a plan polygon and lower and upper Z offsets.
+
+`lib/plans/coordination.ts` screens routed diameters against other services, walls, fixtures, equipment zones and slabs. The slab test accounts for modeled openings and uses conservative horizontal and vertical envelopes near corners. The Studio Coordination panel writes through the command store, so these records share revisioned persistence, actor attribution and undo with the plan. An issue stores stable geometry evidence, source edition and revision. Resolving it preserves that evidence.
+
+MCP adds `route_service`, `write_equipment_zone`, `remove_coordination_item`, `list_coordination`, `find_clashes`, `create_issue` and `resolve_issue`. Writes use the existing floorplan grant and expected revision. JSON persistence and the revision archive use the existing Neon schema through 0006.
+
+## M11.2 Versioned code review
+
+The same optional graph v1 `coordination` array now accepts `profile`, `egress`, `approach` and `turning` records. One profile per storey selects the `us-ibc2021-ada2010-v1` pack with a jurisdiction label and optional occupancy and sprinkler design. The jurisdiction label is recorded with the inputs. The pack applies the selected US model-code references.
+
+An egress path stores up to 64 authored plan waypoints. Its final point follows the designated same-storey door. The checker tests the path from an enclosed room against modeled wall and fixture geometry. The travel-distance screen supports selected Group B and R-2 configurations from 2021 IBC Table 1017.2. The accessibility screens use the 1525 mm circle from 2010 ADA §304.3.1 and front push or pull maneuvering rectangles from Table 404.2.4.1. The pack covers authored paths and modeled obstructions. Route discovery, building-wide egress and jurisdiction amendments remain outside its scope. [2021 IBC Table 1017.2](https://codes.iccsafe.org/s/IBC2021P1/chapter-10-means-of-egress/IBC2021P1-Ch10-Sec1017.2) · [2010 ADA Standards](https://www.ada.gov/law-and-regs/design-standards/2010-stds/)
+
+`lib/plans/review-rules.ts` produces pass, fail or needs-input results with rule edition, reference, inputs and affected IDs. Studio draws the authored path and overlays finding geometry. The server verifies that a new issue matches the current saved revision. The owner-scoped `GET /api/floorplans/:id/coordination-issues/:issueId` evaluates the archived graph and compares the reproduced evidence with the saved finding. Keep the version 1 evaluation available when later rule packs ship.
+
+MCP exposes `set_rule_profile`, `write_egress_path`, `write_access_check`, `trace_egress`, `evaluate_rule_set` and `reproduce_issue` through HTTP and stdio. Read tools can inspect a saved source revision. Issue replay uses the issue’s original revision. Graph v1 and the existing owner and floorplan scope, JSON revision archive and environment configuration carry the release.
