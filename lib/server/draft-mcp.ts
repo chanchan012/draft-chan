@@ -15,6 +15,12 @@ import {
   scheduleKinds,
   schedules,
 } from "../plans/construction-schedules";
+import { dxfImportCommands, dxfUnits, stageDxf } from "../plans/dxf-import";
+import {
+  underlayMetadata,
+  underlayPoint,
+  underlayTransform,
+} from "../plans/underlays";
 import { ConstraintConflict, constraintReport } from "../plans/constraints";
 import { summarizeChanges } from "../plans/change-summary";
 import { calculateBom } from "../plans/bom";
@@ -37,6 +43,8 @@ import {
 } from "../plans/agent-geometry";
 import {
   modelPointInput,
+  underlayCalibrationInput,
+  underlayInput,
   wallInput,
   doorInput,
   windowInput,
@@ -345,7 +353,16 @@ export function createDraftMcp(scope: AgentScope, backend = draftMcpBackend) {
   resource(
     "floorplan-graph",
     "Saved floorplan geometry and revision in model millimeters.",
-    current,
+    async () => {
+      const doc = await current();
+      return {
+        ...doc,
+        graph: {
+          ...doc.graph,
+          underlays: doc.graph.underlays?.map(underlayMetadata),
+        },
+      };
+    },
   );
   resource(
     "spatial-audit",
@@ -598,6 +615,131 @@ export function createDraftMcp(scope: AgentScope, backend = draftMcpBackend) {
         );
       return { planId, issues };
     },
+  );
+
+  const dxfSource = {
+    dxf: z.string().min(1).max(39_000),
+    units: z.enum(dxfUnits).optional(),
+  };
+  tool(
+    "inspect_import",
+    "Inspect ASCII DXF source units, layers, skipped entities and a sample of supported geometry. For larger files use the Studio Interchange panel.",
+    z.strictObject(dxfSource),
+    true,
+    async ({ dxf, units }) => {
+      await current();
+      try {
+        const { shapes, ...report } = stageDxf(dxf, units);
+        return {
+          ...report,
+          supportedGeometry: shapes.length,
+          sample: shapes.slice(0, 20),
+        };
+      } catch (error) {
+        throw new ToolFailure(
+          "invalid_dxf",
+          error instanceof Error ? error.message : "Invalid DXF.",
+        );
+      }
+    },
+  );
+  edit(
+    "import_dxf",
+    "Import supported DXF geometry as native 2D sketches on named layers in one saved revision. Inspect the source and resolve units first.",
+    z.strictObject({
+      ...revision,
+      ...dxfSource,
+      storeyId: storeyIdInput,
+      layers: z.array(z.string().max(80)).max(64).optional(),
+    }),
+    (doc, { dxf, units, storeyId, layers }) => {
+      const staged = stageDxf(dxf, units);
+      const { commands: edits, imported } = dxfImportCommands(
+        doc.graph,
+        staged,
+        storeyById(doc.graph, storeyId).id,
+        layers ??
+          staged.layers
+            .filter((item) => item.supported > 0)
+            .map(({ name }) => name),
+      );
+      return {
+        plan: commands(doc, edits),
+        result: { imported, skipped: staged.unsupported },
+      };
+    },
+  );
+  edit(
+    "attach_underlay",
+    "Attach a small JPEG preview with its source metadata, calibration and storey. Use Studio for PDF rasterization or assets that exceed the MCP request limit.",
+    z.strictObject({ ...revision, underlay: underlayInput }),
+    (doc, { underlay }) => {
+      if (doc.graph.underlays?.some((item) => item.id === underlay.id))
+        throw new Error("That underlay ID is already attached.");
+      return {
+        plan: commands(doc, [{ type: "underlay.write", item: underlay }]),
+        result: { underlay: underlayMetadata(underlay) },
+      };
+    },
+  );
+  edit(
+    "calibrate_underlay",
+    "Update the similarity transform using two image pixel and model millimeter pairs. Optionally return coordinates for a third check point.",
+    z.strictObject({
+      ...revision,
+      id: objectId,
+      calibration: underlayCalibrationInput,
+      checkPixel: z
+        .strictObject({
+          x: z.number().min(0).max(2048),
+          y: z.number().min(0).max(2048),
+        })
+        .optional(),
+    }),
+    (doc, { id, calibration, checkPixel }) => {
+      const item = doc.graph.underlays?.find((underlay) => underlay.id === id);
+      if (!item) throw new Error("The underlay is unavailable.");
+      if (
+        checkPixel &&
+        (checkPixel.x > item.width || checkPixel.y > item.height)
+      )
+        throw new Error("The check point must be in the source preview.");
+      return {
+        plan: commands(doc, [
+          { type: "underlay.write", item: { ...item, calibration } },
+        ]),
+        result: {
+          id,
+          transform: underlayTransform(calibration),
+          ...(checkPixel && {
+            checkModel: underlayPoint(calibration, checkPixel),
+          }),
+        },
+      };
+    },
+  );
+  tool(
+    "list_underlays",
+    "Read underlay source dimensions, placement, and calibration without their JPEG bytes.",
+    z.strictObject({}),
+    true,
+    async () => {
+      const doc = await current();
+      return {
+        planId,
+        revision: doc.revision,
+        underlays: (doc.graph.underlays ?? []).map(underlayMetadata),
+      };
+    },
+  );
+  edit(
+    "remove_underlay",
+    "Detach an underlay from the connected floorplan.",
+    z.strictObject({ ...revision, id: objectId }),
+    (doc, { id }) => ({
+      plan: commands(doc, [{ type: "underlay.remove", id }]),
+      result: { id },
+    }),
   );
 
   edit(

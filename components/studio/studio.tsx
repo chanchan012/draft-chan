@@ -9,6 +9,7 @@ import {
   Link2,
   FileDown,
   FileStack,
+  Files,
   Layers3,
   Component,
   Building2,
@@ -35,6 +36,7 @@ import { summarizeChanges } from "@/lib/plans/change-summary";
 import { ConstraintsPanel } from "./constraints-panel";
 import { BlocksPanel, NamedLayersPanel } from "./organization-panel";
 import { BuildingViewDrawing } from "./building-drawing";
+import { InterchangePanel } from "./interchange-panel";
 import { SheetsPanel } from "./sheets-panel";
 import { SheetDrawing } from "./sheet-drawing";
 import { BuildingPanel } from "./building-panel";
@@ -161,7 +163,7 @@ export function Studio({
   const [iso, setIso] = useState(false);
   const [rightPanel, setRightPanel] = useState<RightPanel | null>(null);
   const [leftPanel, setLeftPanel] = useState<
-    "layers" | "blocks" | "building" | "sheets" | null
+    "layers" | "blocks" | "building" | "sheets" | "interchange" | null
   >(null);
   const [zoomSlot, setZoomSlot] = useState<HTMLDivElement | null>(null);
   const [wall, setWall] = useState<WallSettings>({
@@ -216,6 +218,7 @@ export function Studio({
   const exportsControl = useRef<HTMLButtonElement>(null);
   const buildingControl = useRef<HTMLButtonElement>(null);
   const sheetsControl = useRef<HTMLButtonElement>(null);
+  const interchangeControl = useRef<HTMLButtonElement>(null);
   const blockControl = useRef<HTMLButtonElement>(null);
   const layerControl = useRef<HTMLButtonElement>(null);
 
@@ -541,18 +544,33 @@ export function Studio({
           >
             <FileStack size={20} />
           </button>
+          <button
+            ref={interchangeControl}
+            aria-controls="studio-layers"
+            aria-expanded={leftPanel === "interchange"}
+            aria-label="Interchange"
+            title="Interchange"
+            onClick={() => {
+              if (window.matchMedia(overlayPanels).matches) closeRightPanel();
+              setLeftPanel(leftPanel === "interchange" ? null : "interchange");
+            }}
+          >
+            <Files size={20} />
+          </button>
         </div>
         <StudioPanel
           side="left"
           id="studio-layers"
           label={
-            leftPanel === "sheets"
-              ? "Sheets"
-              : leftPanel === "building"
-                ? "Building"
-                : leftPanel === "blocks"
-                  ? "Blocks"
-                  : "Layers"
+            leftPanel === "interchange"
+              ? "Interchange"
+              : leftPanel === "sheets"
+                ? "Sheets"
+                : leftPanel === "building"
+                  ? "Building"
+                  : leftPanel === "blocks"
+                    ? "Blocks"
+                    : "Layers"
           }
           open={Boolean(leftPanel)}
           onClose={() => {
@@ -562,11 +580,23 @@ export function Studio({
               blocks: blockControl,
               building: buildingControl,
               sheets: sheetsControl,
+              interchange: interchangeControl,
             };
             if (leftPanel) controls[leftPanel].current?.focus();
           }}
         >
-          {leftPanel === "sheets" ? (
+          {leftPanel === "interchange" ? (
+            <InterchangePanel
+              plan={building}
+              storeyId={level.id}
+              onEdit={(commands) => {
+                executeBatch(commands, actor);
+                setIso(false);
+                setSheetId(undefined);
+                setBuildingViewId(undefined);
+              }}
+            />
+          ) : leftPanel === "sheets" ? (
             <SheetsPanel
               building={building}
               planId={initial.id}

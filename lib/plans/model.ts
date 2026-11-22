@@ -538,7 +538,44 @@ export type DrawingMark = Extract<
   { kind: "chain" | "leader" | "tag" | "hatch" }
 >;
 
+const pixelPointInput = z.strictObject({
+  x: z.number().min(0).max(2048),
+  y: z.number().min(0).max(2048),
+});
+export const underlayCalibrationInput = z.strictObject({
+  pixels: z.tuple([pixelPointInput, pixelPointInput]),
+  model: z.tuple([modelPointInput, modelPointInput]),
+});
+export const underlayInput = z.strictObject({
+  id: identifier,
+  storeyId: identifier,
+  name: z.string().trim().min(1).max(120),
+  source: z.discriminatedUnion("kind", [
+    z.strictObject({ kind: z.literal("image") }),
+    z.strictObject({
+      kind: z.literal("pdf"),
+      page: z.int().positive().max(1000),
+    }),
+  ]),
+  raster: z
+    .string()
+    .max(500000)
+    .regex(/^data:image\/jpeg;base64,\/9j\/[A-Za-z0-9+/]+={0,2}$/),
+  width: z.int().positive().max(2048),
+  height: z.int().positive().max(2048),
+  opacity: z.number().min(0.1).max(0.8),
+  visible: z.boolean(),
+  calibration: underlayCalibrationInput,
+});
+export const underlayLimit = 4;
+export type Underlay = z.infer<typeof underlayInput>;
+export type UnderlayCalibration = z.infer<typeof underlayCalibrationInput>;
+
 export const planCommandSchema = z.union([
+  z.discriminatedUnion("type", [
+    z.strictObject({ type: z.literal("underlay.write"), item: underlayInput }),
+    z.strictObject({ type: z.literal("underlay.remove"), id: identifier }),
+  ]),
   z.discriminatedUnion("type", [
     z.strictObject({
       type: z.literal("document.write"),
@@ -667,6 +704,7 @@ export const draftPlanSchema = z.looseObject({
   utilities: z.array(utilitySchema).default([]),
   dimensions: z.array(z.unknown()),
   documentItems: z.array(documentItemInput).max(documentItemLimit).optional(),
+  underlays: z.array(underlayInput).max(underlayLimit).optional(),
   buildingElements: z.array(buildingElementInput).max(256).optional(),
   buildingViews: z.array(buildingViewInput).max(80).optional(),
   storeys: z.array(storeyInput).max(32).optional(),

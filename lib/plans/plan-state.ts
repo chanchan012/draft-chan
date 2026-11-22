@@ -11,6 +11,7 @@ import { entityKey, validateOrganization } from "./organization";
 import { validateConstraints } from "./constraints";
 import { validateOpenings } from "./openings";
 import { polygonAreaMm2 } from "./polygon";
+import { validateUnderlays } from "./underlays";
 import { validateDocuments } from "./drawing-documents";
 import { validateBuilding } from "./building";
 import { storeyRooms, validateStoreys } from "./storeys";
@@ -103,6 +104,7 @@ export function loadDraftPlan(input: unknown): DraftPlanState {
     state.buildingElements ?? [],
     state.buildingViews ?? [],
     state.documentItems ?? [],
+    state.underlays ?? [],
     state.drawingLayers ?? [],
     state.blocks ?? [],
     state.blockInstances ?? [],
@@ -119,6 +121,7 @@ export function loadDraftPlan(input: unknown): DraftPlanState {
   validateStoreys(state);
   validateBuilding(state);
   validateDocuments(state);
+  validateUnderlays(state);
   validateOrganization(state);
   validateConstraints(state.walls, state.constraints);
   state.rooms = storeyRooms(state.walls);

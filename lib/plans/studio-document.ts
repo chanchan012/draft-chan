@@ -3,6 +3,8 @@ import {
   displayUnits,
   documentItemInput,
   documentItemLimit,
+  underlayInput,
+  underlayLimit,
   constraintInput,
   buildingElementInput,
   buildingViewInput,
@@ -61,6 +63,7 @@ export const saveStudioSchema = z.strictObject({
   buildingElements: z.array(buildingElementInput).max(256).optional(),
   buildingViews: z.array(buildingViewInput).max(80).optional(),
   documentItems: z.array(documentItemInput).max(documentItemLimit).optional(),
+  underlays: z.array(underlayInput).max(underlayLimit).optional(),
   storeys: z.array(storeyInput).max(32).optional(),
   wallTypes: z.array(wallTypeInput).max(128).optional(),
   drawingLayers: z.array(drawingLayerInput).max(64).optional(),
@@ -96,6 +99,7 @@ export function studioSnapshot(plan: DraftPlanState, unit: DisplayUnit) {
     documentItems: (plan.documentItems ?? []).map((item) =>
       documentItemInput.parse(item),
     ),
+    underlays: (plan.underlays ?? []).map((item) => underlayInput.parse(item)),
     wallTypes: (plan.wallTypes ?? []).map((item) => wallTypeInput.parse(item)),
     drawingLayers: (plan.drawingLayers ?? []).map((item) =>
       drawingLayerInput.parse(item),
@@ -226,6 +230,7 @@ export function applyStudioSnapshot(
     buildingElements: input.buildingElements ?? previous.buildingElements,
     buildingViews: input.buildingViews ?? previous.buildingViews,
     documentItems: input.documentItems ?? previous.documentItems,
+    underlays: input.underlays ?? previous.underlays,
     wallTypes: input.wallTypes ?? previous.wallTypes,
     drawingLayers: input.drawingLayers ?? previous.drawingLayers,
     blocks: input.blocks ?? previous.blocks,

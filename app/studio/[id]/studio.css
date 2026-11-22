@@ -1584,3 +1584,52 @@
 
 .sheet-issue { display: grid; gap: 4px; }
 .sheet-issue a { text-decoration: underline; }
+
+.interchange-panel { padding: 0; border: 0; }
+.interchange-panel :is(fieldset, details) {
+  min-width: 0;
+  padding: 7px;
+  border: 1px solid var(--studio-rule);
+  border-radius: 6px;
+}
+.interchange-panel legend { font-size: 12px; font-weight: 650; }
+.interchange-panel .interchange-toggle {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  margin-block: 6px;
+}
+.interchange-panel .interchange-toggle input {
+  width: auto;
+  min-height: 0;
+}
+.interchange-panel .interchange-toggle span { overflow-wrap: anywhere; }
+.interchange-panel .interchange-toggle small { display: block; color: var(--muted); }
+.interchange-panel .interchange-error { color: #a12d20; }
+.interchange-panel .interchange-file { overflow-wrap: anywhere; font-weight: 650; }
+.interchange-preview {
+  display: block;
+  width: 100%;
+  height: auto;
+  border: 1px solid var(--studio-rule);
+  border-radius: 6px;
+  background: #fbfbf4;
+  cursor: crosshair;
+}
+.interchange-dxf-preview { height: 140px; cursor: default; }
+.interchange-choices {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+.interchange-choices button, .interchange-action {
+  padding: 5px 7px;
+  border: 1px solid var(--studio-rule);
+  border-radius: 5px;
+  font-size: 12px;
+  justify-self: start;
+}
+.interchange-choices [aria-pressed="true"] { background: var(--studio-dark); color: white; }
+.interchange-report summary { font-size: 12px; font-weight: 650; cursor: pointer; }
+.interchange-report ul { margin: 6px 0 0; padding-left: 13px; font-size: 11px; overflow-wrap: anywhere; }
+.interchange-calibration output { font-size: 12px; font-family: var(--font-mono), monospace; }

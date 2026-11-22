@@ -13,6 +13,7 @@ import {
   compareText,
   constraintLimit,
   documentItemLimit,
+  underlayLimit,
   doorSchema,
   fixtureSchema,
   placementLimit,
@@ -38,6 +39,7 @@ import {
   reconcileOrganization,
   upsertLayer,
 } from "./organization";
+import { validateUnderlays } from "./underlays";
 import { validateDocuments } from "./drawing-documents";
 import { validateBuilding } from "./building";
 import { initialGraph, loadDraftPlan } from "./plan-state";
@@ -122,6 +124,22 @@ function applyEdit(
   actor: DraftActor,
 ) {
   switch (command.type) {
+    case "underlay.write": {
+      const items = (draft.underlays ??= []);
+      const index = items.findIndex(({ id }) => id === command.item.id);
+      if (index >= 0) {
+        if (JSON.stringify(items[index]) !== JSON.stringify(command.item))
+          items[index] = command.item;
+      } else {
+        if (items.length >= underlayLimit)
+          throw new Error("The plan has reached the underlay limit.");
+        items.push(command.item);
+        items.sort((a, b) => compareText(a.id, b.id));
+      }
+      return;
+    }
+    case "underlay.remove":
+      return editPlacement(draft.underlays ?? [], command.id, actor);
     case "document.write": {
       const items = (draft.documentItems ??= []);
       const index = items.findIndex(({ id }) => id === command.item.id);
@@ -499,6 +517,7 @@ export function createDraftPlanStore(input: unknown = initialGraph()) {
         validateStoreys(draft);
         validateBuilding(draft);
         validateDocuments(draft, plan);
+        validateUnderlays(draft);
         if (
           wallsChanged ||
           hasOrganization(draft) ||
