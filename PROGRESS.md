@@ -305,3 +305,7 @@ Released 2026-11-21. Feature commit `d12d05624cefd381288a1fe4a451d991ed01f225` o
 The user reported a successful MCP connection. Release verification used fixture plans for browser checks and public endpoints for production smoke checks.
 
 [Dashboard](https://draft-chan.vercel.app/dashboard) · [Application merge](https://github.com/chanchan012/draft-chan/commit/e45eee8cebeffce978c81516df87f6a3ae22f9d8) · [Feature preview](https://draft-chan-kmmyrjui2-chanchans-projects-aada625f.vercel.app)
+
+## M11.1 coordination checkpoint
+
+Routes, equipment zones and revision-linked clash issues passed 105 Vitest and 150 Playwright checks. Local merge d6de598. GitHub and Vercel were pending after the push was interrupted. Graph v1 adds optional coordination records. Neon remains through 0006.

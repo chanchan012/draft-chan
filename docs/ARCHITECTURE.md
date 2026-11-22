@@ -232,3 +232,7 @@ Read-only drawing references store a versioned snapshot of supported DXF shapes 
 The owner-scoped Hono route `GET /api/floorplans/:id/interchange` reads a saved current or archived revision. `format=typed-dxf` exports the selected storey’s native sketches in millimeters, maintaining line, polyline, circle and arc records and layer names. Illegal DXF layer-name characters are normalized. The existing blueprint DXF remains the architectural outline export. `format=ifc` exports the building in IFC4 STEP format with placements by storey, extruded walls and slabs, IFC wall types and materials, hosted door and window openings, and slab profile holes. The IFC exchange scope is export for those entities. Both exports use attached files with private cache controls.
 
 MCP adds `attach_reference`, `refresh_reference`, `place_reference`, `detach_reference`, `list_references`, `export_typed_dxf` and `export_ifc`. Reference reads expose metadata. Export tools return authenticated download links and can return text for small files. Operations retain Clerk and the existing floorplan OAuth grant contract.
+
+## M11.1 coordination checkpoint
+
+Routes, equipment zones and revision-linked clash issues passed 105 Vitest and 150 Playwright checks. Local merge d6de598. GitHub and Vercel were pending after the push was interrupted. Graph v1 adds optional coordination records. Neon remains through 0006.

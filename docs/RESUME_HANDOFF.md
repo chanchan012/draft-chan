@@ -324,3 +324,7 @@ With the optimized server running, run `PLAYWRIGHT_BASE_URL=http://127.0.0.1:300
 M6.2 application merge `1bcb64c0354c0a1e78041fec49bf55e08ff7c234` exposes 25 MCP tools and the three existing resources. To reproduce the agent workflow, use `preview_changes` with the latest saved revision and ordered operations, then `apply_changes` with the returned token and those same operations. Use `diff_revisions` with the base and saved revisions to inspect the result. Run `npm test -- tests/cad-edit.unit.test.ts tests/mcp.unit.test.ts` and `npm run test:e2e -- --grep "offsets a selected|one adjacent agent transaction"` with a Studio test server.
 
 The shared `draft` database has migration `0005_agent_transactions.sql` recorded at `1795225128431` with SHA-256 `0249738f5c5d0d2dbe536f2154d728ffa12ebf07e250d171224e0ab85fa0a18f`. For a fresh database, run `npm run db:migrate` as the owner. Migration 0005 grants the runtime role access when `draft_app` already exists. If the role is created later, grant SELECT on `public.floorplan_revisions` and SELECT and INSERT on `public.floorplan_edit_batches`. Graph version 1 and existing environment variables are sufficient.
+
+## M11.1 coordination checkpoint
+
+Routes, equipment zones and revision-linked clash issues passed 105 Vitest and 150 Playwright checks. Local merge d6de598. GitHub and Vercel were pending after the push was interrupted. Graph v1 adds optional coordination records. Neon remains through 0006.
