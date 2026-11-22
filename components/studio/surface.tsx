@@ -1,5 +1,7 @@
 "use client";
 
+import { UnderlayDrawing } from "./source-drawing";
+import { underlayPoint } from "@/lib/plans/underlays";
 import { PlanMarks } from "./sheet-drawing";
 import { Crosshair, Focus, Minus, Plus } from "lucide-react";
 import {
@@ -179,7 +181,7 @@ export function Surface({
   const geometry = iso ? plan : initial.current;
   const structurePoints = useMemo(() => {
     const base = storeyById(plan, storeyId).elevationMm;
-    return elementsOnStorey(plan, storeyId).flatMap((item) => {
+    const points = elementsOnStorey(plan, storeyId).flatMap((item) => {
       const footprint = buildingElementFootprint(item);
       if (!iso) return footprint;
       const roof = item.kind === "roof" ? roofProfile(plan, item) : undefined;
@@ -194,6 +196,20 @@ export function Surface({
         projectIso(point, roof ? roof.height(point) - base : z),
       ]);
     });
+    if (iso) return points;
+    return [
+      ...points,
+      ...(plan.underlays ?? [])
+        .filter((item) => item.visible && item.storeyId === storeyId)
+        .flatMap((item) =>
+          [
+            { x: 0, y: 0 },
+            { x: item.width, y: 0 },
+            { x: 0, y: item.height },
+            { x: item.width, y: item.height },
+          ].map((point) => underlayPoint(item.calibration, point)),
+        ),
+    ];
   }, [iso, plan, storeyId]);
   const camera =
     (iso ? isoCamera : planCamera) ??
@@ -791,6 +807,7 @@ export function Surface({
         <g
           transform={`translate(${origin.x} ${origin.y}) scale(${camera.scale})`}
         >
+          {!iso && <UnderlayDrawing plan={plan} storeyId={storeyId} />}
           {iso ? (
             <IsometricDrawing
               plan={plan}

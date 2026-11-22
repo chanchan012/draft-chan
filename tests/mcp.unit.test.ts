@@ -368,7 +368,9 @@ it("lays out a two-bedroom plan using all MCP resources and tools over HTTP", as
       "add_leader",
       "apply_changes",
       "array_entities",
+      "attach_underlay",
       "calculate_bom",
+      "calibrate_underlay",
       "check_clearance_codes",
       "create_elevation",
       "create_floor_opening",
@@ -391,9 +393,12 @@ it("lays out a two-bedroom plan using all MCP resources and tools over HTTP", as
       "furnish_room_preset",
       "generate_schedule",
       "get_job_status",
+      "import_dxf",
       "insert_block",
       "inspect_entity",
+      "inspect_import",
       "list_sheet_issues",
+      "list_underlays",
       "manage_layer",
       "measure_geometry",
       "offset_geometry",
@@ -410,6 +415,7 @@ it("lays out a two-bedroom plan using all MCP resources and tools over HTTP", as
       "remove_building_item",
       "remove_constraint",
       "remove_document_items",
+      "remove_underlay",
       "resolve_snap",
       "save_named_view",
       "set_driving_dimension",
@@ -1278,7 +1284,7 @@ it("bridges stdio to the authenticated HTTP tools without sharing the database c
         },
       }),
     );
-    expect((await client.listTools()).tools).toHaveLength(59);
+    expect((await client.listTools()).tools).toHaveLength(65);
     expect((await client.listResources()).resources).toHaveLength(3);
     expect(
       (await client.readResource({ uri: "draft://floorplan-graph" })).contents,
@@ -1448,6 +1454,74 @@ it("schedules openings and publishes a pinned PDF issue over MCP", async () => {
       isError: false,
       structuredContent: { issues: [{ id: issue.id }] },
     });
+  } finally {
+    await client.close();
+  }
+});
+
+it("stages and commits a DXF and calibrates a saved underlay through MCP", async () => {
+  const { dxfFixture } = await import("./dxf-fixture");
+  const session = await planWithToken();
+  const client = await connect(createMcpHttp(localWindow(100)), session.token);
+  const call = (name: string, args: Record<string, unknown>) =>
+    client.callTool({ name, arguments: args });
+  const calibration = {
+    pixels: [
+      { x: 10, y: 20 },
+      { x: 110, y: 20 },
+    ],
+    model: [
+      { x: 100, y: 200 },
+      { x: 100, y: 1200 },
+    ],
+  };
+  try {
+    expect(await call("inspect_import", { dxf: dxfFixture })).toMatchObject({
+      isError: false,
+      structuredContent: { unit: "in", supportedGeometry: 4 },
+    });
+    expect(
+      await call("import_dxf", {
+        dxf: dxfFixture,
+        expectedRevision: 0,
+        layers: ["Survey"],
+      }),
+    ).toMatchObject({
+      isError: false,
+      structuredContent: { revision: 1, imported: 3 },
+    });
+    expect(
+      await call("attach_underlay", {
+        expectedRevision: 1,
+        underlay: {
+          id: "survey",
+          storeyId: "ground",
+          name: "Survey image",
+          source: { kind: "image" },
+          calibration,
+          raster: "data:image/jpeg;base64,/9j/QQ==",
+          width: 140,
+          height: 100,
+          opacity: 0.4,
+          visible: true,
+        },
+      }),
+    ).toMatchObject({ isError: false, structuredContent: { revision: 2 } });
+    expect(
+      await call("calibrate_underlay", {
+        expectedRevision: 2,
+        id: "survey",
+        calibration,
+        checkPixel: { x: 60, y: 60 },
+      }),
+    ).toMatchObject({
+      isError: false,
+      structuredContent: { revision: 3, checkModel: { x: -300, y: 700 } },
+    });
+    const result = await client.readResource({
+      uri: "draft://floorplan-graph",
+    });
+    expect(JSON.stringify(result)).not.toContain("data:image/jpeg");
   } finally {
     await client.close();
   }

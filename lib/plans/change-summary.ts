@@ -8,6 +8,7 @@ const collections = [
   ["building_element", "buildingElements"],
   ["building_view", "buildingViews"],
   ["document_item", "documentItems"],
+  ["underlay", "underlays"],
   ["door", "openings"],
   ["window", "windows"],
   ["fixture", "fixtures"],

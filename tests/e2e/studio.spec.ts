@@ -1,4 +1,6 @@
 import { test, expect, type Page } from "@playwright/test";
+import { PDFDocument, rgb } from "pdf-lib";
+import { dxfFixture } from "../dxf-fixture";
 import { readFileSync } from "node:fs";
 import {
   Client,
@@ -129,6 +131,7 @@ async function studio(
           input.buildingElements ?? current.graph.buildingElements,
         buildingViews: input.buildingViews ?? current.graph.buildingViews,
         documentItems: input.documentItems ?? current.graph.documentItems,
+        underlays: input.underlays ?? current.graph.underlays,
         wallTypes: input.wallTypes ?? current.graph.wallTypes,
         drawingLayers: input.drawingLayers ?? current.graph.drawingLayers,
         blocks: input.blocks ?? current.graph.blocks,
@@ -998,6 +1001,67 @@ test("publishes and downloads the saved PDF issue from Sheets", async ({
   ]);
   expect(download.suggestedFilename()).toBe("oak-house-r4-issued.pdf");
   await viewportFits(page);
+});
+
+test("stages a DXF and restores a calibrated PDF underlay", async ({
+  page,
+}) => {
+  const workspace = studioWorkspace();
+  await studio(page, false, workspace);
+  await page.getByRole("button", { name: "Interchange", exact: true }).click();
+  const panel = page.getByRole("complementary", { name: "Interchange" });
+  await panel.getByLabel("DXF file").setInputFiles({
+    name: "Survey.dxf",
+    mimeType: "application/dxf",
+    buffer: Buffer.from(dxfFixture),
+  });
+  await expect(
+    panel
+      .getByRole("img", { name: "DXF staging preview" })
+      .locator("[data-staged-dxf]"),
+  ).toHaveCount(4);
+  await expect(panel.getByText(/SPLINE · Unsupported entity/)).toBeVisible();
+  await expect(page.locator("[data-sketch]")).toHaveCount(0);
+  await panel.getByRole("button", { name: "Import 4 entities" }).click();
+  await expect(page.locator("[data-sketch]")).toHaveCount(4);
+  await saveIfNeeded(page);
+  expect(
+    workspace.document.graph.drawingLayers?.map(({ name }) => name).sort(),
+  ).toEqual(["Reference", "Survey"]);
+
+  const pdf = await PDFDocument.create();
+  pdf
+    .addPage([120, 80])
+    .drawLine({
+      start: { x: 10, y: 10 },
+      end: { x: 110, y: 30 },
+      color: rgb(0, 0, 0),
+    });
+  await panel.getByRole("button", { name: "Underlays" }).click();
+  await panel.getByLabel("Underlay file").setInputFiles({
+    name: "Survey.pdf",
+    mimeType: "application/pdf",
+    buffer: Buffer.from(await pdf.save()),
+  });
+  await expect(
+    panel.getByRole("img", { name: "Underlay calibration image" }),
+  ).toBeVisible({ timeout: 10_000 });
+  const pointB = panel.getByRole("group", { name: "Point B", exact: true });
+  await pointB.getByLabel("Plan X (mm)").fill("3200");
+  await expect(panel.getByLabel("Calibration scale")).toHaveText(
+    "2.0000 mm/px",
+  );
+  await panel.getByRole("button", { name: "Attach underlay" }).click();
+  await expect(page.locator("[data-underlay]")).toHaveAttribute(
+    "transform",
+    "matrix(2 0 0 2 0 0)",
+  );
+  await panel.getByRole("button", { name: "Close interchange" }).click();
+  await saveIfNeeded(page);
+  await page.reload();
+  await expect(page.locator("[data-sketch]")).toHaveCount(4);
+  await expect(page.locator("[data-underlay]")).toHaveCount(1);
+  await frame(page);
 });
 
 test("keeps unsaved drawing after a revision conflict", async ({ page }) => {
