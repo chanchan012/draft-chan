@@ -603,7 +603,99 @@ export const drawingReferenceInput = z.strictObject({
 export const drawingReferenceLimit = 6;
 export type DrawingReference = z.infer<typeof drawingReferenceInput>;
 
+const elevationMmInput = z.int().min(-100_000).max(100_000);
+export const serviceSystemInput = z.enum(["electrical", "plumbing"]);
+export const serviceNodeInput = z.discriminatedUnion("kind", [
+  z.strictObject({
+    kind: z.literal("point"),
+    point: modelPointInput,
+    zMm: elevationMmInput,
+  }),
+  z.strictObject({
+    kind: z.literal("utility"),
+    utilityId: identifier,
+    zMm: elevationMmInput,
+  }),
+]);
+const coordinationId = {
+  id: identifier,
+  storeyId: identifier,
+  name: z.string().trim().min(1).max(100),
+};
+export const serviceRouteInput = z.strictObject({
+  kind: z.literal("route"),
+  ...coordinationId,
+  system: serviceSystemInput,
+  diameterMm: z.int().min(5).max(1000),
+  nodes: z.array(serviceNodeInput).min(2).max(32),
+});
+export const equipmentZoneInput = z.strictObject({
+  kind: z.literal("zone"),
+  ...coordinationId,
+  polygon: z.array(modelPointInput).min(3).max(64),
+  bottomMm: elevationMmInput,
+  topMm: elevationMmInput,
+});
+export const coordinationSubjectInput = z.strictObject({
+  kind: z.enum([
+    "route",
+    "zone",
+    "slab",
+    "wall",
+    "fixture",
+    "door",
+    "egress",
+    "turning",
+  ]),
+  id: identifier,
+});
+export const coordinationFindingInput = z.strictObject({
+  key: z.string().min(1).max(630),
+  rule: z.string().min(1).max(100),
+  edition: z.string().min(1).max(100),
+  storeyId: identifier,
+  title: z.string().min(1).max(240),
+  detail: z.string().min(1).max(480),
+  subjects: z.array(coordinationSubjectInput).min(1).max(3),
+  point: z.strictObject({
+    x: z.number().min(-1_010_000).max(1_010_000),
+    y: z.number().min(-1_010_000).max(1_010_000),
+    z: z.number().min(-1_000_000).max(1_000_000),
+  }),
+  measuredMm: z.number().nonnegative().optional(),
+  requiredMm: z.number().nonnegative().optional(),
+  outline: z.array(pointSchema).min(3).max(64).optional(),
+});
+export const coordinationIssueInput = z.strictObject({
+  kind: z.literal("issue"),
+  id: identifier,
+  finding: coordinationFindingInput,
+  sourceRevision: z.int().min(0).max(2_147_483_647),
+  note: z.string().trim().max(400).default(""),
+  status: z.enum(["open", "resolved"]),
+  ...authors,
+});
+export const coordinationItemInput = z.discriminatedUnion("kind", [
+  serviceRouteInput,
+  equipmentZoneInput,
+  coordinationIssueInput,
+]);
+export const coordinationLimit = 240;
+export type ServiceRoute = z.infer<typeof serviceRouteInput>;
+export type EquipmentZone = z.infer<typeof equipmentZoneInput>;
+export type CoordinationIssue = z.infer<typeof coordinationIssueInput>;
+export type CoordinationFinding = z.infer<typeof coordinationFindingInput>;
+export type CoordinationSubject = z.infer<typeof coordinationSubjectInput>;
+export type CoordinationItem = z.infer<typeof coordinationItemInput>;
+
 export const planCommandSchema = z.union([
+  z.discriminatedUnion("type", [
+    z.strictObject({
+      type: z.literal("coordination.write"),
+      item: coordinationItemInput,
+    }),
+    z.strictObject({ type: z.literal("coordination.remove"), id: identifier }),
+  ]),
   z.discriminatedUnion("type", [
     z.strictObject({
       type: z.literal("reference.write"),
@@ -743,6 +835,10 @@ export const draftPlanSchema = z.looseObject({
   utilities: z.array(utilitySchema).default([]),
   dimensions: z.array(z.unknown()),
   documentItems: z.array(documentItemInput).max(documentItemLimit).optional(),
+  coordination: z
+    .array(coordinationItemInput)
+    .max(coordinationLimit)
+    .optional(),
   underlays: z.array(underlayInput).max(underlayLimit).optional(),
   drawingReferences: z
     .array(drawingReferenceInput)

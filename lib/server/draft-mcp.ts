@@ -30,6 +30,12 @@ import {
   underlayPoint,
   underlayTransform,
 } from "../plans/underlays";
+import {
+  coordinationEdition,
+  findClashes,
+  issueFromFinding,
+  routePoints,
+} from "../plans/coordination";
 import { ConstraintConflict, constraintReport } from "../plans/constraints";
 import { summarizeChanges } from "../plans/change-summary";
 import { calculateBom } from "../plans/bom";
@@ -52,6 +58,8 @@ import {
 } from "../plans/agent-geometry";
 import {
   modelPointInput,
+  serviceRouteInput,
+  equipmentZoneInput,
   underlayCalibrationInput,
   underlayInput,
   wallInput,
@@ -938,6 +946,151 @@ export function createDraftMcp(scope: AgentScope, backend = draftMcpBackend) {
     true,
     ({ revision, includeData }) =>
       exportInterchange("ifc", revision, includeData),
+  );
+
+  edit(
+    "route_service",
+    "Create or replace a connected electrical or plumbing route. Each node uses storey-relative elevation in millimeters and can follow a utility symbol.",
+    z.strictObject({
+      ...revision,
+      route: serviceRouteInput.omit({ kind: true }),
+    }),
+    (doc, { route }) => {
+      const item = { kind: "route" as const, ...route };
+      const next = commands(doc, [{ type: "coordination.write", item }]);
+      return {
+        plan: next,
+        result: { id: item.id, points: routePoints(next, item) },
+      };
+    },
+  );
+  edit(
+    "write_equipment_zone",
+    "Create or replace a storey-local equipment zone with a simple plan polygon and top and bottom elevations.",
+    z.strictObject({
+      ...revision,
+      zone: equipmentZoneInput.omit({ kind: true }),
+    }),
+    (doc, { zone }) => ({
+      plan: commands(doc, [
+        { type: "coordination.write", item: { kind: "zone", ...zone } },
+      ]),
+      result: { id: zone.id },
+    }),
+  );
+  edit(
+    "remove_coordination_item",
+    "Remove an editable service route or equipment zone and retain recorded issues.",
+    z.strictObject({ ...revision, id: objectId }),
+    (doc, { id }) => {
+      const item = doc.graph.coordination?.find((entry) => entry.id === id);
+      if (!item || item.kind === "issue")
+        throw new Error("That editable coordination item is unavailable.");
+      return {
+        plan: commands(doc, [{ type: "coordination.remove", id }]),
+        result: { id },
+      };
+    },
+  );
+  tool(
+    "list_coordination",
+    "List service routes, resolved 3D waypoints, equipment zones, and tracked issues.",
+    z.strictObject({ storeyId: storeyIdInput }),
+    true,
+    async ({ storeyId }) => {
+      const doc = await current();
+      if (storeyId) storeyById(doc.graph, storeyId);
+      const items = (doc.graph.coordination ?? []).filter(
+        (item) =>
+          !storeyId ||
+          (item.kind === "issue" ? item.finding.storeyId : item.storeyId) ===
+            storeyId,
+      );
+      return {
+        planId,
+        revision: doc.revision,
+        items: items.map((item) =>
+          item.kind === "route"
+            ? { ...item, points: routePoints(doc.graph, item) }
+            : item,
+        ),
+      };
+    },
+  );
+  tool(
+    "find_clashes",
+    "Evaluate 3D service route coordination on the current or an archived drawing revision. Results contain revision, edition, object IDs and model coordinates.",
+    z.strictObject({
+      sourceRevision: exportRevision.optional(),
+      storeyId: storeyIdInput,
+    }),
+    true,
+    async ({ sourceRevision, storeyId }) => {
+      const doc = await current();
+      const source =
+        sourceRevision === undefined || sourceRevision === doc.revision
+          ? doc
+          : (
+              await (backend.transactions ?? revisionStore).revisions(
+                scope,
+                sourceRevision,
+                sourceRevision,
+              )
+            )[0];
+      if (!source)
+        throw new ToolFailure(
+          "revision_unavailable",
+          "That drawing revision is unavailable.",
+        );
+      if (storeyId) storeyById(source.graph, storeyId);
+      return {
+        planId,
+        revision: source.revision,
+        edition: coordinationEdition,
+        ...findClashes(source.graph, storeyId),
+      };
+    },
+  );
+  edit(
+    "create_issue",
+    "Record a clash from the currently saved revision using its finding key.",
+    z.strictObject({
+      ...revision,
+      findingKey: z.string().min(1).max(630),
+      note: z.string().trim().max(400).default(""),
+    }),
+    (doc, { findingKey, note }) => {
+      const finding = findClashes(doc.graph).findings.find(
+        (item) => item.key === findingKey,
+      );
+      if (!finding)
+        throw new Error("Use a current finding key from find_clashes.");
+      const issue = issueFromFinding(doc.graph, finding, doc.revision, note);
+      return {
+        plan: commands(doc, [{ type: "coordination.write", item: issue }]),
+        result: { issue },
+      };
+    },
+  );
+  edit(
+    "resolve_issue",
+    "Resolve or reopen a tracked issue and preserve its original finding and revision.",
+    z.strictObject({
+      ...revision,
+      id: objectId,
+      status: z.enum(["open", "resolved"]).default("resolved"),
+    }),
+    (doc, { id, status }) => {
+      const issue = doc.graph.coordination?.find((item) => item.id === id);
+      if (!issue || issue.kind !== "issue")
+        throw new Error("That coordination issue is unavailable.");
+      return {
+        plan: commands(doc, [
+          { type: "coordination.write", item: { ...issue, status } },
+        ]),
+        result: { id, status },
+      };
+    },
   );
 
   edit(

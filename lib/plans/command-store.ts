@@ -13,6 +13,7 @@ import {
   compareText,
   constraintLimit,
   documentItemLimit,
+  coordinationLimit,
   underlayLimit,
   drawingReferenceLimit,
   doorSchema,
@@ -42,6 +43,7 @@ import {
 } from "./organization";
 import { validateDrawingReferences } from "./drawing-references";
 import { validateUnderlays } from "./underlays";
+import { validateCoordination } from "./coordination";
 import { validateDocuments } from "./drawing-documents";
 import { validateBuilding } from "./building";
 import { initialGraph, loadDraftPlan } from "./plan-state";
@@ -126,6 +128,32 @@ function applyEdit(
   actor: DraftActor,
 ) {
   switch (command.type) {
+    case "coordination.write": {
+      const items = (draft.coordination ??= []);
+      const index = items.findIndex(({ id }) => id === command.item.id);
+      const prior = items[index];
+      if (prior && prior.kind !== command.item.kind)
+        throw new Error("Coordination items keep their original type.");
+      const item =
+        command.item.kind === "issue"
+          ? {
+              ...command.item,
+              createdBy:
+                prior?.kind === "issue" ? (prior.createdBy ?? actor) : actor,
+              updatedBy: actor,
+            }
+          : command.item;
+      if (index < 0) {
+        if (items.length >= coordinationLimit)
+          throw new Error("The plan has reached the coordination item limit.");
+        items.push(item);
+        items.sort((a, b) => compareText(a.id, b.id));
+      } else if (JSON.stringify(prior) !== JSON.stringify(item))
+        items[index] = item;
+      return;
+    }
+    case "coordination.remove":
+      return editPlacement(draft.coordination ?? [], command.id, actor);
     case "reference.write": {
       const items = (draft.drawingReferences ??= []);
       const index = items.findIndex(({ id }) => id === command.item.id);
@@ -535,6 +563,7 @@ export function createDraftPlanStore(input: unknown = initialGraph()) {
         validateStoreys(draft);
         validateBuilding(draft);
         validateDocuments(draft, plan);
+        validateCoordination(draft);
         validateUnderlays(draft);
         validateDrawingReferences(draft);
         if (

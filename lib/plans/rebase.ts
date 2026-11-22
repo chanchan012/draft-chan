@@ -69,6 +69,11 @@ export function rebaseSnapshot(
       draft.documentItems,
       saved.documentItems,
     ),
+    coordination: mergeItems(
+      base.coordination,
+      draft.coordination,
+      saved.coordination,
+    ),
     underlays: mergeItems(base.underlays, draft.underlays, saved.underlays),
     drawingReferences: mergeItems(
       base.drawingReferences,

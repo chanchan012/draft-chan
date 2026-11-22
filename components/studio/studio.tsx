@@ -15,6 +15,7 @@ import {
   Building2,
   Zap,
   ScanLine,
+  Network,
   Spline,
   DoorOpen,
   Hand,
@@ -73,6 +74,8 @@ import {
   type WindowSettings,
 } from "./inspector";
 import { Surface, type Tool } from "./surface";
+import { CoordinationPanel } from "./coordination-panel";
+import type { CoordinationFinding } from "@/lib/plans/model";
 import { AuditPanel } from "./audit-panel";
 import { StudioPanel } from "./studio-panel";
 import { ExportPanel } from "./export-panel";
@@ -100,6 +103,7 @@ const overlayPanels = "(max-width: 1000px)";
 type RightPanel =
   | "inspector"
   | "clearance"
+  | "coordination"
   | "exports"
   | "edit"
   | "constraints";
@@ -214,6 +218,9 @@ export function Studio({
   const constraintControl = useRef<HTMLButtonElement>(null);
   const editControl = useRef<HTMLButtonElement>(null);
   const auditControl = useRef<HTMLButtonElement>(null);
+  const coordinationControl = useRef<HTMLButtonElement>(null);
+  const [coordinationFinding, setCoordinationFinding] =
+    useState<CoordinationFinding>();
   const inspectorControl = useRef<HTMLButtonElement>(null);
   const exportsControl = useRef<HTMLButtonElement>(null);
   const buildingControl = useRef<HTMLButtonElement>(null);
@@ -766,6 +773,9 @@ export function Studio({
               </div>
 
               <Surface
+                coordinationPlan={building}
+                coordinationFinding={coordinationFinding}
+                equipmentZones={rightPanel === "coordination"}
                 key={level.id}
                 plan={plan}
                 storeyId={level.id}
@@ -882,6 +892,21 @@ export function Studio({
             <Link2 size={20} />
           </button>
           <button
+            ref={coordinationControl}
+            aria-expanded={rightPanel === "coordination"}
+            aria-controls="studio-inspector"
+            aria-label="Coordination"
+            title="Coordination"
+            onClick={() => {
+              setIso(false);
+              setSheetId(undefined);
+              setBuildingViewId(undefined);
+              toggleRightPanel("coordination");
+            }}
+          >
+            <Network size={20} />
+          </button>
+          <button
             ref={auditControl}
             aria-expanded={rightPanel === "clearance"}
             aria-controls="studio-inspector"
@@ -928,32 +953,53 @@ export function Studio({
           side="right"
           id="studio-inspector"
           label={
-            rightPanel === "exports"
-              ? "Exports"
-              : rightPanel === "constraints"
-                ? "Constraints"
-                : rightPanel === "edit"
-                  ? "Edit geometry"
-                  : "Inspector"
+            rightPanel === "coordination"
+              ? "Coordination"
+              : rightPanel === "exports"
+                ? "Exports"
+                : rightPanel === "constraints"
+                  ? "Constraints"
+                  : rightPanel === "edit"
+                    ? "Edit geometry"
+                    : "Inspector"
           }
           title={rightPanel === "clearance" ? "Clearance check" : undefined}
           open={rightPanel !== null}
           onClose={() => {
             closeRightPanel();
             const trigger =
-              rightPanel === "constraints"
-                ? constraintControl
-                : rightPanel === "edit"
-                  ? editControl
-                  : rightPanel === "exports"
-                    ? exportsControl
-                    : rightPanel === "clearance"
-                      ? auditControl
-                      : inspectorControl;
+              rightPanel === "coordination"
+                ? coordinationControl
+                : rightPanel === "constraints"
+                  ? constraintControl
+                  : rightPanel === "edit"
+                    ? editControl
+                    : rightPanel === "exports"
+                      ? exportsControl
+                      : rightPanel === "clearance"
+                        ? auditControl
+                        : inspectorControl;
             trigger.current?.focus();
           }}
         >
-          {rightPanel === "constraints" ? (
+          {rightPanel === "coordination" ? (
+            <CoordinationPanel
+              plan={building}
+              storeyId={level.id}
+              revision={checkpoint.revision}
+              dirty={dirty}
+              onEdit={(command) => executeBatch([command], actor)}
+              onShow={(item) => {
+                if (
+                  planStoreys(building).some(({ id }) => id === item.storeyId)
+                )
+                  setActiveStorey(item.storeyId);
+                setCoordinationFinding(item);
+                setIso(false);
+                if (window.matchMedia(overlayPanels).matches) closeRightPanel();
+              }}
+            />
+          ) : rightPanel === "constraints" ? (
             <ConstraintsPanel
               plan={plan}
               selectedWalls={selection

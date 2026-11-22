@@ -3,6 +3,9 @@ import {
   displayUnits,
   documentItemInput,
   documentItemLimit,
+  coordinationIssueInput,
+  coordinationItemInput,
+  coordinationLimit,
   underlayInput,
   underlayLimit,
   drawingReferenceInput,
@@ -38,6 +41,7 @@ import {
   type WindowOpening,
   type DimensionAnnotation,
 } from "./model";
+import { findClashes } from "./coordination";
 import { validateDocuments } from "./drawing-documents";
 import { hasOrganization, reconcileOrganization } from "./organization";
 import { resolveWallTypes } from "./storeys";
@@ -65,6 +69,10 @@ export const saveStudioSchema = z.strictObject({
   buildingElements: z.array(buildingElementInput).max(256).optional(),
   buildingViews: z.array(buildingViewInput).max(80).optional(),
   documentItems: z.array(documentItemInput).max(documentItemLimit).optional(),
+  coordination: z
+    .array(coordinationItemInput)
+    .max(coordinationLimit)
+    .optional(),
   underlays: z.array(underlayInput).max(underlayLimit).optional(),
   drawingReferences: z
     .array(drawingReferenceInput)
@@ -104,6 +112,14 @@ export function studioSnapshot(plan: DraftPlanState, unit: DisplayUnit) {
     ),
     documentItems: (plan.documentItems ?? []).map((item) =>
       documentItemInput.parse(item),
+    ),
+    coordination: (plan.coordination ?? []).map((item) =>
+      item.kind === "issue"
+        ? coordinationIssueInput
+            .omit({ createdBy: true, updatedBy: true })
+            .strip()
+            .parse(item)
+        : coordinationItemInput.parse(item),
     ),
     underlays: (plan.underlays ?? []).map((item) => underlayInput.parse(item)),
     drawingReferences: (plan.drawingReferences ?? []).map((item) =>
@@ -225,6 +241,45 @@ export function applyStudioSnapshot(
         sketchInput.strip(),
       ),
     ) ?? previous.sketches;
+  const priorCoordination = new Map(
+    previous.coordination?.map((item) => [item.id, item]),
+  );
+  const coordination =
+    input.coordination?.map((item) => {
+      const prior = priorCoordination.get(item.id);
+      if (prior && prior.kind !== item.kind)
+        throw new Error("Coordination items keep their original type.");
+      if (item.kind !== "issue") return item;
+      const { createdBy: _created, updatedBy: _updated, ...data } = item;
+      if (prior?.kind === "issue") {
+        if (
+          JSON.stringify(data.finding) !== JSON.stringify(prior.finding) ||
+          data.sourceRevision !== prior.sourceRevision
+        )
+          throw new Error(
+            "An issue keeps its original finding and source revision.",
+          );
+        if (prior.status === data.status && prior.note === data.note)
+          return prior;
+      }
+      if (!prior) {
+        if (data.sourceRevision !== input.revision)
+          throw new Error("Record issues against the current saved revision.");
+        const finding = findClashes(previous).findings.find(
+          (entry) => entry.key === data.finding.key,
+        );
+        if (!finding)
+          throw new Error(
+            "The issue must reference a finding on the saved plan.",
+          );
+        return { ...data, finding, createdBy: actor, updatedBy: actor };
+      }
+      return {
+        ...data,
+        createdBy: prior.kind === "issue" ? (prior.createdBy ?? actor) : actor,
+        updatedBy: actor,
+      };
+    }) ?? previous.coordination;
   const next: DraftPlanState = {
     ...previous,
     walls,
@@ -239,6 +294,7 @@ export function applyStudioSnapshot(
     buildingElements: input.buildingElements ?? previous.buildingElements,
     buildingViews: input.buildingViews ?? previous.buildingViews,
     documentItems: input.documentItems ?? previous.documentItems,
+    coordination,
     underlays: input.underlays ?? previous.underlays,
     drawingReferences: input.drawingReferences ?? previous.drawingReferences,
     wallTypes: input.wallTypes ?? previous.wallTypes,
