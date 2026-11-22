@@ -1,10 +1,23 @@
 # Resume handoff
 
+## M10.2 release checkpoint
+
+Feature `7978a420d6e9171503a3659692e25cf285854b46`; application merge `44a4785cacce1ea96974f0ddcb33b91b119f0f6f`. Vercel preview `dpl_BvZs8xX1JWzFc3AmoRTTw3KycpM6` and production `dpl_GaScGc7jvCPc2D9PMLWxAG9LP26j` reached Ready. 101 Vitest tests, 145 Playwright checks and the Next.js build passed. The independent export checks used ezdxf and IfcOpenShell. MCP exposes 72 tools and three resources. Graph v1 adds `drawingReferences`; Neon remains at 0006 with no new environment variables.
+
+Recheck from the repository root.
+
+```sh
+npm run typecheck
+npm test -- tests/interchange.unit.test.ts tests/exchange.unit.test.ts tests/export-rpc.unit.test.ts tests/mcp.unit.test.ts
+npm run test:e2e -- --grep 'stages a DXF|refreshes a read-only drawing reference'
+npm run build
+```
+
+Use Studio’s Interchange panel to stage and import a DXF, attach or refresh a reference and export typed DXF or IFC4 from a saved revision. Test data lives in `tests/dxf-fixture.ts` and `tests/ifc-fixture.ts`. Keep the original blueprint DXF route for plotted architectural outlines.
+
 ## M10.1 implementation checkpoint
 
-Feature `4961452fdd238d63985f6da07470ef478ec29ca2` and merge `044b268caa129d334b84ba6ab948f6d9c11b2884`. Vercel preview `dpl_JAGn8aFhmepsEd72TqehyMBzyFGJ` is Ready. Production `dpl_9AsXAjbRsVjGvMx6TN1FGaTqHSsn` is building. Run `npm test -- tests/interchange.unit.test.ts tests/mcp.unit.test.ts`, `npm run test:e2e -- --grep 'stages a DXF'` and `npm run build`. Graph v1 adds `underlays` without a schema migration.
-
-M10.2 adds read-only DXF snapshots, typed DXF per-storey export and IFC4 building export.
+Feature `4961452fdd238d63985f6da07470ef478ec29ca2` and merge `044b268caa129d334b84ba6ab948f6d9c11b2884`. Vercel preview `dpl_JAGn8aFhmepsEd72TqehyMBzyFGJ` is Ready. Production `dpl_9AsXAjbRsVjGvMx6TN1FGaTqHSsn` reached Ready. Run `npm test -- tests/interchange.unit.test.ts tests/mcp.unit.test.ts`, `npm run test:e2e -- --grep 'stages a DXF'` and `npm run build`. Graph v1 adds `underlays` without a schema migration.
 
 ## M9.2 implementation checkpoint
 
@@ -23,7 +36,7 @@ The release passed 92 Vitest tests and 135 browser checks across the broad and f
 
 ## M9.1 release checkpoint
 
-Application merge `9736d2ee21bfcd1e0dab1075714a64935877ebf7`. Preview `dpl_CW7bE7qm2zPXdufhE9r7Cfa1Yv3v` reached Ready. Production is pending because Vercel returned HTTP 402 with its daily deployment limit. Run `npm test -- tests/drawing-documents.unit.test.ts tests/mcp.unit.test.ts`, `npm run test:e2e -- --grep 'lays out an A3'` and `npm run build`. Tests passed for 88 Vitest cases and 130 browser checks. Graph v1 stores optional `documentItems` and named layer print weights. Neon remains at 0005. MCP exposes 54 tools and three resources.
+Application merge `9736d2ee21bfcd1e0dab1075714a64935877ebf7`. Preview `dpl_CW7bE7qm2zPXdufhE9r7Cfa1Yv3v` reached Ready. The verified M9.2 production release also contains M9.1. Run `npm test -- tests/drawing-documents.unit.test.ts tests/mcp.unit.test.ts`, `npm run test:e2e -- --grep 'lays out an A3'` and `npm run build`. Tests passed for 88 Vitest cases and 130 browser checks. Graph v1 stores optional `documentItems` and named layer print weights. Neon remains at 0005. MCP exposes 54 tools and three resources.
 
 ## M8 release checkpoint
 
@@ -42,7 +55,7 @@ The release passed all 85 Vitest tests and 125 Playwright checks. Playwright use
 
 ## Next proposed subgoal
 
-M10.1 covers staged DXF import, units and layer reporting, and calibrated image and PDF underlays. Read the [CAD roadmap](CAD_ROADMAP.md) and inspect `lib/plans/blueprints.ts` and the model-space precision inputs before implementing interchange.
+M11.1 adds connected electrical and plumbing routes, equipment zones, and object-linked clash issues. Start from the [CAD roadmap](CAD_ROADMAP.md) and existing utility and clearance models.
 
 The visual track starts at M13.1 in the [CAD roadmap](CAD_ROADMAP.md). Inspect the current renderer with `rg --files components/studio lib/plans | rg "isometric|wall-mesh"`. Use the MCP-furnished apartment in `tests/e2e/studio.spec.ts` as the first reference scene.
 

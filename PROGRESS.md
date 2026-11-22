@@ -2,7 +2,7 @@
 
 ## CAD roadmap
 
-The [architectural CAD roadmap](docs/CAD_ROADMAP.md) tracks the completed M5–M9 implementation and planned M10–M17, with candidate MCP tools and release checks. M10.1 is next in the drafting track. M13.1 is the next visual milestone. Later milestones cover move-in rehearsals, client briefs, renovation and owner handover. The release history below records shipped work.
+The [architectural CAD roadmap](docs/CAD_ROADMAP.md) tracks the completed M5–M10 implementation and planned M11–M17, with candidate MCP tools and release checks. M11.1 is next in the drafting track. M13.1 is the next visual milestone. Later milestones cover move-in rehearsals, client briefs, renovation and owner handover. The release history below records shipped work.
 
 ## M5.1 · Precision drafting
 
@@ -62,7 +62,7 @@ Vercel preview `dpl_GX3JHUXH6yTVpLF8Cj4ZXZ5PTDpr` and production `dpl_BAuBvqHaxn
 
 Application merge `9736d2ee21bfcd1e0dab1075714a64935877ebf7`. Studio’s Sheets panel authors dimension chains, leaders, entity tags and polygon hatches. Named views reference storey plans, sections or elevations. Paper-space viewports accept exact paper millimeters and scale denominators. Named layer weights apply to the paper drawing. Studio and MCP use the same model, save validation and undo commands.
 
-TypeScript, the Next.js build, 88 Vitest tests and 130 Playwright checks passed. In the five-viewport browser matrix, a 5000 mm wall occupied 100 mm of the A3 sheet at 1:50 and its viewport restored after reload. MCP exposes 54 tools and three resources. Graph v1 adds optional `documentItems` and `drawingLayers[].lineWeightMm`. Vercel preview `dpl_CW7bE7qm2zPXdufhE9r7Cfa1Yv3v` reached Ready. Production is pending because Vercel returned HTTP 402 with its daily deployment limit. Neon stays at migration 0005.
+TypeScript, the Next.js build, 88 Vitest tests and 130 Playwright checks passed. In the five-viewport browser matrix, a 5000 mm wall occupied 100 mm of the A3 sheet at 1:50 and its viewport restored after reload. MCP exposes 54 tools and three resources. Graph v1 adds optional `documentItems` and `drawingLayers[].lineWeightMm`. Vercel preview `dpl_CW7bE7qm2zPXdufhE9r7Cfa1Yv3v` reached Ready. The verified M9.2 production release also contains M9.1. Neon stays at migration 0005.
 
 ## M9.2 · Construction schedules and PDF issue sets
 
@@ -74,7 +74,13 @@ TypeScript, the Next.js production build, 92 Vitest tests and 135 Playwright cas
 
 Application merge `044b268caa129d334b84ba6ab948f6d9c11b2884`. Studio previews ASCII DXF geometry, source units, layer styles and unsupported entities. Confirmed imports create typed sketches and layer membership in one undo step. Two corresponding points align JPEG, PNG, WebP and individual PDF pages to a storey, with an optional third check point.
 
-TypeScript, Next.js build, 96 Vitest tests and 140 Playwright checks passed. MCP exposes 65 tools. Graph v1 adds optional `underlays`; existing Neon migrations through 0006 suffice. Vercel preview `dpl_JAGn8aFhmepsEd72TqehyMBzyFGJ` is Ready. Production `dpl_9AsXAjbRsVjGvMx6TN1FGaTqHSsn` was accepted and is building from the tested feature commit.
+TypeScript, Next.js build, 96 Vitest tests and 140 Playwright checks passed. MCP exposes 65 tools. Graph v1 adds optional `underlays`; existing Neon migrations through 0006 suffice. Vercel preview `dpl_JAGn8aFhmepsEd72TqehyMBzyFGJ` is Ready. Production `dpl_9AsXAjbRsVjGvMx6TN1FGaTqHSsn` reached Ready from the tested feature commit.
+
+## M10.2 · CAD references, typed DXF and IFC4
+
+Merge `44a4785cacce1ea96974f0ddcb33b91b119f0f6f` adds read-only DXF reference snapshots with independent storey placement, a visible state and a replacement-file refresh that retains position. Typed DXF saves LINE, LWPOLYLINE, CIRCLE and ARC with named layers for the chosen storey. IFC4 saves the building’s storeys, walls, wall types and material layers, hosted doors and windows, and slabs with voids.
+
+TypeScript, the Next.js production build, 101 Vitest tests and 145 Playwright checks passed. ezdxf independently reopened and audited the exported drawing. IfcOpenShell opened both storeys, resolved wall types and hosted openings, validated schema and generated meshes. MCP exposes 72 tools and three resources. Graph v1 adds optional `drawingReferences`; migrations remain at 0006. Vercel preview `dpl_BvZs8xX1JWzFc3AmoRTTw3KycpM6` and production `dpl_GaScGc7jvCPc2D9PMLWxAG9LP26j` reached Ready, and the public landing, signed-out Studio and MCP OAuth checks passed.
 
 ## M1.1 · Foundation and shell
 

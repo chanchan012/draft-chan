@@ -1,8 +1,8 @@
 # Architectural CAD and agent roadmap
 
-Draft supports floorplans, hosted openings, furnishing, an isometric cutaway, clearance screening, quantities, blueprint exports and the precision tools shipped in M5. Its authenticated MCP server exposes 65 tools and three resources at the M10.1 checkpoint. M10–M17 describe planned additions. The product focus is architectural drafting from measured survey through an issued drawing set.
+Draft supports floorplans, hosted openings, furnishing, an isometric cutaway, clearance screening, quantities, blueprint exports and the precision tools shipped in M5. Its authenticated MCP server exposes 72 tools and three resources. M11–M17 describe planned additions. The product focus is architectural drafting from measured survey through an issued drawing set.
 
-M5.1 and M5.2 shipped precision measurements, object snaps, exact entry and 2D sketch primitives. M6.1 and M6.2 shipped Studio editing commands and agent transactions. M7 is shipped with driving wall dimensions, layers and reusable blocks. M8 shipped multi-storey plans, wall assemblies, slabs, stairs, floor openings, roofs, sections and elevations. M9 implements drawing annotations, paper space, construction schedules and vector PDF issues. M10.1 is the next drafting subgoal. M13.1 is the next visual milestone. The sequence below identifies dependencies and suggested release order.
+M5.1 and M5.2 shipped precision measurements, object snaps, exact entry and 2D sketch primitives. M6.1 and M6.2 shipped Studio editing commands and agent transactions. M7 is shipped with driving wall dimensions, layers and reusable blocks. M8 shipped multi-storey plans, wall assemblies, slabs, stairs, floor openings, roofs, sections and elevations. M9 implements drawing annotations, paper space, construction schedules and vector PDF issues. M10 shipped CAD interchange. M11.1 is the next drafting subgoal. M13.1 is the next visual milestone. The sequence below identifies dependencies and suggested release order.
 
 ## Milestones
 
@@ -51,12 +51,12 @@ Implemented MCP tools include `tag_entities`, `dimension_chain`, `create_sheet`,
 
 **Acceptance.** Publish a dimensioned A3 sheet at 1:50. A 5 m line measures 100 mm in the PDF. Door tags match schedule rows. Editing the live model leaves the previously issued set reproducible from its saved revision.
 
-### M10 · CAD interchange and references
+### M10 · CAD interchange and references (shipped)
 
 - **10.1 (implemented)** Import a documented DXF subset into a staging view with unit, layer and unsupported-entity reports. Support calibrated PDF/image underlays.
 - **10.2** Add read-only external drawing references, typed DXF round trips and IFC exchange for a declared set of architectural elements.
 
-Proposed MCP tools include `inspect_import`, `import_dxf`, `calibrate_underlay`, `attach_reference`, `refresh_reference`, `export_ifc`.
+Shipped MCP tools include `inspect_import`, `import_dxf`, `calibrate_underlay`, `attach_reference`, `refresh_reference`, `export_typed_dxf` and `export_ifc`.
 
 **Acceptance.** Round-trip a known DXF through an independent reader and compare coordinates, units and layers within the stated tolerance. A two-point underlay calibration reproduces a third check dimension. An IFC viewer opens both storeys and reports the expected wall types.
 
