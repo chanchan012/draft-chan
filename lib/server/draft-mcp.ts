@@ -36,6 +36,12 @@ import {
   issueFromFinding,
   routePoints,
 } from "../plans/coordination";
+import {
+  evaluateRuleSet,
+  findingAtRevision,
+  reproduceCoordinationIssue,
+  traceEgress,
+} from "../plans/review-rules";
 import { ConstraintConflict, constraintReport } from "../plans/constraints";
 import { summarizeChanges } from "../plans/change-summary";
 import { calculateBom } from "../plans/bom";
@@ -60,6 +66,9 @@ import {
   modelPointInput,
   serviceRouteInput,
   equipmentZoneInput,
+  ruleProfileInput,
+  egressPathInput,
+  accessCheckInput,
   underlayCalibrationInput,
   underlayInput,
   wallInput,
@@ -980,7 +989,7 @@ export function createDraftMcp(scope: AgentScope, backend = draftMcpBackend) {
   );
   edit(
     "remove_coordination_item",
-    "Remove an editable service route or equipment zone and retain recorded issues.",
+    "Remove an editable service route, equipment zone, rule profile, or authored review check. Keeps recorded issues.",
     z.strictObject({ ...revision, id: objectId }),
     (doc, { id }) => {
       const item = doc.graph.coordination?.find((entry) => entry.id === id);
@@ -994,7 +1003,7 @@ export function createDraftMcp(scope: AgentScope, backend = draftMcpBackend) {
   );
   tool(
     "list_coordination",
-    "List service routes, resolved 3D waypoints, equipment zones, and tracked issues.",
+    "List service routes and resolved 3D waypoints, equipment zones, rule profiles, authored checks, and tracked issues.",
     z.strictObject({ storeyId: storeyIdInput }),
     true,
     async ({ storeyId }) => {
@@ -1053,18 +1062,18 @@ export function createDraftMcp(scope: AgentScope, backend = draftMcpBackend) {
   );
   edit(
     "create_issue",
-    "Record a clash from the currently saved revision using its finding key.",
+    "Record a current clash or code-review finding using its key and saved revision.",
     z.strictObject({
       ...revision,
-      findingKey: z.string().min(1).max(630),
+      findingKey: z.string().min(1).max(1000),
       note: z.string().trim().max(400).default(""),
     }),
     (doc, { findingKey, note }) => {
-      const finding = findClashes(doc.graph).findings.find(
-        (item) => item.key === findingKey,
-      );
+      const finding = findingAtRevision(doc.graph, findingKey);
       if (!finding)
-        throw new Error("Use a current finding key from find_clashes.");
+        throw new Error(
+          "Use a key from find_clashes or evaluate_rule_set at the current saved revision.",
+        );
       const issue = issueFromFinding(doc.graph, finding, doc.revision, note);
       return {
         plan: commands(doc, [{ type: "coordination.write", item: issue }]),
@@ -1089,6 +1098,134 @@ export function createDraftMcp(scope: AgentScope, backend = draftMcpBackend) {
           { type: "coordination.write", item: { ...issue, status } },
         ]),
         result: { id, status },
+      };
+    },
+  );
+
+  edit(
+    "set_rule_profile",
+    "Save the versioned US model-code profile for one storey. Omit occupancy or sprinkler configuration when unknown.",
+    z.strictObject({
+      ...revision,
+      profile: ruleProfileInput.omit({ kind: true }),
+    }),
+    (doc, { profile }) => {
+      const prior = doc.graph.coordination?.find(
+        (item) => item.kind === "profile" && item.storeyId === profile.storeyId,
+      );
+      const item = {
+        kind: "profile" as const,
+        ...profile,
+        id: prior?.id ?? profile.id,
+      };
+      return {
+        plan: commands(doc, [{ type: "coordination.write", item }]),
+        result: { profile: item },
+      };
+    },
+  );
+  edit(
+    "write_egress_path",
+    "Save an authored same-storey egress polyline. The final point follows the designated exit door on the saved graph.",
+    z.strictObject({ ...revision, path: egressPathInput.omit({ kind: true }) }),
+    (doc, { path }) => ({
+      plan: commands(doc, [
+        { type: "coordination.write", item: { kind: "egress", ...path } },
+      ]),
+      result: { id: path.id },
+    }),
+  );
+  edit(
+    "write_access_check",
+    "Save a 2010 ADA front door approach or a circular turning-space check for a storey.",
+    z.strictObject({ ...revision, check: accessCheckInput }),
+    (doc, { check }) => ({
+      plan: commands(doc, [{ type: "coordination.write", item: check }]),
+      result: { id: check.id },
+    }),
+  );
+
+  async function reviewSource(sourceRevision?: number) {
+    const doc = await current();
+    const source =
+      sourceRevision === undefined || sourceRevision === doc.revision
+        ? doc
+        : (
+            await (backend.transactions ?? revisionStore).revisions(
+              scope,
+              sourceRevision,
+              sourceRevision,
+            )
+          )[0];
+    if (!source)
+      throw new ToolFailure(
+        "revision_unavailable",
+        "That drawing revision is unavailable.",
+      );
+    return source;
+  }
+
+  tool(
+    "trace_egress",
+    "Trace the saved authored path to its exit door, reporting model length, blocked segments, affected objects and unresolved inputs.",
+    z.strictObject({ id: objectId, sourceRevision: exportRevision.optional() }),
+    true,
+    async ({ id, sourceRevision }) => {
+      const source = await reviewSource(sourceRevision);
+      const path = source.graph.coordination?.find(
+        (item) => item.kind === "egress" && item.id === id,
+      );
+      if (!path || path.kind !== "egress")
+        throw new ToolFailure(
+          "path_unavailable",
+          "That egress path is unavailable.",
+        );
+      return {
+        planId,
+        revision: source.revision,
+        id,
+        ...traceEgress(source.graph, path),
+      };
+    },
+  );
+  tool(
+    "evaluate_rule_set",
+    "Screen selected 2021 IBC and 2010 ADA rules on a saved drawing revision. Results include edition, source, inputs, affected IDs and needs_input states.",
+    z.strictObject({
+      sourceRevision: exportRevision.optional(),
+      storeyId: storeyIdInput,
+    }),
+    true,
+    async ({ sourceRevision, storeyId }) => {
+      const source = await reviewSource(sourceRevision);
+      if (storeyId) storeyById(source.graph, storeyId);
+      return {
+        planId,
+        revision: source.revision,
+        ...evaluateRuleSet(source.graph, storeyId),
+      };
+    },
+  );
+  tool(
+    "reproduce_issue",
+    "Open the issue’s original model revision and recompute its recorded finding with the saved rule edition and inputs.",
+    z.strictObject({ id: objectId }),
+    true,
+    async ({ id }) => {
+      const doc = await current();
+      const issue = doc.graph.coordination?.find((item) => item.id === id);
+      if (!issue || issue.kind !== "issue")
+        throw new ToolFailure(
+          "issue_unavailable",
+          "That issue is unavailable.",
+        );
+      const source = await reviewSource(issue.sourceRevision);
+      return {
+        planId,
+        id,
+        sourceRevision: source.revision,
+        issue,
+        reproduced: reproduceCoordinationIssue(source.graph, issue),
       };
     },
   );

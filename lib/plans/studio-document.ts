@@ -41,7 +41,7 @@ import {
   type WindowOpening,
   type DimensionAnnotation,
 } from "./model";
-import { findClashes } from "./coordination";
+import { findingAtRevision } from "./review-rules";
 import { validateDocuments } from "./drawing-documents";
 import { hasOrganization, reconcileOrganization } from "./organization";
 import { resolveWallTypes } from "./storeys";
@@ -265,9 +265,7 @@ export function applyStudioSnapshot(
       if (!prior) {
         if (data.sourceRevision !== input.revision)
           throw new Error("Record issues against the current saved revision.");
-        const finding = findClashes(previous).findings.find(
-          (entry) => entry.key === data.finding.key,
-        );
+        const finding = findingAtRevision(previous, data.finding.key);
         if (!finding)
           throw new Error(
             "The issue must reference a finding on the saved plan.",

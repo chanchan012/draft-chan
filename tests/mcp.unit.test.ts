@@ -35,6 +35,7 @@ import {
   type StudioDocument,
 } from "../lib/plans/studio-document";
 import { sheetFixture } from "./sheet-fixture";
+import { reviewFixture } from "./review-fixture";
 
 const pg = new PGlite();
 const db = drizzle(pg);
@@ -392,6 +393,7 @@ it("lays out a two-bedroom plan using all MCP resources and tools over HTTP", as
       "draw_wall",
       "edit_block_definition",
       "edit_corner",
+      "evaluate_rule_set",
       "explain_constraints",
       "export_ifc",
       "export_typed_dxf",
@@ -427,19 +429,24 @@ it("lays out a two-bedroom plan using all MCP resources and tools over HTTP", as
       "remove_coordination_item",
       "remove_document_items",
       "remove_underlay",
+      "reproduce_issue",
       "resolve_issue",
       "resolve_snap",
       "route_service",
       "save_named_view",
       "set_driving_dimension",
       "set_room_finish",
+      "set_rule_profile",
       "set_wall_type",
       "split_or_join_wall",
       "tag_entities",
+      "trace_egress",
       "transform_entities",
       "trigger_dxf_export",
       "trim_extend",
       "update_storey",
+      "write_access_check",
+      "write_egress_path",
       "write_equipment_zone",
     ]);
     expect(
@@ -1298,7 +1305,7 @@ it("bridges stdio to the authenticated HTTP tools without sharing the database c
         },
       }),
     );
-    expect((await client.listTools()).tools).toHaveLength(79);
+    expect((await client.listTools()).tools).toHaveLength(85);
     expect((await client.listResources()).resources).toHaveLength(3);
     expect(
       (await client.readResource({ uri: "draft://floorplan-graph" })).contents,
@@ -1678,6 +1685,100 @@ it("detects and reviews a saved multi-storey service clash through MCP", async (
       isError: false,
       structuredContent: { revision: 2, findings: [{ key: findings[0].key }] },
     });
+    expect(await call("reproduce_issue", { id: issue.id })).toMatchObject({
+      isError: false,
+      structuredContent: {
+        sourceRevision: 2,
+        reproduced: { matches: true, finding: { key: findings[0].key } },
+      },
+    });
+  } finally {
+    await client.close();
+  }
+});
+
+it("replays versioned code review through MCP and owner-scoped Hono RPC", async () => {
+  const session = await planWithToken();
+  const graph = reviewFixture();
+  const items = graph.coordination ?? [];
+  graph.coordination = [];
+  const saved = await session.api.request(
+    session.path + "/graph",
+    payload("PATCH", { revision: 0, ...studioSnapshot(graph, "mm") }),
+  );
+  expect(await saved.json()).toEqual({ revision: 1 });
+  const client = await connect(createMcpHttp(localWindow(100)), session.token);
+  const call = (name: string, args: Record<string, unknown>) =>
+    client.callTool({ name, arguments: args });
+  try {
+    const profile = items.find((item) => item.kind === "profile");
+    const path = items.find((item) => item.kind === "egress");
+    const check = items.find((item) => item.kind === "approach");
+    if (!profile || !path || !check) throw new Error("Missing review inputs");
+    const { kind: _profileKind, ...profileInput } = profile;
+    const { kind: _pathKind, ...pathInput } = path;
+    expect(
+      await call("set_rule_profile", {
+        expectedRevision: 1,
+        profile: profileInput,
+      }),
+    ).toMatchObject({ isError: false, structuredContent: { revision: 2 } });
+    expect(
+      await call("write_egress_path", { expectedRevision: 2, path: pathInput }),
+    ).toMatchObject({ isError: false, structuredContent: { revision: 3 } });
+    expect(
+      await call("write_access_check", { expectedRevision: 3, check }),
+    ).toMatchObject({ isError: false, structuredContent: { revision: 4 } });
+    expect(
+      await call("trace_egress", { id: path.id, sourceRevision: 3 }),
+    ).toMatchObject({
+      isError: false,
+      structuredContent: { revision: 3, measuredMm: 2500, unresolved: [] },
+    });
+    const result = await call("evaluate_rule_set", { storeyId: "ground" });
+    expect(result).toMatchObject({
+      isError: false,
+      structuredContent: {
+        revision: 4,
+        findings: [{ rule: "ADA 404.2.4.1" }],
+        checks: expect.arrayContaining([
+          expect.objectContaining({
+            rule: "IBC 1017.2",
+            status: "needs_input",
+          }),
+        ]),
+      },
+    });
+    if (!isCallToolResult(result))
+      throw new Error("Expected a review response");
+    const { findings } = result.structuredContent as {
+      findings: { key: string }[];
+    };
+    const created = await call("create_issue", {
+      expectedRevision: 4,
+      findingKey: findings[0].key,
+    });
+    expect(created).toMatchObject({
+      isError: false,
+      structuredContent: { revision: 5, issue: { sourceRevision: 4 } },
+    });
+    if (!isCallToolResult(created))
+      throw new Error("Expected an issue response");
+    const { issue } = created.structuredContent as { issue: { id: string } };
+    const url = session.path + "/coordination-issues/" + issue.id;
+    const match = {
+      sourceRevision: 4,
+      reproduced: {
+        matches: true,
+        inputs: { depthMm: 1525, latchSideMm: 455 },
+      },
+    };
+    expect(await call("reproduce_issue", { id: issue.id })).toMatchObject({
+      isError: false,
+      structuredContent: match,
+    });
+    expect(await (await session.api.request(url)).json()).toMatchObject(match);
+    expect((await member("other-owner").request(url)).status).toBe(404);
   } finally {
     await client.close();
   }

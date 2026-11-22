@@ -1,6 +1,7 @@
 import { useMemo, useState, type FormEvent, type ReactNode } from "react";
 import { findClashes, issueFromFinding } from "@/lib/plans/coordination";
 import { utilityCatalog } from "@/lib/plans/catalog";
+import { RuleReviewPanel } from "./rule-review-panel";
 import type {
   CoordinationFinding,
   DraftPlanState,
@@ -282,6 +283,7 @@ function ZoneForm({
 
 export function CoordinationPanel({
   plan,
+  planId,
   storeyId,
   revision,
   dirty,
@@ -289,19 +291,25 @@ export function CoordinationPanel({
   onShow,
 }: {
   plan: DraftPlanState;
+  planId: string;
   storeyId: string;
   revision: number;
   dirty: boolean;
   onEdit(command: PlanCommand): void;
   onShow(finding: CoordinationFinding): void;
 }) {
-  const [tab, setTab] = useState<"routes" | "zones" | "clashes" | "issues">(
-    "routes",
-  );
+  const [tab, setTab] = useState<
+    "routes" | "zones" | "clashes" | "rules" | "issues"
+  >("routes");
   const [routeId, setRouteId] = useState("");
   const [zoneId, setZoneId] = useState("");
   const [error, setError] = useState("");
   const [activeClash, setActiveClash] = useState("");
+  const [replay, setReplay] = useState<{
+    id: string;
+    message: string;
+    pending?: boolean;
+  }>();
   const items = plan.coordination ?? [];
   const routes = items.filter(
     (item): item is ServiceRoute =>
@@ -334,6 +342,63 @@ export function CoordinationPanel({
     }
   }
 
+  function recorded(key: string) {
+    return issues.some(
+      (item) =>
+        item.status === "open" &&
+        item.finding.key === key &&
+        item.sourceRevision === revision,
+    );
+  }
+
+  function record(finding: CoordinationFinding) {
+    try {
+      dispatch({
+        type: "coordination.write",
+        item: issueFromFinding(plan, finding, revision),
+      });
+    } catch (cause) {
+      setError(
+        cause instanceof Error
+          ? cause.message
+          : "The issue could not be created.",
+      );
+    }
+  }
+
+  async function reproduce(id: string) {
+    setReplay({ id, message: "Replaying saved revision…", pending: true });
+    try {
+      const response = await fetch(
+        `/api/floorplans/${encodeURIComponent(planId)}/coordination-issues/${encodeURIComponent(id)}`,
+      );
+      if (!response.ok)
+        throw new Error(
+          response.status === 404
+            ? "The issue or its source revision is unavailable."
+            : "The issue could not be replayed.",
+        );
+      const result: {
+        sourceRevision: number;
+        reproduced: { matches: boolean } | null;
+      } = await response.json();
+      const message = result.reproduced?.matches
+        ? `Finding reproduced at revision ${result.sourceRevision}.`
+        : result.reproduced
+          ? `Finding evidence differs at revision ${result.sourceRevision}.`
+          : `No matching finding at revision ${result.sourceRevision}.`;
+      setReplay({ id, message });
+    } catch (cause) {
+      setReplay({
+        id,
+        message:
+          cause instanceof Error
+            ? cause.message
+            : "The issue could not be replayed.",
+      });
+    }
+  }
+
   return (
     <section className="studio-fields coordination-panel">
       <div
@@ -341,19 +406,21 @@ export function CoordinationPanel({
         role="group"
         aria-label="Coordination views"
       >
-        {(["routes", "zones", "clashes", "issues"] as const).map((view) => (
-          <button
-            key={view}
-            type="button"
-            aria-pressed={tab === view}
-            onClick={() => {
-              setTab(view);
-              setError("");
-            }}
-          >
-            {view[0].toUpperCase() + view.slice(1)}
-          </button>
-        ))}
+        {(["routes", "zones", "clashes", "rules", "issues"] as const).map(
+          (view) => (
+            <button
+              key={view}
+              type="button"
+              aria-pressed={tab === view}
+              onClick={() => {
+                setTab(view);
+                setError("");
+              }}
+            >
+              {view[0].toUpperCase() + view.slice(1)}
+            </button>
+          ),
+        )}
       </div>
       {error && (
         <p role="alert" className="coordination-error">
@@ -464,29 +531,8 @@ export function CoordinationPanel({
                 </button>
                 <button
                   type="button"
-                  disabled={
-                    dirty ||
-                    issues.some(
-                      (item) =>
-                        item.status === "open" &&
-                        item.finding.key === finding.key &&
-                        item.sourceRevision === revision,
-                    )
-                  }
-                  onClick={() => {
-                    try {
-                      dispatch({
-                        type: "coordination.write",
-                        item: issueFromFinding(plan, finding, revision),
-                      });
-                    } catch (cause) {
-                      setError(
-                        cause instanceof Error
-                          ? cause.message
-                          : "The issue could not be created.",
-                      );
-                    }
-                  }}
+                  disabled={dirty || recorded(finding.key)}
+                  onClick={() => record(finding)}
                 >
                   Create issue
                 </button>
@@ -494,6 +540,13 @@ export function CoordinationPanel({
             </article>
           ))}
         </>
+      )}
+      {tab === "rules" && (
+        <RuleReviewPanel
+          {...{ plan, storeyId, dirty, onShow, recorded }}
+          onEdit={dispatch}
+          onRecord={record}
+        />
       )}
       {tab === "issues" && (
         <>
@@ -511,6 +564,13 @@ export function CoordinationPanel({
                 </button>
                 <button
                   type="button"
+                  disabled={!!replay?.pending || dirty}
+                  onClick={() => void reproduce(item.id)}
+                >
+                  Reproduce issue
+                </button>
+                <button
+                  type="button"
                   onClick={() =>
                     dispatch({
                       type: "coordination.write",
@@ -524,6 +584,7 @@ export function CoordinationPanel({
                   {item.status === "open" ? "Resolve issue" : "Reopen issue"}
                 </button>
               </div>
+              {replay?.id === item.id && <p role="status">{replay.message}</p>}
             </article>
           ))}
         </>

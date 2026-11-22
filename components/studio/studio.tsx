@@ -985,6 +985,7 @@ export function Studio({
           {rightPanel === "coordination" ? (
             <CoordinationPanel
               plan={building}
+              planId={initial.id}
               storeyId={level.id}
               revision={checkpoint.revision}
               dirty={dirty}

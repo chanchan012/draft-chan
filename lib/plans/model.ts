@@ -646,11 +646,12 @@ export const coordinationSubjectInput = z.strictObject({
     "door",
     "egress",
     "turning",
+    "approach",
   ]),
   id: identifier,
 });
 export const coordinationFindingInput = z.strictObject({
-  key: z.string().min(1).max(630),
+  key: z.string().min(1).max(1000),
   rule: z.string().min(1).max(100),
   edition: z.string().min(1).max(100),
   storeyId: identifier,
@@ -660,7 +661,7 @@ export const coordinationFindingInput = z.strictObject({
   point: z.strictObject({
     x: z.number().min(-1_010_000).max(1_010_000),
     y: z.number().min(-1_010_000).max(1_010_000),
-    z: z.number().min(-1_000_000).max(1_000_000),
+    z: z.number().min(-1_200_000).max(1_200_000),
   }),
   measuredMm: z.number().nonnegative().optional(),
   requiredMm: z.number().nonnegative().optional(),
@@ -675,10 +676,51 @@ export const coordinationIssueInput = z.strictObject({
   status: z.enum(["open", "resolved"]),
   ...authors,
 });
+export const reviewPackId = "us-ibc2021-ada2010-v1";
+export const ruleProfileInput = z.strictObject({
+  kind: z.literal("profile"),
+  id: identifier,
+  storeyId: identifier,
+  pack: z.literal(reviewPackId),
+  jurisdiction: z.string().trim().min(1).max(100),
+  occupancy: z.enum(["B", "R-2"]).optional(),
+  sprinkler: z.enum(["none", "nfpa13", "nfpa13r"]).optional(),
+});
+export const egressPathInput = z.strictObject({
+  kind: z.literal("egress"),
+  ...coordinationId,
+  exitDoorId: identifier,
+  waypoints: z.array(modelPointInput).min(1).max(64),
+});
+export const approachCheckInput = z.strictObject({
+  kind: z.literal("approach"),
+  ...coordinationId,
+  doorId: identifier,
+  side: z.enum(["front-pull", "front-push"]),
+  closerAndLatch: z.boolean().optional(),
+});
+export const turningCheckInput = z.strictObject({
+  kind: z.literal("turning"),
+  ...coordinationId,
+  center: modelPointInput,
+});
+export const accessCheckInput = z.discriminatedUnion("kind", [
+  approachCheckInput,
+  turningCheckInput,
+]);
+export type RuleProfile = z.infer<typeof ruleProfileInput>;
+export type EgressPath = z.infer<typeof egressPathInput>;
+export type ApproachCheck = z.infer<typeof approachCheckInput>;
+export type TurningCheck = z.infer<typeof turningCheckInput>;
+
 export const coordinationItemInput = z.discriminatedUnion("kind", [
   serviceRouteInput,
   equipmentZoneInput,
   coordinationIssueInput,
+  ruleProfileInput,
+  egressPathInput,
+  approachCheckInput,
+  turningCheckInput,
 ]);
 export const coordinationLimit = 240;
 export type ServiceRoute = z.infer<typeof serviceRouteInput>;

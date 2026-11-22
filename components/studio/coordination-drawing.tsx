@@ -1,10 +1,7 @@
 import { routePoints } from "@/lib/plans/coordination";
+import { egressPoints } from "@/lib/plans/review-rules";
 import { planStoreys } from "@/lib/plans/storeys";
-import type {
-  CoordinationFinding,
-  DraftPlanState,
-  ServiceRoute,
-} from "@/lib/plans/model";
+import type { CoordinationFinding, DraftPlanState } from "@/lib/plans/model";
 import type { UtilityLayer } from "@/lib/plans/catalog";
 
 export function CoordinationDrawing({
@@ -29,6 +26,18 @@ export function CoordinationDrawing({
   return (
     <g pointerEvents="none" aria-hidden="true">
       {items.map((item) => {
+        if (item.kind === "egress" && zones && item.storeyId === storeyId)
+          return (
+            <polyline
+              key={item.id}
+              data-egress-path={item.id}
+              className="cad-egress-path"
+              points={egressPoints(plan, item)
+                .map(({ x, y }) => x + "," + y)
+                .join(" ")}
+              vectorEffect="non-scaling-stroke"
+            />
+          );
         if (item.kind === "zone" && zones && item.storeyId === storeyId)
           return (
             <polygon
@@ -105,7 +114,9 @@ export function coordinationExtent(plan: DraftPlanState, storeyId: string) {
   return (plan.coordination ?? []).flatMap((item) => {
     if (item.kind === "zone" && item.storeyId === storeyId) return item.polygon;
     if (item.kind === "route" && item.storeyId === storeyId)
-      return routePoints(plan, item as ServiceRoute);
+      return routePoints(plan, item);
+    if (item.kind === "egress" && item.storeyId === storeyId)
+      return egressPoints(plan, item);
     return [];
   });
 }

@@ -4,6 +4,7 @@ import { saveStudioSchema } from "../plans/studio-document";
 import { newPlan, renamePlan } from "../plans/geometry";
 import { interchangeFormats } from "../plans/interchange-export";
 import { interchangeFile } from "./interchange-export";
+import { reproduceCoordinationIssue } from "../plans/review-rules";
 import { revisionStore } from "./revision-store";
 import { bomCsv } from "../plans/bom";
 import {
@@ -82,6 +83,7 @@ export function planRoutes(
   app.use("/:id/presence", validateId);
   app.use("/:id/bom", validateId);
   app.use("/:id/interchange", validateId);
+  app.use("/:id/coordination-issues/:issueId", validateId);
   app.use("/:id/exports", validateId);
   app.use("/:id/issues", validateId);
   app.use("/:id/exports/:exportId/download", validateId);
@@ -165,6 +167,33 @@ export function planRoutes(
         revision.data,
       );
       return jobs ? c.json(jobs) : c.json({ error: "Plan unavailable" }, 404);
+    })
+    .get("/:id/coordination-issues/:issueId", async (c) => {
+      const owner = c.get("owner");
+      const planId = c.req.param("id");
+      const document = await repo.getStudio(owner, planId);
+      const id = c.req.param("issueId");
+      const issue = document?.graph.coordination?.find(
+        (item) => item.id === id,
+      );
+      if (!issue || issue.kind !== "issue")
+        return c.json({ error: "Coordination issue unavailable." }, 404);
+      const source =
+        issue.sourceRevision === document?.revision
+          ? document
+          : (
+              await revisionStore.revisions(
+                { owner, planId },
+                issue.sourceRevision,
+                issue.sourceRevision,
+              )
+            )[0];
+      if (!source)
+        return c.json({ error: "The source revision is unavailable." }, 404);
+      return c.json({
+        sourceRevision: source.revision,
+        reproduced: reproduceCoordinationIssue(source.graph, issue),
+      });
     })
     .get("/:id/interchange", async (c) => {
       const revision = revisionQuery.safeParse(c.req.query("revision"));
