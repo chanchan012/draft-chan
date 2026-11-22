@@ -239,3 +239,31 @@ it("keeps a published sheet set available and unchanged after a model edit", asy
   expect((await outsider("GET", url)).status).toBe(404);
   expect((await outsider("GET", id + "/issues")).status).toBe(404);
 });
+
+it("downloads an owned saved revision as IFC4 and typed model DXF", async () => {
+  const owner = client("exchange-owner");
+  const outsider = client("exchange-outsider");
+  const id = crypto.randomUUID();
+  const { studioSnapshot } = await import("../lib/plans/studio-document");
+  const { ifcFixture } = await import("./ifc-fixture");
+  await owner("POST", "", { id, name: "Duplex" });
+  const saved = await owner("PATCH", id + "/graph", {
+    revision: 0,
+    ...studioSnapshot(ifcFixture().graph, "mm"),
+  });
+  expect(await saved.json()).toEqual({ revision: 1 });
+  await owner("PATCH", id, { name: "Renamed duplex", revision: 1 });
+  const path = id + "/interchange?revision=1";
+  const file = await owner("GET", path + "&format=ifc");
+  expect(file.status).toBe(200);
+  expect(file.headers.get("content-disposition")).toContain("duplex-r1.ifc");
+  expect(await file.text()).toContain("FILE_SCHEMA(('IFC4'))");
+  const dxf = await owner("GET", path + "&format=typed-dxf&storeyId=upper");
+  expect(dxf.status).toBe(200);
+  expect(await dxf.text()).toContain("$INSUNITS");
+  expect(
+    (await owner("GET", path + "&format=typed-dxf&storeyId=unknown")).status,
+  ).toBe(400);
+  expect((await outsider("GET", path + "&format=ifc")).status).toBe(404);
+  expect((await client()("GET", path + "&format=ifc")).status).toBe(401);
+});

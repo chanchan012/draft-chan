@@ -2,6 +2,9 @@ import { Hono, type MiddlewareHandler } from "hono";
 import { z } from "zod";
 import { saveStudioSchema } from "../plans/studio-document";
 import { newPlan, renamePlan } from "../plans/geometry";
+import { interchangeFormats } from "../plans/interchange-export";
+import { interchangeFile } from "./interchange-export";
+import { revisionStore } from "./revision-store";
 import { bomCsv } from "../plans/bom";
 import {
   exportFilename,
@@ -78,6 +81,7 @@ export function planRoutes(
   app.use("/:id/live", validateId);
   app.use("/:id/presence", validateId);
   app.use("/:id/bom", validateId);
+  app.use("/:id/interchange", validateId);
   app.use("/:id/exports", validateId);
   app.use("/:id/issues", validateId);
   app.use("/:id/exports/:exportId/download", validateId);
@@ -161,6 +165,41 @@ export function planRoutes(
         revision.data,
       );
       return jobs ? c.json(jobs) : c.json({ error: "Plan unavailable" }, 404);
+    })
+    .get("/:id/interchange", async (c) => {
+      const revision = revisionQuery.safeParse(c.req.query("revision"));
+      const format = z
+        .enum(interchangeFormats)
+        .safeParse(c.req.query("format"));
+      const storeyId = z
+        .string()
+        .trim()
+        .min(1)
+        .max(128)
+        .optional()
+        .safeParse(c.req.query("storeyId"));
+      if (!revision.success || !format.success || !storeyId.success)
+        return c.json(
+          { error: "Invalid exchange format, revision, or storey." },
+          400,
+        );
+      const planId = c.req.param("id");
+      const [document] = await revisionStore.revisions(
+        { owner: c.get("owner"), planId },
+        revision.data,
+        revision.data,
+      );
+      if (!document)
+        return c.json({ error: "Drawing revision unavailable." }, 404);
+      if (
+        format.data === "typed-dxf" &&
+        storeyId.data &&
+        !document.graph.storeys?.some((item) => item.id === storeyId.data) &&
+        storeyId.data !== "ground"
+      )
+        return c.json({ error: "The selected storey is unavailable." }, 400);
+      const file = interchangeFile(document, format.data, storeyId.data);
+      return attachment(file.content, file.type, file.filename);
     })
     .get("/:id/issues", async (c) => {
       const issues = await listSheetIssues(c.get("owner"), c.req.param("id"));

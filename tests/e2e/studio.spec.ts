@@ -132,6 +132,8 @@ async function studio(
         buildingViews: input.buildingViews ?? current.graph.buildingViews,
         documentItems: input.documentItems ?? current.graph.documentItems,
         underlays: input.underlays ?? current.graph.underlays,
+        drawingReferences:
+          input.drawingReferences ?? current.graph.drawingReferences,
         wallTypes: input.wallTypes ?? current.graph.wallTypes,
         drawingLayers: input.drawingLayers ?? current.graph.drawingLayers,
         blocks: input.blocks ?? current.graph.blocks,
@@ -1030,13 +1032,11 @@ test("stages a DXF and restores a calibrated PDF underlay", async ({
   ).toEqual(["Reference", "Survey"]);
 
   const pdf = await PDFDocument.create();
-  pdf
-    .addPage([120, 80])
-    .drawLine({
-      start: { x: 10, y: 10 },
-      end: { x: 110, y: 30 },
-      color: rgb(0, 0, 0),
-    });
+  pdf.addPage([120, 80]).drawLine({
+    start: { x: 10, y: 10 },
+    end: { x: 110, y: 30 },
+    color: rgb(0, 0, 0),
+  });
   await panel.getByRole("button", { name: "Underlays" }).click();
   await panel.getByLabel("Underlay file").setInputFiles({
     name: "Survey.pdf",
@@ -1061,6 +1061,48 @@ test("stages a DXF and restores a calibrated PDF underlay", async ({
   await page.reload();
   await expect(page.locator("[data-sketch]")).toHaveCount(4);
   await expect(page.locator("[data-underlay]")).toHaveCount(1);
+  await frame(page);
+});
+
+test("refreshes a read-only drawing reference and opens saved CAD exports", async ({
+  page,
+}) => {
+  const workspace = studioWorkspace();
+  await studio(page, false, workspace);
+  await page.getByRole("button", { name: "Interchange", exact: true }).click();
+  const panel = page.getByRole("complementary", { name: "Interchange" });
+  await panel.getByRole("button", { name: "References", exact: true }).click();
+  await panel.getByLabel("DXF file").setInputFiles({
+    name: "Survey.dxf",
+    mimeType: "application/dxf",
+    buffer: Buffer.from(dxfFixture),
+  });
+  await panel.getByRole("button", { name: "Attach reference" }).click();
+  const drawing = page.locator("[data-drawing-reference]");
+  await expect(drawing.locator("path")).toHaveCount(4);
+  await expect(page.locator("[data-sketch]")).toHaveCount(0);
+  await panel.getByLabel("Reference X (mm)").fill("425");
+  await panel.getByRole("button", { name: "Save reference placement" }).click();
+  await expect(drawing).toHaveAttribute("transform", "translate(425 0)");
+  await panel.getByLabel("DXF file").setInputFiles({
+    name: "Resurvey.dxf",
+    mimeType: "application/dxf",
+    buffer: Buffer.from(dxfFixture),
+  });
+  await panel.getByRole("button", { name: "Refresh reference" }).click();
+  await expect(drawing).toHaveAttribute("data-source-version", "2");
+  await expect(drawing).toHaveAttribute("transform", "translate(425 0)");
+  await saveIfNeeded(page);
+  await panel.getByRole("button", { name: "Export CAD" }).click();
+  await expect(
+    panel.getByRole("link", { name: "Download typed DXF" }),
+  ).toHaveAttribute("href", /format=typed-dxf.*storeyId=ground/);
+  await expect(
+    panel.getByRole("link", { name: "Download IFC4 building" }),
+  ).toHaveAttribute("href", /format=ifc/);
+  await panel.getByRole("button", { name: "Close interchange" }).click();
+  await page.reload();
+  await expect(drawing).toHaveAttribute("data-source-version", "2");
   await frame(page);
 });
 

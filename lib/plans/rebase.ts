@@ -70,6 +70,11 @@ export function rebaseSnapshot(
       saved.documentItems,
     ),
     underlays: mergeItems(base.underlays, draft.underlays, saved.underlays),
+    drawingReferences: mergeItems(
+      base.drawingReferences,
+      draft.drawingReferences,
+      saved.drawingReferences,
+    ),
     wallTypes: mergeItems(base.wallTypes, draft.wallTypes, saved.wallTypes),
     drawingLayers: mergeItems(
       base.drawingLayers,

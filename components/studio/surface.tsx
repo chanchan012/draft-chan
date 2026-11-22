@@ -1,6 +1,7 @@
 "use client";
 
-import { UnderlayDrawing } from "./source-drawing";
+import { referencePoints } from "@/lib/plans/drawing-references";
+import { ReferenceDrawing, UnderlayDrawing } from "./source-drawing";
 import { underlayPoint } from "@/lib/plans/underlays";
 import { PlanMarks } from "./sheet-drawing";
 import { Crosshair, Focus, Minus, Plus } from "lucide-react";
@@ -199,6 +200,7 @@ export function Surface({
     if (iso) return points;
     return [
       ...points,
+      ...referencePoints(plan, storeyId),
       ...(plan.underlays ?? [])
         .filter((item) => item.visible && item.storeyId === storeyId)
         .flatMap((item) =>
@@ -808,6 +810,7 @@ export function Surface({
           transform={`translate(${origin.x} ${origin.y}) scale(${camera.scale})`}
         >
           {!iso && <UnderlayDrawing plan={plan} storeyId={storeyId} />}
+          {!iso && <ReferenceDrawing plan={plan} storeyId={storeyId} />}
           {iso ? (
             <IsometricDrawing
               plan={plan}

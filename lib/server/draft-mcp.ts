@@ -15,6 +15,15 @@ import {
   scheduleKinds,
   schedules,
 } from "../plans/construction-schedules";
+import {
+  createDrawingReference,
+  referenceMetadata,
+} from "../plans/drawing-references";
+import {
+  interchangeDownloadPath,
+  type InterchangeFormat,
+} from "../plans/interchange-export";
+import { interchangeFile } from "./interchange-export";
 import { dxfImportCommands, dxfUnits, stageDxf } from "../plans/dxf-import";
 import {
   underlayMetadata,
@@ -360,6 +369,8 @@ export function createDraftMcp(scope: AgentScope, backend = draftMcpBackend) {
         graph: {
           ...doc.graph,
           underlays: doc.graph.underlays?.map(underlayMetadata),
+          drawingReferences:
+            doc.graph.drawingReferences?.map(referenceMetadata),
         },
       };
     },
@@ -740,6 +751,193 @@ export function createDraftMcp(scope: AgentScope, backend = draftMcpBackend) {
       plan: commands(doc, [{ type: "underlay.remove", id }]),
       result: { id },
     }),
+  );
+
+  edit(
+    "attach_reference",
+    "Attach a read-only snapshot from ASCII DXF to a storey. Drawing references do not join editable geometry.",
+    z.strictObject({
+      ...revision,
+      ...dxfSource,
+      id: objectId,
+      name: z.string().trim().min(1).max(120),
+      storeyId: storeyIdInput,
+      offset: modelPointInput.optional(),
+    }),
+    (doc, input) => {
+      if (doc.graph.drawingReferences?.some(({ id }) => id === input.id))
+        throw new Error("That reference ID already exists.");
+      const stage = stageDxf(input.dxf, input.units);
+      const item = createDrawingReference(
+        stage,
+        input.name,
+        storeyById(doc.graph, input.storeyId).id,
+        input.id,
+        undefined,
+        undefined,
+        input.offset,
+      );
+      return {
+        plan: commands(doc, [{ type: "reference.write", item }]),
+        result: {
+          reference: referenceMetadata(item),
+          skipped: stage.unsupported,
+        },
+      };
+    },
+  );
+  edit(
+    "refresh_reference",
+    "Replace a reference's read-only DXF snapshot while retaining its storey, placement and visibility.",
+    z.strictObject({
+      ...revision,
+      ...dxfSource,
+      id: objectId,
+      name: z.string().trim().min(1).max(120).optional(),
+    }),
+    (doc, input) => {
+      const previous = doc.graph.drawingReferences?.find(
+        ({ id }) => id === input.id,
+      );
+      if (!previous) throw new Error("The reference is unavailable.");
+      const stage = stageDxf(input.dxf, input.units);
+      const item = createDrawingReference(
+        stage,
+        input.name ?? previous.name,
+        previous.storeyId,
+        input.id,
+        undefined,
+        previous,
+      );
+      return {
+        plan: commands(doc, [{ type: "reference.write", item }]),
+        result: {
+          reference: referenceMetadata(item),
+          skipped: stage.unsupported,
+        },
+      };
+    },
+  );
+  edit(
+    "place_reference",
+    "Set a read-only drawing reference's offset in millimeters and its visibility.",
+    z.strictObject({
+      ...revision,
+      id: objectId,
+      offset: modelPointInput,
+      visible: z.boolean(),
+    }),
+    (doc, { id, offset, visible }) => {
+      const item = doc.graph.drawingReferences?.find(
+        (reference) => reference.id === id,
+      );
+      if (!item) throw new Error("The reference is unavailable.");
+      const next = { ...item, offset, visible };
+      return {
+        plan: commands(doc, [{ type: "reference.write", item: next }]),
+        result: { reference: referenceMetadata(next) },
+      };
+    },
+  );
+  edit(
+    "detach_reference",
+    "Detach a read-only drawing reference and retain editable model entities.",
+    z.strictObject({ ...revision, id: objectId }),
+    (doc, { id }) => ({
+      plan: commands(doc, [{ type: "reference.remove", id }]),
+      result: { id },
+    }),
+  );
+  tool(
+    "list_references",
+    "List read-only drawing reference sources and placements for the current revision.",
+    z.strictObject({}),
+    true,
+    async () => {
+      const doc = await current();
+      return {
+        planId,
+        revision: doc.revision,
+        references: (doc.graph.drawingReferences ?? []).map(referenceMetadata),
+      };
+    },
+  );
+
+  async function exportInterchange(
+    format: InterchangeFormat,
+    revisionNumber: number,
+    includeData: boolean,
+    storeyId?: string,
+  ) {
+    const doc = await current();
+    const source =
+      doc.revision === revisionNumber
+        ? doc
+        : (
+            await (backend.transactions ?? revisionStore).revisions(
+              scope,
+              revisionNumber,
+              revisionNumber,
+            )
+          )[0];
+    if (!source)
+      throw new ToolFailure(
+        "revision_unavailable",
+        "That saved drawing revision is unavailable.",
+      );
+    if (format === "typed-dxf") {
+      try {
+        storeyById(source.graph, storeyId);
+      } catch {
+        throw new ToolFailure(
+          "storey_unavailable",
+          "That storey is unavailable in the saved revision.",
+        );
+      }
+    }
+    const path = interchangeDownloadPath(
+      planId,
+      revisionNumber,
+      format,
+      storeyId,
+    );
+    if (!includeData)
+      return { planId, revision: revisionNumber, format, downloadPath: path };
+    const file = interchangeFile(source, format, storeyId);
+    return {
+      planId,
+      revision: revisionNumber,
+      format,
+      downloadPath: path,
+      name: file.filename,
+      mediaType: file.type,
+      ...(file.content.length <= 120_000
+        ? { content: file.content }
+        : { note: "Download the full file from the signed-in Studio." }),
+    };
+  }
+  tool(
+    "export_typed_dxf",
+    "Export an editable storey drawing with typed LINE, LWPOLYLINE, CIRCLE and ARC sketches and named layers.",
+    z.strictObject({
+      revision: exportRevision,
+      storeyId: storeyIdInput,
+      includeData: z.boolean().default(false),
+    }),
+    true,
+    ({ revision, storeyId, includeData }) =>
+      exportInterchange("typed-dxf", revision, includeData, storeyId),
+  );
+  tool(
+    "export_ifc",
+    "Export IFC4 for the saved building's storeys, walls with material types, hosted doors and windows, and slabs with modeled voids.",
+    z.strictObject({
+      revision: exportRevision,
+      includeData: z.boolean().default(false),
+    }),
+    true,
+    ({ revision, includeData }) =>
+      exportInterchange("ifc", revision, includeData),
   );
 
   edit(

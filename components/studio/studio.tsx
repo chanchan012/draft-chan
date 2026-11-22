@@ -589,6 +589,9 @@ export function Studio({
             <InterchangePanel
               plan={building}
               storeyId={level.id}
+              planId={initial.id}
+              revision={checkpoint.revision}
+              dirty={dirty}
               onEdit={(commands) => {
                 executeBatch(commands, actor);
                 setIso(false);

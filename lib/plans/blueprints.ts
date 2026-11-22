@@ -6,6 +6,7 @@ import {
   point2d,
   point3d,
 } from "@tarikjabiri/dxf";
+import { writeDxfSketch } from "./typed-dxf";
 import { drivingDimensions } from "./constraints";
 import { utilityCatalog } from "./catalog";
 import {
@@ -21,12 +22,7 @@ import {
   wallLength,
   wallRuns,
 } from "./openings";
-import {
-  normalizeDegrees,
-  shiftSketch,
-  sketchPath,
-  sketchPoints,
-} from "./sketch";
+import { shiftSketch, sketchPath, sketchPoints } from "./sketch";
 import {
   elementsOnStorey,
   roofProfile,
@@ -176,30 +172,7 @@ function exportDxf({
   for (const geometry of sketches) {
     const layerName =
       geometry.kind === "construction" ? "CONSTRUCTION" : "SKETCH";
-    const options = { layerName };
-    switch (geometry.kind) {
-      case "construction":
-        writer.addLine(vertex(geometry.start), vertex(geometry.end), options);
-        break;
-      case "polyline":
-        writer.addLWPolyline(
-          geometry.points.map((p) => ({ point: point2d(p.x, -p.y) })),
-          { ...options, flags: geometry.closed ? LWPolylineFlags.Closed : 0 },
-        );
-        break;
-      case "circle":
-        writer.addCircle(vertex(geometry.center), geometry.radiusMm, options);
-        break;
-      case "arc":
-        writer.addArc(
-          vertex(geometry.center),
-          geometry.radiusMm,
-          normalizeDegrees(-geometry.startDeg - geometry.sweepDeg),
-          normalizeDegrees(-geometry.startDeg),
-          options,
-        );
-        break;
-    }
+    writeDxfSketch(writer, geometry, layerName);
   }
   for (const points of walls) polygon(points, "WALLS");
   for (const { hinge, closed, leaf, clockwise, radius } of doors) {
