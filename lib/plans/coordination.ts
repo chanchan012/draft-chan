@@ -111,6 +111,7 @@ export function validateCoordination(plan: DraftPlanState) {
   if (new Set(items.map(({ id }) => id)).size !== items.length)
     throw new Error("Coordination IDs must be unique.");
   let legs = 0;
+  const definedProfiles = new Set<string>();
   for (const item of items) {
     if (item.kind === "issue") continue;
     storeyById(plan, item.storeyId);
@@ -121,11 +122,26 @@ export function validateCoordination(plan: DraftPlanState) {
         throw new Error(
           "Adjacent service route points must differ by at least 1 mm.",
         );
-    } else {
+    } else if (item.kind === "zone") {
       validateRing(item.polygon, item.name);
       if (item.topMm <= item.bottomMm)
         throw new Error("An equipment zone must have positive height.");
     }
+    if (item.kind === "profile") {
+      if (definedProfiles.has(item.storeyId))
+        throw new Error("Keep one rule profile per storey.");
+      definedProfiles.add(item.storeyId);
+    }
+    if (
+      item.kind === "egress" &&
+      item.waypoints.some(
+        (point, i) =>
+          i > 0 &&
+          point.x === item.waypoints[i - 1].x &&
+          point.y === item.waypoints[i - 1].y,
+      )
+    )
+      throw new Error("Adjacent egress waypoints must be distinct.");
   }
   if (legs > 768)
     throw new Error("This plan can contain up to 768 service route segments.");
@@ -241,32 +257,39 @@ function hitPrism(segment: Segment, radius: number, solid: Prism) {
       : clamp(Math.max((low - segment.a.z) / dz, (high - segment.a.z) / dz));
   const a = at(segment, t1);
   const b = at(segment, t2);
-  const [polygon, ...holes] = solid.rings;
-  if (inRoom({ id: solid.subject.id, polygon, holes }, a)) return a;
-  for (const ring of solid.rings) {
+  const hit = segmentAgainstPlanPolygon(a, b, solid.rings, radius);
+  return hit === undefined ? undefined : at({ a, b }, hit);
+}
+
+export function segmentAgainstPlanPolygon(
+  a: Point,
+  b: Point,
+  rings: Point[][],
+  radius = 0,
+) {
+  const [polygon, ...holes] = rings;
+  if (inRoom({ id: "", polygon, holes }, a)) return 0;
+  for (const ring of rings) {
     for (let i = 0; i < ring.length; i++) {
       const edge = {
         a: flatten(ring[i]),
         b: flatten(ring[(i + 1) % ring.length]),
       };
-      const nearestPoint = nearest({ a: flatten(a), b: flatten(b) }, edge);
-      if (nearestPoint.distance <= radius + epsilon)
-        return at({ a, b }, nearestPoint.s);
+      const result = nearest({ a: flatten(a), b: flatten(b) }, edge);
+      if (result.distance <= radius + epsilon) return result.s;
     }
   }
-  if (inRoom({ id: solid.subject.id, polygon, holes }, b)) return b;
+  if (inRoom({ id: "", polygon, holes }, b)) return 1;
 }
 
 function pathSegments(plan: DraftPlanState, route: ServiceRoute) {
   const points = routePoints(plan, route);
-  return points
-    .slice(1)
-    .map((b, i) => ({
-      a: points[i],
-      b,
-      startNode: route.nodes[i],
-      endNode: route.nodes[i + 1],
-    }));
+  return points.slice(1).map((b, i) => ({
+    a: points[i],
+    b,
+    startNode: route.nodes[i],
+    endNode: route.nodes[i + 1],
+  }));
 }
 
 export function coordinationFinding(input: Omit<CoordinationFinding, "key">) {

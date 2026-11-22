@@ -1,6 +1,7 @@
 import { test, expect, type Page } from "@playwright/test";
 import { PDFDocument, rgb } from "pdf-lib";
 import { coordinationFixture } from "../coordination-fixture";
+import { reviewFixture } from "../review-fixture";
 import { dxfFixture } from "../dxf-fixture";
 import { readFileSync } from "node:fs";
 import {
@@ -1146,6 +1147,58 @@ test("highlights a slab clash and tracks its issue against the saved revision", 
       (item) => item.kind === "issue",
     ),
   ).toMatchObject({ sourceRevision: 4, status: "resolved" });
+  await frame(page);
+});
+
+test("screens code inputs and shows door approach geometry", async ({
+  page,
+}) => {
+  const workspace = studioWorkspace();
+  workspace.document.graph = reviewFixture();
+  await studio(page, false, workspace);
+  await page.getByRole("button", { name: "Coordination", exact: true }).click();
+  const panel = page.getByRole("complementary", { name: "Coordination" });
+  await panel.getByRole("button", { name: "Rules", exact: true }).click();
+  const approach = panel
+    .locator("article")
+    .filter({ hasText: "Entry door approach" });
+  const travel = panel
+    .locator("article")
+    .filter({ hasText: "Exit route · travel distance" });
+  await expect(approach).toHaveAttribute("data-review-status", "fail");
+  await expect(travel).toHaveAttribute("data-review-status", "needs_input");
+  await expect(page.locator('[data-egress-path="exit-route"]')).toHaveAttribute(
+    "points",
+    "3000,2500 3000,0",
+  );
+  await approach.getByRole("button", { name: "Show finding" }).click();
+  await expect(
+    page.locator('[data-coordination-finding="ADA 404.2.4.1"]'),
+  ).toHaveCount(1);
+  if (!(await panel.isVisible())) {
+    await page
+      .getByRole("button", { name: "Coordination", exact: true })
+      .click();
+    await panel.getByRole("button", { name: "Rules", exact: true }).click();
+  }
+  await approach.getByRole("button", { name: "Create issue" }).click();
+  await saveIfNeeded(page);
+  const issue = workspace.document.graph.coordination?.find(
+    (item) => item.kind === "issue",
+  );
+  if (!issue) throw new Error("Expected saved accessibility issue");
+  await page.route(
+    "**" + "/api/floorplans/" + id + "/coordination-issues/" + issue.id,
+    (route) =>
+      route.fulfill({
+        json: { sourceRevision: 0, reproduced: { matches: true } },
+      }),
+  );
+  await panel.getByRole("button", { name: "Issues", exact: true }).click();
+  await panel.getByRole("button", { name: "Reproduce issue" }).click();
+  await expect(panel.getByRole("status")).toHaveText(
+    "Finding reproduced at revision 0.",
+  );
   await frame(page);
 });
 
