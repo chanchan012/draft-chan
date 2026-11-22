@@ -368,6 +368,7 @@ it("lays out a two-bedroom plan using all MCP resources and tools over HTTP", as
       "add_leader",
       "apply_changes",
       "array_entities",
+      "attach_reference",
       "attach_underlay",
       "calculate_bom",
       "calibrate_underlay",
@@ -380,6 +381,7 @@ it("lays out a two-bedroom plan using all MCP resources and tools over HTTP", as
       "create_slab",
       "create_storey",
       "define_block",
+      "detach_reference",
       "diff_revisions",
       "dimension_chain",
       "draw_arc",
@@ -390,6 +392,8 @@ it("lays out a two-bedroom plan using all MCP resources and tools over HTTP", as
       "edit_block_definition",
       "edit_corner",
       "explain_constraints",
+      "export_ifc",
+      "export_typed_dxf",
       "furnish_room_preset",
       "generate_schedule",
       "get_job_status",
@@ -397,6 +401,7 @@ it("lays out a two-bedroom plan using all MCP resources and tools over HTTP", as
       "insert_block",
       "inspect_entity",
       "inspect_import",
+      "list_references",
       "list_sheet_issues",
       "list_underlays",
       "manage_layer",
@@ -404,6 +409,7 @@ it("lays out a two-bedroom plan using all MCP resources and tools over HTTP", as
       "offset_geometry",
       "place_fixture",
       "place_opening",
+      "place_reference",
       "place_stair",
       "place_viewport",
       "preview_changes",
@@ -412,6 +418,7 @@ it("lays out a two-bedroom plan using all MCP resources and tools over HTTP", as
       "query_drawing_documents",
       "query_entities",
       "query_spaces",
+      "refresh_reference",
       "remove_building_item",
       "remove_constraint",
       "remove_document_items",
@@ -1284,7 +1291,7 @@ it("bridges stdio to the authenticated HTTP tools without sharing the database c
         },
       }),
     );
-    expect((await client.listTools()).tools).toHaveLength(65);
+    expect((await client.listTools()).tools).toHaveLength(72);
     expect((await client.listResources()).resources).toHaveLength(3);
     expect(
       (await client.readResource({ uri: "draft://floorplan-graph" })).contents,
@@ -1522,6 +1529,81 @@ it("stages and commits a DXF and calibrates a saved underlay through MCP", async
       uri: "draft://floorplan-graph",
     });
     expect(JSON.stringify(result)).not.toContain("data:image/jpeg");
+  } finally {
+    await client.close();
+  }
+});
+
+it("attaches, refreshes and exports read-only CAD references through MCP", async () => {
+  const { dxfFixture } = await import("./dxf-fixture");
+  const { ifcFixture } = await import("./ifc-fixture");
+  const session = await planWithToken();
+  const seeded = await session.api.request(
+    session.path + "/graph",
+    payload("PATCH", {
+      revision: 0,
+      ...studioSnapshot(ifcFixture().graph, "mm"),
+    }),
+  );
+  expect(await seeded.json()).toEqual({ revision: 1 });
+  const client = await connect(createMcpHttp(localWindow(100)), session.token);
+  const call = (name: string, args: Record<string, unknown>) =>
+    client.callTool({ name, arguments: args });
+  try {
+    expect(
+      await call("attach_reference", {
+        expectedRevision: 1,
+        dxf: dxfFixture,
+        id: "survey",
+        name: "Survey",
+        storeyId: "upper",
+        offset: { x: 150, y: -30 },
+      }),
+    ).toMatchObject({
+      isError: false,
+      structuredContent: {
+        revision: 2,
+        reference: { version: 1, entities: 4, storeyId: "upper" },
+      },
+    });
+    expect(
+      await call("refresh_reference", {
+        expectedRevision: 2,
+        dxf: dxfFixture,
+        id: "survey",
+        units: "mm",
+      }),
+    ).toMatchObject({
+      isError: false,
+      structuredContent: {
+        revision: 3,
+        reference: { version: 2, unit: "mm", offset: { x: 150, y: -30 } },
+      },
+    });
+    expect(await call("list_references", {})).toMatchObject({
+      isError: false,
+      structuredContent: { references: [{ id: "survey", entities: 4 }] },
+    });
+    const ifc = await call("export_ifc", { revision: 1, includeData: true });
+    expect(ifc).toMatchObject({
+      isError: false,
+      structuredContent: {
+        revision: 1,
+        content: expect.stringContaining("IFCWALLTYPE"),
+      },
+    });
+    const dxf = await call("export_typed_dxf", {
+      revision: 3,
+      storeyId: "upper",
+      includeData: true,
+    });
+    expect(dxf).toMatchObject({
+      isError: false,
+      structuredContent: {
+        revision: 3,
+        content: expect.stringContaining("$INSUNITS"),
+      },
+    });
   } finally {
     await client.close();
   }

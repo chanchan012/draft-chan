@@ -14,6 +14,7 @@ import {
   constraintLimit,
   documentItemLimit,
   underlayLimit,
+  drawingReferenceLimit,
   doorSchema,
   fixtureSchema,
   placementLimit,
@@ -39,6 +40,7 @@ import {
   reconcileOrganization,
   upsertLayer,
 } from "./organization";
+import { validateDrawingReferences } from "./drawing-references";
 import { validateUnderlays } from "./underlays";
 import { validateDocuments } from "./drawing-documents";
 import { validateBuilding } from "./building";
@@ -124,6 +126,22 @@ function applyEdit(
   actor: DraftActor,
 ) {
   switch (command.type) {
+    case "reference.write": {
+      const items = (draft.drawingReferences ??= []);
+      const index = items.findIndex(({ id }) => id === command.item.id);
+      if (index >= 0) {
+        if (JSON.stringify(items[index]) !== JSON.stringify(command.item))
+          items[index] = command.item;
+      } else {
+        if (items.length >= drawingReferenceLimit)
+          throw new Error("The plan has reached the drawing reference limit.");
+        items.push(command.item);
+        items.sort((a, b) => compareText(a.id, b.id));
+      }
+      return;
+    }
+    case "reference.remove":
+      return editPlacement(draft.drawingReferences ?? [], command.id, actor);
     case "underlay.write": {
       const items = (draft.underlays ??= []);
       const index = items.findIndex(({ id }) => id === command.item.id);
@@ -518,6 +536,7 @@ export function createDraftPlanStore(input: unknown = initialGraph()) {
         validateBuilding(draft);
         validateDocuments(draft, plan);
         validateUnderlays(draft);
+        validateDrawingReferences(draft);
         if (
           wallsChanged ||
           hasOrganization(draft) ||

@@ -1,4 +1,5 @@
 import {
+  dxfUnits,
   placementLimit,
   sketchSchema,
   type DraftPlanState,
@@ -9,7 +10,7 @@ import {
 import { normalizeDegrees } from "./sketch";
 import { storeyById } from "./storeys";
 
-export const dxfUnits = ["mm", "cm", "m", "in", "ft"] as const;
+export { dxfUnits };
 export type DxfUnit = (typeof dxfUnits)[number];
 const units = new Map<number, DxfUnit>([
   [1, "in"],

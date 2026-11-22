@@ -571,7 +571,46 @@ export const underlayLimit = 4;
 export type Underlay = z.infer<typeof underlayInput>;
 export type UnderlayCalibration = z.infer<typeof underlayCalibrationInput>;
 
+export const dxfUnits = ["mm", "cm", "m", "in", "ft"] as const;
+export const drawingReferenceInput = z.strictObject({
+  id: identifier,
+  name: z.string().trim().min(1).max(120),
+  storeyId: identifier,
+  version: z.int().positive().max(2_147_483_647),
+  unit: z.enum(dxfUnits),
+  offset: modelPointInput,
+  visible: z.boolean(),
+  layers: z
+    .array(
+      z.strictObject({
+        name: z.string().min(1).max(80),
+        color: z.string().regex(/^#[0-9a-fA-F]{6}$/),
+        lineStyle: z.enum(["solid", "dashed", "dotted"]),
+      }),
+    )
+    .min(1)
+    .max(64),
+  shapes: z
+    .array(
+      z.strictObject({
+        layer: z.string().min(1).max(80),
+        geometry: sketchGeometry,
+      }),
+    )
+    .min(1)
+    .max(512),
+});
+export const drawingReferenceLimit = 6;
+export type DrawingReference = z.infer<typeof drawingReferenceInput>;
+
 export const planCommandSchema = z.union([
+  z.discriminatedUnion("type", [
+    z.strictObject({
+      type: z.literal("reference.write"),
+      item: drawingReferenceInput,
+    }),
+    z.strictObject({ type: z.literal("reference.remove"), id: identifier }),
+  ]),
   z.discriminatedUnion("type", [
     z.strictObject({ type: z.literal("underlay.write"), item: underlayInput }),
     z.strictObject({ type: z.literal("underlay.remove"), id: identifier }),
@@ -705,6 +744,10 @@ export const draftPlanSchema = z.looseObject({
   dimensions: z.array(z.unknown()),
   documentItems: z.array(documentItemInput).max(documentItemLimit).optional(),
   underlays: z.array(underlayInput).max(underlayLimit).optional(),
+  drawingReferences: z
+    .array(drawingReferenceInput)
+    .max(drawingReferenceLimit)
+    .optional(),
   buildingElements: z.array(buildingElementInput).max(256).optional(),
   buildingViews: z.array(buildingViewInput).max(80).optional(),
   storeys: z.array(storeyInput).max(32).optional(),
