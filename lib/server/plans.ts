@@ -3,6 +3,7 @@ import { openDatabase } from "../../db/client";
 import { floorplanEditBatches, floorplans } from "../../db/schema";
 import { floorplanProjectMembers as members } from "../../db/schema";
 import { planPermission, projectKey } from "./project-access";
+import type { EditOperation } from "./operations";
 import {
   areaM2,
   initialGraph,
@@ -97,6 +98,7 @@ export const plans = {
     id: string,
     input: StudioSave,
     author: DraftActor = { kind: "human", id: owner },
+    operation?: EditOperation,
   ) {
     const db = openDatabase();
     const atRevision = and(
@@ -117,6 +119,24 @@ export const plans = {
         status: "invalid",
         error: error instanceof Error ? error.message : "Invalid geometry",
       } as const;
+    }
+    if (author.kind === "ai" && operation) {
+      const result = await db.execute<{ revision: number }>(sql`
+        WITH saved AS (
+          UPDATE public.floorplans
+          SET graph = ${JSON.stringify(graph)}::jsonb, unit = ${input.unit}::display_unit,
+              revision = revision + 1, thumbnail = NULL, updated_at = now()
+          WHERE ${atRevision} RETURNING id, revision
+        )
+        INSERT INTO public.floorplan_edit_operations
+          (id, floorplan_id, agent_id, tool, request_hash, base_revision, revision, receipt)
+        SELECT ${operation.id}::uuid, id, ${author.id}, ${operation.tool}, ${operation.requestHash},
+          ${input.revision}, revision, ${JSON.stringify(operation.receipt)}::jsonb
+        FROM saved RETURNING revision
+      `);
+      return result.rows[0]
+        ? ({ status: "saved", revision: result.rows[0].revision } as const)
+        : ({ status: "conflict" } as const);
     }
     const [saved] = await db
       .update(floorplans)

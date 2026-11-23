@@ -4,6 +4,7 @@ import {
   type CallToolResult,
   type ToolCallback,
 } from "@modelcontextprotocol/server";
+import { createHash } from "node:crypto";
 import { z } from "zod";
 import {
   cadEditCommands,
@@ -140,6 +141,7 @@ import { queueBlueprint } from "./blueprint-jobs";
 import { liveBus, planChannel, publishPlanPresence } from "./live-bus";
 import { plans } from "./plans";
 import { queueThumbnail } from "./thumbnails";
+import { getEditOperation, traceOperation } from "./operations";
 import { optionInput, restoreInput, reviewInput } from "../plans/projects";
 import {
   compareDesignOptions,
@@ -164,6 +166,13 @@ const revision = {
     "Current revision from floorplan-graph.",
   ),
 };
+const saveRevision = {
+  ...revision,
+  operationId: z
+    .uuid()
+    .optional()
+    .describe("Client UUID for safe retries and operation status."),
+};
 const catalog = {
   fixtures: fixtureCatalog,
   utilities: utilityCatalog,
@@ -180,6 +189,7 @@ export interface DraftMcpBackend {
   get: typeof plans.getStudio;
   transactions?: typeof revisionStore;
   save: typeof plans.saveStudio;
+  getOperation?: typeof getEditOperation;
   publish(
     scope: AgentScope,
     revision: number,
@@ -193,6 +203,7 @@ export const draftMcpBackend: DraftMcpBackend = {
   get: plans.getStudio,
   transactions: revisionStore,
   save: plans.saveStudio,
+  getOperation: getEditOperation,
   async publish(scope, revision, cursor, storeyId) {
     const { owner, planId, agentId } = scope;
     const work = [
@@ -223,8 +234,11 @@ export const draftMcpBackend: DraftMcpBackend = {
         "revision_conflict",
         "Read the latest floorplan revision and try again.",
       );
+    const operation = { kind: "export" as const, id: requested.blueprint.id };
+    traceOperation({ ...operation, planId, revision, stage: "requested" });
     if (requested.queue) await queueBlueprint(requested.queue).catch(() => {});
     return {
+      operation,
       export: requested.blueprint,
       downloadPath: `/api/floorplans/${planId}/exports/${requested.blueprint.id}/download`,
     };
@@ -338,23 +352,62 @@ export function createDraftMcp(scope: AgentScope, backend = draftMcpBackend) {
       invoke,
     );
   }
-  function edit<T extends z.ZodType<{ expectedRevision: number }>>(
+  function edit<
+    T extends z.ZodType<{ expectedRevision: number; operationId?: string }>,
+  >(
     name: string,
     description: string,
     schema: T,
     transform: (doc: StudioDocument, input: z.output<T>) => AgentEdit,
   ) {
     tool(name, description, schema, false, async (input) => {
+      const { operationId, ...parameters } = input;
+      const operation = {
+        kind: "edit" as const,
+        id: operationId ?? crypto.randomUUID(),
+      };
+      const requestHash = createHash("sha256")
+        .update(JSON.stringify([name, parameters]))
+        .digest("hex");
+      async function receipt() {
+        const prior = await backend.getOperation?.(scope, operation.id);
+        if (prior && prior.requestHash !== requestHash)
+          throw new ToolFailure(
+            "operation_id_conflict",
+            "Use a new operation ID when the tool or inputs change.",
+          );
+        if (prior)
+          traceOperation({
+            ...operation,
+            stage: "replayed",
+            tool: name,
+            planId,
+            revision: prior.revision,
+          });
+        return prior?.receipt as Record<string, unknown> | undefined;
+      }
+      traceOperation({
+        ...operation,
+        stage: "received",
+        tool: name,
+        planId,
+        revision: input.expectedRevision,
+      });
+      const prior = await receipt();
+      if (prior) return prior;
       const doc = await current();
-      if (doc.revision !== input.expectedRevision)
+      if (doc.revision !== input.expectedRevision) {
+        const concurrent = await receipt();
+        if (concurrent) return concurrent;
         throw new ToolFailure(
           "revision_conflict",
           "Read floorplan-graph and retry with its current revision.",
         );
+      }
       let changed: AgentEdit;
       let snapshot;
       try {
-        changed = transform(doc, input);
+        changed = transform(doc, parameters as z.output<T>);
         snapshot = saveStudioSchema.parse({
           revision: doc.revision,
           ...studioSnapshot(changed.plan, doc.unit),
@@ -369,18 +422,50 @@ export function createDraftMcp(scope: AgentScope, backend = draftMcpBackend) {
           error instanceof Error ? error.message : "Invalid geometry.",
         );
       }
-      const saved = await backend.save(owner, planId, snapshot, actor);
-      if (saved.status === "conflict")
+      const next = {
+        planId,
+        revision: doc.revision + 1,
+        ...changed.result,
+        ...(backend.getOperation && { operation }),
+      };
+      const saved = await backend
+        .save(
+          owner,
+          planId,
+          snapshot,
+          actor,
+          backend.getOperation && {
+            id: operation.id,
+            requestHash,
+            tool: name,
+            receipt: next,
+          },
+        )
+        .catch(async (error: unknown) => {
+          if (await receipt()) return { status: "conflict" } as const;
+          throw error;
+        });
+      if (saved.status === "conflict") {
+        const concurrent = await receipt();
+        if (concurrent) return concurrent;
         throw new ToolFailure(
           "revision_conflict",
           "Another editor saved first. Read floorplan-graph and retry.",
         );
+      }
       if (saved.status === "invalid")
         throw new ToolFailure("invalid_geometry", saved.error);
+      traceOperation({
+        ...operation,
+        stage: "saved",
+        tool: name,
+        planId,
+        revision: saved.revision,
+      });
       await backend
         .publish(scope, saved.revision, changed.cursor, changed.cursorStoreyId)
         .catch(() => {});
-      return { planId, revision: saved.revision, ...changed.result };
+      return { ...next, revision: saved.revision };
     });
   }
 
@@ -512,7 +597,7 @@ export function createDraftMcp(scope: AgentScope, backend = draftMcpBackend) {
     "dimension_chain",
     "Create or update a storey dimension chain with wall endpoints, opening or fixture centers, or fixed millimeter points. The offset places the chain outside its anchors.",
     z.strictObject({
-      ...revision,
+      ...saveRevision,
       chain: documentItems[0].omit({ kind: true }),
     }),
     (doc, { chain }) => writeDocument(doc, [{ kind: "chain", ...chain }]),
@@ -521,7 +606,7 @@ export function createDraftMcp(scope: AgentScope, backend = draftMcpBackend) {
     "add_leader",
     "Create or update a leader label tied to a storey geometry anchor.",
     z.strictObject({
-      ...revision,
+      ...saveRevision,
       leader: documentItems[1].omit({ kind: true }),
     }),
     (doc, { leader }) => writeDocument(doc, [{ kind: "leader", ...leader }]),
@@ -530,7 +615,7 @@ export function createDraftMcp(scope: AgentScope, backend = draftMcpBackend) {
     "tag_entities",
     "Associate unique tags with native doors, windows or fixtures. Writes all tags in one revision.",
     z.strictObject({
-      ...revision,
+      ...saveRevision,
       tags: z
         .array(documentItems[2].omit({ kind: true }))
         .min(1)
@@ -546,7 +631,7 @@ export function createDraftMcp(scope: AgentScope, backend = draftMcpBackend) {
     "add_hatch",
     "Create or update a diagonal or crosshatch clipped to a simple model-space polygon.",
     z.strictObject({
-      ...revision,
+      ...saveRevision,
       hatch: documentItems[3].omit({ kind: true }),
     }),
     (doc, { hatch }) => writeDocument(doc, [{ kind: "hatch", ...hatch }]),
@@ -555,7 +640,7 @@ export function createDraftMcp(scope: AgentScope, backend = draftMcpBackend) {
     "save_named_view",
     "Save a storey plan, section or elevation view with a center in drawing millimeters. Vertical views use negative elevation on the Y axis.",
     z.strictObject({
-      ...revision,
+      ...saveRevision,
       view: documentItems[4].omit({ kind: true }),
     }),
     (doc, { view }) => writeDocument(doc, [{ kind: "view", ...view }]),
@@ -564,7 +649,7 @@ export function createDraftMcp(scope: AgentScope, backend = draftMcpBackend) {
     "create_sheet",
     "Create or update a numbered A2, A3 or A4 drawing sheet with an explicit orientation.",
     z.strictObject({
-      ...revision,
+      ...saveRevision,
       sheet: documentItems[5].omit({ kind: true }),
     }),
     (doc, { sheet }) => writeDocument(doc, [{ kind: "sheet", ...sheet }]),
@@ -573,7 +658,7 @@ export function createDraftMcp(scope: AgentScope, backend = draftMcpBackend) {
     "place_viewport",
     "Place or update a named view on a sheet. Use paper millimeters from top left and a scale denominator such as 50 for 1:50.",
     z.strictObject({
-      ...revision,
+      ...saveRevision,
       viewport: documentItems[6].omit({ kind: true }),
     }),
     (doc, { viewport }) =>
@@ -582,7 +667,7 @@ export function createDraftMcp(scope: AgentScope, backend = draftMcpBackend) {
   edit(
     "remove_document_items",
     "Remove annotation, viewport, named view or sheet IDs together. Include dependent viewports when deleting their sheet or view.",
-    z.strictObject({ ...revision, ids: z.array(objectId).min(1).max(64) }),
+    z.strictObject({ ...saveRevision, ids: z.array(objectId).min(1).max(64) }),
     (doc, { ids }) => ({
       plan: commands(
         doc,
@@ -624,7 +709,7 @@ export function createDraftMcp(scope: AgentScope, backend = draftMcpBackend) {
     "set_room_finish",
     "Assign floor, wall and ceiling finishes to the enclosed room at a model point on the specified storey.",
     z.strictObject({
-      ...revision,
+      ...saveRevision,
       finish: documentItems[7].omit({ kind: true }),
     }),
     (doc, { finish }) => {
@@ -674,7 +759,7 @@ export function createDraftMcp(scope: AgentScope, backend = draftMcpBackend) {
   tool(
     "publish_sheet_set",
     "Queue a vector PDF issue of the sheet set and schedules from a saved revision. Subsequent requests reuse the same issue.",
-    z.strictObject({ ...revision }),
+    z.strictObject(revision),
     false,
     async ({ expectedRevision }) => {
       const requested = await requestBlueprint(owner, planId, {
@@ -688,10 +773,19 @@ export function createDraftMcp(scope: AgentScope, backend = draftMcpBackend) {
           "revision_unavailable",
           "That source revision is unavailable.",
         );
+      const operation = { kind: "export" as const, id: requested.blueprint.id };
+      traceOperation({
+        ...operation,
+        stage: "requested",
+        planId,
+        revision: expectedRevision,
+        tool: "publish_sheet_set",
+      });
       if (requested.queue)
         await queueBlueprint(requested.queue).catch(() => {});
       return {
         planId,
+        operation,
         issue: requested.blueprint,
         downloadPath: `/api/floorplans/${planId}/exports/${requested.blueprint.id}/download`,
       };
@@ -714,6 +808,32 @@ export function createDraftMcp(scope: AgentScope, backend = draftMcpBackend) {
         job,
         downloadPath: `/api/floorplans/${planId}/exports/${jobId}/download`,
       };
+    },
+  );
+  tool(
+    "get_operation_status",
+    "Look up a saved MCP edit, batch receipt, or blueprint operation in the connected plan by its operation ID.",
+    z.strictObject({ kind: z.enum(["edit", "batch", "export"]), id: z.uuid() }),
+    true,
+    async ({ kind, id }) => {
+      const operation = { kind, id };
+      if (kind === "edit") {
+        const saved = await backend.getOperation?.(scope, id);
+        if (saved) {
+          const { requestHash: _requestHash, ...details } = saved;
+          return { operation, planId, status: "saved", ...details };
+        }
+      } else if (kind === "batch") {
+        const receipt = await backend.transactions?.getReceipt(scope, id);
+        if (receipt) return { operation, status: "saved", ...receipt };
+      } else {
+        const job = await getBlueprintStatus(owner, planId, id);
+        if (job) return { operation, planId, ...job };
+      }
+      throw new ToolFailure(
+        "operation_unavailable",
+        "That operation is unavailable in this connection.",
+      );
     },
   );
   tool(
@@ -762,7 +882,7 @@ export function createDraftMcp(scope: AgentScope, backend = draftMcpBackend) {
     "import_dxf",
     "Import supported DXF geometry as native 2D sketches on named layers in one saved revision. Inspect the source and resolve units first.",
     z.strictObject({
-      ...revision,
+      ...saveRevision,
       ...dxfSource,
       storeyId: storeyIdInput,
       layers: z.array(z.string().max(80)).max(64).optional(),
@@ -787,7 +907,7 @@ export function createDraftMcp(scope: AgentScope, backend = draftMcpBackend) {
   edit(
     "attach_underlay",
     "Attach a small JPEG preview with its source metadata, calibration and storey. Use Studio for PDF rasterization or assets that exceed the MCP request limit.",
-    z.strictObject({ ...revision, underlay: underlayInput }),
+    z.strictObject({ ...saveRevision, underlay: underlayInput }),
     (doc, { underlay }) => {
       if (doc.graph.underlays?.some((item) => item.id === underlay.id))
         throw new Error("That underlay ID is already attached.");
@@ -801,7 +921,7 @@ export function createDraftMcp(scope: AgentScope, backend = draftMcpBackend) {
     "calibrate_underlay",
     "Update the similarity transform using two image pixel and model millimeter pairs. Optionally return coordinates for a third check point.",
     z.strictObject({
-      ...revision,
+      ...saveRevision,
       id: objectId,
       calibration: underlayCalibrationInput,
       checkPixel: z
@@ -850,7 +970,7 @@ export function createDraftMcp(scope: AgentScope, backend = draftMcpBackend) {
   edit(
     "remove_underlay",
     "Detach an underlay from the connected floorplan.",
-    z.strictObject({ ...revision, id: objectId }),
+    z.strictObject({ ...saveRevision, id: objectId }),
     (doc, { id }) => ({
       plan: commands(doc, [{ type: "underlay.remove", id }]),
       result: { id },
@@ -861,7 +981,7 @@ export function createDraftMcp(scope: AgentScope, backend = draftMcpBackend) {
     "attach_reference",
     "Attach a read-only snapshot from ASCII DXF to a storey. Drawing references do not join editable geometry.",
     z.strictObject({
-      ...revision,
+      ...saveRevision,
       ...dxfSource,
       id: objectId,
       name: z.string().trim().min(1).max(120),
@@ -894,7 +1014,7 @@ export function createDraftMcp(scope: AgentScope, backend = draftMcpBackend) {
     "refresh_reference",
     "Replace a reference's read-only DXF snapshot while retaining its storey, placement and visibility.",
     z.strictObject({
-      ...revision,
+      ...saveRevision,
       ...dxfSource,
       id: objectId,
       name: z.string().trim().min(1).max(120).optional(),
@@ -926,7 +1046,7 @@ export function createDraftMcp(scope: AgentScope, backend = draftMcpBackend) {
     "place_reference",
     "Set a read-only drawing reference's offset in millimeters and its visibility.",
     z.strictObject({
-      ...revision,
+      ...saveRevision,
       id: objectId,
       offset: modelPointInput,
       visible: z.boolean(),
@@ -946,7 +1066,7 @@ export function createDraftMcp(scope: AgentScope, backend = draftMcpBackend) {
   edit(
     "detach_reference",
     "Detach a read-only drawing reference and retain editable model entities.",
-    z.strictObject({ ...revision, id: objectId }),
+    z.strictObject({ ...saveRevision, id: objectId }),
     (doc, { id }) => ({
       plan: commands(doc, [{ type: "reference.remove", id }]),
       result: { id },
@@ -1048,7 +1168,7 @@ export function createDraftMcp(scope: AgentScope, backend = draftMcpBackend) {
     "route_service",
     "Create or replace a connected electrical or plumbing route. Each node uses storey-relative elevation in millimeters and can follow a utility symbol.",
     z.strictObject({
-      ...revision,
+      ...saveRevision,
       route: serviceRouteInput.omit({ kind: true }),
     }),
     (doc, { route }) => {
@@ -1064,7 +1184,7 @@ export function createDraftMcp(scope: AgentScope, backend = draftMcpBackend) {
     "write_equipment_zone",
     "Create or replace a storey-local equipment zone with a simple plan polygon and top and bottom elevations.",
     z.strictObject({
-      ...revision,
+      ...saveRevision,
       zone: equipmentZoneInput.omit({ kind: true }),
     }),
     (doc, { zone }) => ({
@@ -1077,7 +1197,7 @@ export function createDraftMcp(scope: AgentScope, backend = draftMcpBackend) {
   edit(
     "remove_coordination_item",
     "Remove an editable service route, equipment zone, rule profile, or authored review check. Keeps recorded issues.",
-    z.strictObject({ ...revision, id: objectId }),
+    z.strictObject({ ...saveRevision, id: objectId }),
     (doc, { id }) => {
       const item = doc.graph.coordination?.find((entry) => entry.id === id);
       if (!item || item.kind === "issue")
@@ -1151,7 +1271,7 @@ export function createDraftMcp(scope: AgentScope, backend = draftMcpBackend) {
     "create_issue",
     "Record a current clash or code-review finding using its key and saved revision.",
     z.strictObject({
-      ...revision,
+      ...saveRevision,
       findingKey: z.string().min(1).max(1000),
       note: z.string().trim().max(400).default(""),
     }),
@@ -1172,7 +1292,7 @@ export function createDraftMcp(scope: AgentScope, backend = draftMcpBackend) {
     "resolve_issue",
     "Resolve or reopen a tracked issue and preserve its original finding and revision.",
     z.strictObject({
-      ...revision,
+      ...saveRevision,
       id: objectId,
       status: z.enum(["open", "resolved"]).default("resolved"),
     }),
@@ -1193,7 +1313,7 @@ export function createDraftMcp(scope: AgentScope, backend = draftMcpBackend) {
     "set_rule_profile",
     "Save the versioned US model-code profile for one storey. Omit occupancy or sprinkler configuration when unknown.",
     z.strictObject({
-      ...revision,
+      ...saveRevision,
       profile: ruleProfileInput.omit({ kind: true }),
     }),
     (doc, { profile }) => {
@@ -1214,7 +1334,10 @@ export function createDraftMcp(scope: AgentScope, backend = draftMcpBackend) {
   edit(
     "write_egress_path",
     "Save an authored same-storey egress polyline. The final point follows the designated exit door on the saved graph.",
-    z.strictObject({ ...revision, path: egressPathInput.omit({ kind: true }) }),
+    z.strictObject({
+      ...saveRevision,
+      path: egressPathInput.omit({ kind: true }),
+    }),
     (doc, { path }) => ({
       plan: commands(doc, [
         { type: "coordination.write", item: { kind: "egress", ...path } },
@@ -1225,7 +1348,7 @@ export function createDraftMcp(scope: AgentScope, backend = draftMcpBackend) {
   edit(
     "write_access_check",
     "Save a 2010 ADA front door approach or a circular turning-space check for a storey.",
-    z.strictObject({ ...revision, check: accessCheckInput }),
+    z.strictObject({ ...saveRevision, check: accessCheckInput }),
     (doc, { check }) => ({
       plan: commands(doc, [{ type: "coordination.write", item: check }]),
       result: { id: check.id },
@@ -1321,7 +1444,7 @@ export function createDraftMcp(scope: AgentScope, backend = draftMcpBackend) {
     "create_storey",
     "Add a named storey with a distinct elevation and wall height in millimeters. Legacy plans have a ground storey named Ground floor.",
     z.strictObject({
-      ...revision,
+      ...saveRevision,
       storey: storeyInput,
     }),
     (doc, { storey }) => {
@@ -1337,7 +1460,7 @@ export function createDraftMcp(scope: AgentScope, backend = draftMcpBackend) {
     "update_storey",
     "Set the name, elevation and wall height of an existing storey.",
     z.strictObject({
-      ...revision,
+      ...saveRevision,
       storey: storeyInput,
     }),
     (doc, { storey }) => {
@@ -1353,7 +1476,7 @@ export function createDraftMcp(scope: AgentScope, backend = draftMcpBackend) {
     "Define or update an assembly and optionally assign it to walls. A positive or negative reference is the matching face, and its authored coordinates stay fixed.",
     z
       .strictObject({
-        ...revision,
+        ...saveRevision,
         wallType: wallTypeInput.optional(),
         wallTypeId: objectId.nullable().optional(),
         wallIds: z.array(objectId).min(1).max(128).optional(),
@@ -1427,7 +1550,7 @@ export function createDraftMcp(scope: AgentScope, backend = draftMcpBackend) {
     "create_slab",
     "Create or replace a slab by ID. Supply a simple footprint in millimeters and a storey. Offset is measured from that storey's elevation to the slab top.",
     z.strictObject({
-      ...revision,
+      ...saveRevision,
       slab: buildingElements[0].omit({ kind: true }),
     }),
     (doc, { slab }) => writeBuilding(doc, { kind: "slab", ...slab }),
@@ -1436,7 +1559,7 @@ export function createDraftMcp(scope: AgentScope, backend = draftMcpBackend) {
     "create_floor_opening",
     "Create or replace a polygonal opening inside a slab.",
     z.strictObject({
-      ...revision,
+      ...saveRevision,
       opening: buildingElements[1].omit({ kind: true }),
     }),
     (doc, { opening }) => writeBuilding(doc, { kind: "opening", ...opening }),
@@ -1445,7 +1568,7 @@ export function createDraftMcp(scope: AgentScope, backend = draftMcpBackend) {
     "place_stair",
     "Place or move a straight stair by ID. A supplied openingSlabId cuts the stair footprint into the destination slab and updates on moves.",
     z.strictObject({
-      ...revision,
+      ...saveRevision,
       stair: buildingElements[2].omit({ kind: true }),
     }),
     (doc, { stair }) => writeBuilding(doc, { kind: "stair", ...stair }),
@@ -1454,7 +1577,7 @@ export function createDraftMcp(scope: AgentScope, backend = draftMcpBackend) {
     "create_roof",
     "Create or replace a flat, shed or gable roof profile in model millimeters and degrees. The direction is clockwise from +X in plan.",
     z.strictObject({
-      ...revision,
+      ...saveRevision,
       roof: buildingElements[3].omit({ kind: true }),
     }),
     (doc, { roof }) => writeBuilding(doc, { kind: "roof", ...roof }),
@@ -1463,7 +1586,7 @@ export function createDraftMcp(scope: AgentScope, backend = draftMcpBackend) {
     "create_section",
     "Save or replace a finite section cut from start to end in plan. Each derived section spans the building's storeys.",
     z.strictObject({
-      ...revision,
+      ...saveRevision,
       section: buildingViews[0].omit({ kind: true }),
     }),
     (doc, { section }) => writeView(doc, { kind: "section", ...section }),
@@ -1472,7 +1595,7 @@ export function createDraftMcp(scope: AgentScope, backend = draftMcpBackend) {
     "create_elevation",
     "Save or replace an orthographic elevation from the given side of the building.",
     z.strictObject({
-      ...revision,
+      ...saveRevision,
       elevation: buildingViews[1].omit({ kind: true }),
     }),
     (doc, { elevation }) => writeView(doc, { kind: "elevation", ...elevation }),
@@ -1481,7 +1604,7 @@ export function createDraftMcp(scope: AgentScope, backend = draftMcpBackend) {
     "remove_building_item",
     "Remove a structural element or view by ID. Slabs referenced by openings or stairs must be detached first.",
     z.strictObject({
-      ...revision,
+      ...saveRevision,
       id: objectId,
       collection: z.enum(["elements", "views"]),
     }),
@@ -1644,7 +1767,7 @@ export function createDraftMcp(scope: AgentScope, backend = draftMcpBackend) {
     "add_constraint",
     "Add a wall relation or fixed distance and solve the affected wall endpoints. Supply a stable constraint ID.",
     z.strictObject({
-      ...revision,
+      ...saveRevision,
       constraint: constraintInput,
     }),
     (doc, input) => {
@@ -1665,7 +1788,7 @@ export function createDraftMcp(scope: AgentScope, backend = draftMcpBackend) {
     "set_driving_dimension",
     "Change a fixed-distance constraint in millimeters. Door and window hosts are validated before save.",
     z.strictObject({
-      ...revision,
+      ...saveRevision,
       constraintId: objectId,
       distanceMm: z.number().finite().min(1).max(2_828_427),
     }),
@@ -1691,7 +1814,7 @@ export function createDraftMcp(scope: AgentScope, backend = draftMcpBackend) {
     "remove_constraint",
     "Remove a wall constraint by ID. Current geometry stays in place.",
     z.strictObject({
-      ...revision,
+      ...saveRevision,
       constraintId: objectId,
     }),
     (doc, input) => ({
@@ -1745,12 +1868,12 @@ export function createDraftMcp(scope: AgentScope, backend = draftMcpBackend) {
     "Create or replace a named layer, or remove an unlocked layer. Put includes the complete member list and style. A member moves from its previous layer if it is unlocked.",
     z.discriminatedUnion("action", [
       z.strictObject({
-        ...revision,
+        ...saveRevision,
         action: z.literal("put"),
         layer: drawingLayerInput,
       }),
       z.strictObject({
-        ...revision,
+        ...saveRevision,
         action: z.literal("remove"),
         layerId: objectId,
       }),
@@ -1769,7 +1892,7 @@ export function createDraftMcp(scope: AgentScope, backend = draftMcpBackend) {
     "define_block",
     "Create a reusable door, window or fixture definition with typed defaults. Supply a unique definition ID and name.",
     z.strictObject({
-      ...revision,
+      ...saveRevision,
       definition: blockInput,
     }),
     (doc, input) => ({
@@ -1784,7 +1907,7 @@ export function createDraftMcp(scope: AgentScope, backend = draftMcpBackend) {
     "insert_block",
     "Insert a native object linked to a reusable definition. Provide a host wall and offset for openings, or a position and rotation for furniture. Optional overrides stay local to the instance.",
     z.strictObject({
-      ...revision,
+      ...saveRevision,
       blockId: objectId,
       placement: blockPlacementInput,
     }),
@@ -1808,7 +1931,7 @@ export function createDraftMcp(scope: AgentScope, backend = draftMcpBackend) {
     "edit_block_definition",
     "Replace the typed defaults of an existing definition. Inheriting objects update together and explicit instance overrides persist.",
     z.strictObject({
-      ...revision,
+      ...saveRevision,
       definition: blockInput,
     }),
     (doc, input) => {
@@ -1835,35 +1958,35 @@ export function createDraftMcp(scope: AgentScope, backend = draftMcpBackend) {
   edit(
     "transform_entities",
     "Move, copy, rotate or mirror selected entities. Hosted openings follow selected walls. Angles are clockwise, coordinates in millimeters.",
-    cadEditOptions.transform.extend(revision),
+    cadEditOptions.transform.extend(saveRevision),
     (doc, { expectedRevision: _, ...input }) =>
       editCad(doc, { operation: "transform", ...input }),
   );
   edit(
     "offset_geometry",
     "Offset a wall or sketch by a signed distance. Positive offsets follow the positive wall edge, or increase an arc or circle radius.",
-    cadEditOptions.offset.extend(revision),
+    cadEditOptions.offset.extend(saveRevision),
     (doc, { expectedRevision: _, ...input }) =>
       editCad(doc, { operation: "offset", ...input }),
   );
   edit(
     "trim_extend",
     "Trim or extend one endpoint to the finite boundary of a wall or two-point sketch. Rejects cuts through openings.",
-    cadEditOptions.trim_extend.extend(revision),
+    cadEditOptions.trim_extend.extend(saveRevision),
     (doc, { expectedRevision: _, ...input }) =>
       editCad(doc, { operation: "trim_extend", ...input }),
   );
   edit(
     "edit_corner",
     "Chamfer two walls or two straight sketches with a shared endpoint. Fillets apply to straight sketch linework. Size is setback for chamfer and radius for fillet.",
-    cadEditOptions.corner.extend(revision),
+    cadEditOptions.corner.extend(saveRevision),
     (doc, { expectedRevision: _, ...input }) =>
       editCad(doc, { operation: "corner", ...input }),
   );
   edit(
     "array_entities",
     "Create a linear or clockwise polar array. Count includes the original selection and hosted openings are copied with their walls.",
-    cadEditOptions.array.extend(revision),
+    cadEditOptions.array.extend(saveRevision),
     (doc, { expectedRevision: _, ...input }) =>
       editCad(doc, { operation: "array", ...input }),
   );
@@ -1942,8 +2065,25 @@ export function createDraftMcp(scope: AgentScope, backend = draftMcpBackend) {
           "invalid_preview",
           "Use the token and exact operations from a preview for this floorplan and agent.",
         );
+      const operation = { kind: "batch" as const, id: stamp.id };
+      traceOperation({
+        ...operation,
+        stage: "received",
+        tool: "apply_changes",
+        planId,
+        revision: stamp.revision,
+      });
       const receipt = await repo.getReceipt(scope, stamp.id);
-      if (receipt) return receipt;
+      if (receipt) {
+        traceOperation({
+          ...operation,
+          stage: "replayed",
+          tool: "apply_changes",
+          planId,
+          revision: receipt.revision,
+        });
+        return receipt;
+      }
       if (stamp.expiresAt <= Date.now())
         throw new ToolFailure("preview_expired", "Create a fresh preview.");
       const doc = await current();
@@ -1966,6 +2106,13 @@ export function createDraftMcp(scope: AgentScope, backend = draftMcpBackend) {
           summary,
         };
         if (await repo.commit(scope, doc, graph, next)) {
+          traceOperation({
+            ...operation,
+            stage: "saved",
+            tool: "apply_changes",
+            planId,
+            revision: next.revision,
+          });
           await backend.publish(scope, next.revision).catch(() => {});
           // Read the stored receipt so initial and repeated response payloads match.
           return (await repo.getReceipt(scope, stamp.id)) ?? next;
@@ -2045,7 +2192,7 @@ export function createDraftMcp(scope: AgentScope, backend = draftMcpBackend) {
     "Add a two-point guide in model millimeters.",
     sketchFields[0]
       .omit({ kind: true })
-      .extend({ ...revision, storeyId: storeyIdInput }),
+      .extend({ ...saveRevision, storeyId: storeyIdInput }),
     (doc, { expectedRevision: _, storeyId, ...geometry }) =>
       addSketch(doc, { kind: "construction", ...geometry }, storeyId),
   );
@@ -2054,7 +2201,7 @@ export function createDraftMcp(scope: AgentScope, backend = draftMcpBackend) {
     "Add an open or closed polyline in model millimeters. Omit the duplicate closing point.",
     sketchFields[1]
       .omit({ kind: true })
-      .extend({ ...revision, storeyId: storeyIdInput }),
+      .extend({ ...saveRevision, storeyId: storeyIdInput }),
     (doc, { expectedRevision: _, storeyId, ...geometry }) =>
       addSketch(doc, { kind: "polyline", ...geometry }, storeyId),
   );
@@ -2063,7 +2210,7 @@ export function createDraftMcp(scope: AgentScope, backend = draftMcpBackend) {
     "Add a circle with a center and radius in model millimeters.",
     sketchFields[2]
       .omit({ kind: true })
-      .extend({ ...revision, storeyId: storeyIdInput }),
+      .extend({ ...saveRevision, storeyId: storeyIdInput }),
     (doc, { expectedRevision: _, storeyId, ...geometry }) =>
       addSketch(doc, { kind: "circle", ...geometry }, storeyId),
   );
@@ -2072,7 +2219,7 @@ export function createDraftMcp(scope: AgentScope, backend = draftMcpBackend) {
     "Add an arc with a center and radius in model millimeters. Angles are clockwise degrees from right in Draft's Y-down model.",
     sketchFields[3]
       .omit({ kind: true })
-      .extend({ ...revision, storeyId: storeyIdInput }),
+      .extend({ ...saveRevision, storeyId: storeyIdInput }),
     (doc, { expectedRevision: _, storeyId, ...geometry }) =>
       addSketch(doc, { kind: "arc", ...geometry }, storeyId),
   );
@@ -2080,7 +2227,7 @@ export function createDraftMcp(scope: AgentScope, backend = draftMcpBackend) {
   edit(
     "draw_wall",
     "Draw a wall between two integer millimeter coordinates.",
-    wallInput.omit({ id: true }).extend(revision),
+    wallInput.omit({ id: true }).extend(saveRevision),
     (doc, { expectedRevision: _, ...wall }) => {
       const id = crypto.randomUUID();
       return {
@@ -2096,13 +2243,13 @@ export function createDraftMcp(scope: AgentScope, backend = draftMcpBackend) {
     "Split at an interior centerline point or join two alike collinear walls that share an endpoint.",
     z.discriminatedUnion("operation", [
       z.strictObject({
-        ...revision,
+        ...saveRevision,
         operation: z.literal("split"),
         wallId: objectId,
         point: modelPointInput,
       }),
       z.strictObject({
-        ...revision,
+        ...saveRevision,
         operation: z.literal("join"),
         wallId: objectId,
         otherWallId: objectId,
@@ -2131,10 +2278,10 @@ export function createDraftMcp(scope: AgentScope, backend = draftMcpBackend) {
     z.discriminatedUnion("kind", [
       doorInput
         .omit({ id: true })
-        .extend({ ...revision, kind: z.literal("door") }),
+        .extend({ ...saveRevision, kind: z.literal("door") }),
       windowInput
         .omit({ id: true })
-        .extend({ ...revision, kind: z.literal("window") }),
+        .extend({ ...saveRevision, kind: z.literal("window") }),
     ]),
     (doc, input) => {
       const { expectedRevision: _, kind, ...fields } = input;
@@ -2172,7 +2319,7 @@ export function createDraftMcp(scope: AgentScope, backend = draftMcpBackend) {
     "Place parametric furniture or an electrical or plumbing symbol. Omitted furniture dimensions use the catalog.",
     z.discriminatedUnion("kind", [
       z.strictObject({
-        ...revision,
+        ...saveRevision,
         kind: z.literal("furniture"),
         position: modelPointInput,
         storeyId: storeyIdInput,
@@ -2187,7 +2334,7 @@ export function createDraftMcp(scope: AgentScope, backend = draftMcpBackend) {
           .partial().shape,
       }),
       utilityInput.omit({ id: true, template: true }).extend({
-        ...revision,
+        ...saveRevision,
         kind: z.literal("utility"),
         template: z.enum(utilityKinds),
       }),
@@ -2234,7 +2381,7 @@ export function createDraftMcp(scope: AgentScope, backend = draftMcpBackend) {
     "furnish_room_preset",
     "Place an entire room preset inside a room from spatial-audit.",
     z.strictObject({
-      ...revision,
+      ...saveRevision,
       roomId: objectId,
       preset: z.enum(["bedroom", "living", "kitchen", "bath"]),
     }),
@@ -2254,7 +2401,7 @@ export function createDraftMcp(scope: AgentScope, backend = draftMcpBackend) {
   edit(
     "add_dimension_annotation",
     "Add a measured dimension line between two integer millimeter coordinates.",
-    annotationInput.omit({ id: true }).extend(revision),
+    annotationInput.omit({ id: true }).extend(saveRevision),
     (doc, { start, end, storeyId }) => {
       const annotationId = crypto.randomUUID();
       return {

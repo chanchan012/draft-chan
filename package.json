@@ -11,7 +11,8 @@
     "typecheck": "next typegen && tsc --noEmit",
     "db:generate": "drizzle-kit generate",
     "db:migrate": "drizzle-kit migrate",
-    "mcp:stdio": "node scripts/mcp-stdio.mjs"
+    "mcp:stdio": "node scripts/mcp-stdio.mjs",
+    "bench:plans": "vitest bench --run tests/large-plan.bench.ts"
   },
   "dependencies": {
     "@clerk/backend": "3.30.0",

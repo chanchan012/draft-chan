@@ -15,10 +15,14 @@ function pause(delay: number, signal: AbortSignal) {
     function finish() {
       clearTimeout(timer);
       signal.removeEventListener("abort", finish);
+      window.removeEventListener("online", finish);
       resolve();
     }
     if (signal.aborted) finish();
-    else signal.addEventListener("abort", finish, { once: true });
+    else {
+      signal.addEventListener("abort", finish, { once: true });
+      window.addEventListener("online", finish, { once: true });
+    }
   });
 }
 

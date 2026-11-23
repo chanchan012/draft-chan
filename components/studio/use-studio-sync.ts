@@ -79,6 +79,12 @@ export function useStudioSync(
   const dirty = encoded !== checkpoint.encoded;
 
   useEffect(() => () => running.current?.abort(), []);
+  useEffect(() => {
+    const resume = () =>
+      setFailure((pending) => pending && { ...pending, at: Date.now() });
+    window.addEventListener("online", resume);
+    return () => window.removeEventListener("online", resume);
+  }, []);
 
   const setUnit = useCallback((value: DisplayUnit) => {
     currentUnit.current = value;

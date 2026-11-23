@@ -257,3 +257,29 @@ export const floorplanRevisionRestores = pgTable(
     ),
   ],
 );
+
+export const floorplanEditOperations = pgTable(
+  "floorplan_edit_operations",
+  {
+    id: uuid("id").notNull(),
+    floorplanId: uuid("floorplan_id")
+      .notNull()
+      .references(() => floorplans.id, { onDelete: "cascade" }),
+    agentId: text("agent_id").notNull(),
+    tool: text("tool").notNull(),
+    requestHash: text("request_hash").notNull(),
+    baseRevision: integer("base_revision").notNull(),
+    revision: integer("revision").notNull(),
+    receipt: jsonb("receipt").notNull(),
+    savedAt: timestamp("saved_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (t) => [
+    primaryKey({ columns: [t.floorplanId, t.agentId, t.id] }),
+    check(
+      "floorplan_edit_operations_revision",
+      sql`${t.baseRevision} >= 0 AND ${t.revision} = ${t.baseRevision} + 1`,
+    ),
+  ],
+);
