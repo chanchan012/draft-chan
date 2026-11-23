@@ -1,5 +1,28 @@
 # Resume handoff
 
+## M12.2 release checkpoint
+
+Feature branch `feat/m12-2-operational-readiness` at `ab2cb9a36e1a61334c5eda1ce5e633d465df8156` merged as `30d35b55555e7780ab4ac9abf5650a74ba0db8c5`. The optimized build, 112 Vitest tests and 165 Playwright checks passed. Draft MCP exposes 91 tools and three resources. The shared Neon database records migration `0008_edit_operation_receipts.sql` at `1795403075007` with SHA-256 `52ad0987d45b85f391ac854341871a1dc99ce46fb4980f59ea9f0e339ef2719f`. Existing graph v1 and environment variables carry the release.
+
+Vercel Preview `dpl_3N2otiNeFb22A7cXKgT8fJeGDDQa` and Production `dpl_5Z2rZhPNQYX6fsyaJvYicbcujxXv` reached Ready. Public production returned 200 for landing and OAuth discovery, 307 for signed-out Studio, and 401 for project access and MCP. The unsigned Inngest endpoint returned 401. Inngest Cloud confirmed the registered functions and completed recovery run `01M83XJ880WWMYXE6FB8AKQ85G`. Signed-in project and MCP workflows were verified with the integration fixtures. [Production](https://draft-chan.vercel.app) · [Preview](https://draft-chan-r8n5322ux-chanchans-projects-aada625f.vercel.app)
+
+For a direct MCP edit, supply an `operationId` UUID and reuse the same ID and inputs after an interrupted response. Retrieve it through `get_operation_status` with kind `edit`. Use kind `batch` and the returned batch ID for a committed transaction. Use kind `export` and the job ID to follow a DXF or PDF. Search deployed runtime logs for `draft.operation` and the returned ID.
+
+The benchmark uses 384 walls, 96 rooms, 96 fixtures and 24 service routes. Mean times on the release runner were 4.15 ms for loading and rebuilding topology, 66.71 ms for comparing 12 fixture changes, 0.78 ms for screening service clashes, and 0.57 ms for rendering SVG. These are local CPU measurements.
+
+The automated backup drill uses PGlite with a synthetic issued sheet and reproduces the same four-page PDF after restore and retry. Neon’s snapshot endpoint rejected the request. The managed drill used a fresh copy-on-write branch `br-nameless-heart-besx9mpo` from isolation branch `br-ancient-mountain-be6mka65`. It verified current revision 2 and rebuilt the issued PDF from archived revision 1 with matching SHA-256 `e5da88c4be64855d5946ba7a010f2625d97f09e7490fd440c7ae171fca2e3808`. The drill copy expires November 24, 2026 at 6:02 p.m. Manila time. The validation branch is retained.
+
+```sh
+git switch main
+git pull --ff-only
+npm ci
+npm run typecheck
+npm test -- tests/backup-recovery.unit.test.ts tests/mcp.unit.test.ts
+npm run bench:plans
+npm run test:e2e -- --grep 'two tabs show cursors|recovers a save'
+npm run build
+```
+
 ## M12.1 release checkpoint
 
 Feature branch `feat/m12-1-team-projects` at `d1a126eda3c69d7b0c903062419f63b1b901b2a9` merged as `de0784fb377a6a6e4631553b2dbbc08fe33dabfa`. The optimized Next build, 110 Vitest tests and 160 Playwright checks passed. The shared Neon database has migration `0007_team_projects.sql` recorded at `1795397939689` with SHA-256 `d18d3e644ccb94435b661fbe79267c487e104663f12792f28f588e11e1129d58`. The runtime role was verified on isolation branch `br-ancient-mountain-be6mka65`. Graph v1 and the existing environment variables carry the release.
@@ -17,8 +40,6 @@ npm test -- tests/mcp.unit.test.ts -t 'shares a project'
 npm run test:e2e -- --grep 'posts revision feedback'
 npm run build
 ```
-
-M12.2 next covers the large-plan benchmark, interrupted save recovery, the backup restore drill, and MCP operation tracing.
 
 ## M11.2 release checkpoint
 
@@ -93,9 +114,7 @@ The release passed all 85 Vitest tests and 125 Playwright checks. Playwright use
 
 ## Next proposed subgoal
 
-M12.2 covers large-plan benchmarks, reconnect and recovery checks, backup restore drills, and MCP operation tracing. Start from the [CAD roadmap](CAD_ROADMAP.md), the Studio sync hooks, the revision store and the Inngest blueprint worker.
-
-The visual track starts at M13.1 in the [CAD roadmap](CAD_ROADMAP.md). Inspect the current renderer with `rg --files components/studio lib/plans | rg "isometric|wall-mesh"`. Use the MCP-furnished apartment in `tests/e2e/studio.spec.ts` as the first reference scene.
+M13.1 starts the furnished isometric presentation scene in the [CAD roadmap](CAD_ROADMAP.md). Inspect the current renderer with `rg --files components/studio lib/plans | rg "isometric|wall-mesh"`. Use the MCP-furnished apartment in `tests/e2e/studio.spec.ts` as the first reference scene.
 
 ## Reproduce the foundation
 

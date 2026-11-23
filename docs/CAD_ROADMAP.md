@@ -1,8 +1,8 @@
 # Architectural CAD and agent roadmap
 
-Draft supports floorplans, hosted openings, furnishing, an isometric cutaway, clearance screening, quantities, blueprint exports and the precision tools shipped in M5. Its authenticated MCP server exposes 90 tools and three resources. M12.2–M17 describe planned additions. The product focus is architectural drafting from measured survey through an issued drawing set.
+Draft supports floorplans, hosted openings, furnishing, an isometric cutaway, clearance screening, quantities, blueprint exports and the precision tools shipped in M5. Its authenticated MCP server exposes 91 tools and three resources. M13–M17 describe planned additions. The product focus is architectural drafting from measured survey through an issued drawing set.
 
-M5.1 and M5.2 shipped precision measurements, object snaps, exact entry and 2D sketch primitives. M6.1 and M6.2 shipped Studio editing commands and agent transactions. M7 shipped driving wall dimensions, layers and reusable blocks. M8 shipped multi-storey plans, wall assemblies, slabs, stairs, floor openings, roofs, sections and elevations. M9 implements drawing annotations, paper space, construction schedules and vector PDF issues. M10 shipped CAD interchange. M11 shipped service coordination and versioned code review. M12.1 is the next drafting subgoal. M13.1 is the next visual milestone.
+M5.1 and M5.2 shipped precision measurements, object snaps, exact entry and 2D sketch primitives. M6.1 and M6.2 shipped Studio editing commands and agent transactions. M7 shipped driving wall dimensions, layers and reusable blocks. M8 shipped multi-storey plans, wall assemblies, slabs, stairs, floor openings, roofs, sections and elevations. M9 implements drawing annotations, paper space, construction schedules and vector PDF issues. M10 shipped CAD interchange. M11 shipped service coordination and versioned code review. M12 shipped team projects and operational readiness. M13.1 is next.
 
 ## Milestones
 
@@ -69,12 +69,12 @@ MCP tools include `route_service`, `find_clashes`, `trace_egress`, `evaluate_rul
 
 **Acceptance.** Detect an obstructed door approach and a pipe crossing a slab. Highlight both in Studio. For a rule that needs an unspecified occupancy, return “needs input.” A reviewer can reproduce each finding against the saved revision and rule edition.
 
-### M12 · Team projects and operational readiness
+### M12 · Team projects and operational readiness · Shipped
 
 - **12.1 · Shipped.** Explicit project membership, viewer/editor/reviewer roles, per-client grants, named alternatives, review comments and revision restore.
-- **12.2** Add large-plan benchmarks, reconnect/recovery tests, backup restore drills and tracing from MCP request through save or export.
+- **12.2 · Shipped.** Large-plan benchmarks, reconnect and recovery checks, a backup drill, and operation tracing from MCP through save or export.
 
-Proposed MCP tools include `create_design_option`, `compare_options`, `request_review`, `list_revisions`, `restore_revision`, `get_operation_status`.
+MCP tools include `create_design_option`, `compare_options`, `request_review`, `list_revisions`, `restore_revision`, and `get_operation_status`.
 
 **Acceptance.** A reviewer can comment on an option. An agent scoped to another option cannot read or change it. Restore creates an attributed revision. Exercise simultaneous edits, disconnect during save and worker retries, then restore a backup and reproduce an issued sheet.
 

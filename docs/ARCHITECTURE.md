@@ -260,3 +260,13 @@ Owners manage membership by verified Clerk user ID. Viewers can open project opt
 `GET /api/floorplans/:id/project` returns the authorized option list. The same Hono route group handles membership, comparison, saved reviews, revision history, restore, and client assignment. Restore copies a prior graph and unit into a new revision and atomically records the source revision and human or agent actor. The current plan name and existing revision history are preserved.
 
 Explicit Clerk OAuth grants bind an owner and client ID to one option. Revoking an explicit grant blocks fallback to the existing default grant for that client. Existing default grants cover project roots. MCP comparison reads revisions of the connected option, and forking does not transfer the client’s grant. The added tools are `create_design_option`, `compare_options`, `request_review`, `list_revisions` and `restore_revision`.
+
+## M12.2 Operation receipts and recovery
+
+Migration `0008_edit_operation_receipts.sql` adds `floorplan_edit_operations`. Its key scopes the operation UUID to a floorplan and agent. Direct MCP editing tools accept an optional client-generated `operationId`. The server hashes the validated tool name and inputs. The optimistic graph update, revision archive trigger and receipt insert run in one SQL statement. A retry with the same ID and inputs returns the original response. Reusing the ID with different inputs returns `operation_id_conflict`.
+
+`get_operation_status` resolves direct edit IDs and batch IDs within the connected floorplan and agent scope. Export IDs resolve within the connected floorplan. Direct edits, batches, and export workers emit `draft.operation` events in deployed runtime logs. The operation ID correlates saved and replayed edits with the request. The blueprint job ID correlates the request, dispatch, worker attempt and final output status. Events carry IDs, stage, revision and attempt where available.
+
+When the browser comes online, Studio wakes the live stream retry and advances the save retry. If the server committed a save with a lost acknowledgment, Studio can adopt that revision as its baseline, preserve subsequent local edits, and save them on the newer revision. The browser test forces this sequence and reloads the persisted result.
+
+Blueprint attempts use the existing revision and attempt checks. Worker completion replaces the pending snapshot with the issued artifact. Recovery requeues aged pending jobs. The backup drill loads a database backup into a fresh instance, retries a failed attempt, rejects the stale attempt and reproduces the archived vector PDF. The managed rehearsal uses an isolated Neon branch copy and compares the saved PDF against a fresh render of its archived graph.

@@ -2,7 +2,7 @@
 
 ## CAD roadmap
 
-The [architectural CAD roadmap](docs/CAD_ROADMAP.md) tracks the completed M5–M11 implementation and planned M12–M17, with candidate MCP tools and release checks. M12.1 is next in the drafting track. M13.1 is the next visual milestone. Later milestones cover move-in rehearsals, client briefs, renovation and owner handover. The release history below records shipped work.
+The [architectural CAD roadmap](docs/CAD_ROADMAP.md) tracks the completed M5–M12 implementation and planned M13–M17, with candidate MCP tools and release checks. M13.1 is next. Later milestones cover move-in rehearsals, client briefs, renovation and owner handover.
 
 ## M5.1 · Precision drafting
 
@@ -327,3 +327,13 @@ Feature `d1a126eda3c69d7b0c903062419f63b1b901b2a9` merged as `de0784fb377a6a6e46
 The production build, 110 Vitest tests and 160 Playwright checks passed. Migration `0007_team_projects.sql` passed on an isolated Neon branch using the `draft_app` role and was applied to the shared `draft` database. Graph v1 and the existing environment variables carry the release.
 
 Vercel Preview `dpl_E3Ktp2s7pYKBgnzMnRZ2YdWoM7uf` and Production `dpl_HjLPnBtcNWXusRYNDbzmnDmTsPBx` reached Ready. Public smoke checks passed for landing, Studio sign-in, protected project routes, and the MCP OAuth challenge. [Production](https://draft-chan.vercel.app)
+
+## M12.2 · Operational readiness
+
+Feature `ab2cb9a36e1a61334c5eda1ce5e633d465df8156` merged as `30d35b55555e7780ab4ac9abf5650a74ba0db8c5`. Direct MCP edits support retrying with the same operation ID and inputs. The saved graph revision and edit receipt commit together. `get_operation_status` checks edit receipts, applied batches, and blueprint jobs. MCP exposes 91 tools and three resources.
+
+The optimized Next build, 112 Vitest tests and 165 Playwright checks passed. Coverage includes concurrent edits, lost save acknowledgments, reconnect, retrying an MCP request, and duplicate or stale blueprint delivery. The benchmark covers topology loading, revision comparison, service clashes, and SVG export on a 384-wall plan.
+
+Migration `0008_edit_operation_receipts.sql` was verified as `draft_app` on an isolated Neon branch and applied to the shared `draft` database. The local backup and isolated Neon branch copy both reproduced the byte-identical PDF from an archived revision. See the [resume handoff](docs/RESUME_HANDOFF.md) for the drill results and benchmark measurements.
+
+Vercel Preview `dpl_3N2otiNeFb22A7cXKgT8fJeGDDQa` and Production `dpl_5Z2rZhPNQYX6fsyaJvYicbcujxXv` reached Ready. Public smoke checks passed for landing, secured Studio and project access, and MCP OAuth discovery. Inngest Cloud listed the production blueprint renderer and recovery schedule. Production recovery run `01M83XJ880WWMYXE6FB8AKQ85G` completed. [Production](https://draft-chan.vercel.app)
