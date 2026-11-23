@@ -11,6 +11,8 @@ import {
   index,
   unique,
   check,
+  boolean,
+  type AnyPgColumn,
 } from "drizzle-orm/pg-core";
 
 export const displayUnit = pgEnum("display_unit", ["mm", "in"]);
@@ -19,6 +21,11 @@ export const floorplans = pgTable(
   {
     id: uuid("id").primaryKey().defaultRandom(),
     ownerId: text("owner_id").notNull(),
+    projectId: uuid("project_id").references((): AnyPgColumn => floorplans.id, {
+      onDelete: "restrict",
+    }),
+    forkFromPlanId: uuid("fork_from_plan_id"),
+    forkFromRevision: integer("fork_from_revision"),
     name: text("name").notNull(),
     unit: displayUnit("unit").notNull().default("mm"),
     revision: integer("revision").notNull().default(0),
@@ -41,6 +48,15 @@ export const floorplans = pgTable(
   (t) => [
     index("plans_owner_updated_idx").on(t.ownerId, t.updatedAt),
     check("revision_nonnegative", sql`${t.revision} >= 0`),
+    index("floorplans_project_idx").on(t.projectId),
+    check(
+      "floorplans_fork_metadata",
+      sql`
+      (${t.projectId} IS NULL AND ${t.forkFromPlanId} IS NULL AND ${t.forkFromRevision} IS NULL)
+      OR (${t.projectId} IS NOT NULL AND ${t.projectId} <> ${t.id}
+        AND ${t.forkFromPlanId} IS NOT NULL AND ${t.forkFromRevision} IS NOT NULL AND ${t.forkFromRevision} >= 0)
+    `,
+    ),
   ],
 );
 
@@ -148,5 +164,96 @@ export const floorplanEditBatches = pgTable(
   },
   (t) => [
     unique("floorplan_edit_batch_revision").on(t.floorplanId, t.revision),
+  ],
+);
+
+export const projectRole = pgEnum("project_role", [
+  "viewer",
+  "reviewer",
+  "editor",
+]);
+export const floorplanProjectMembers = pgTable(
+  "floorplan_project_members",
+  {
+    projectId: uuid("project_id")
+      .notNull()
+      .references(() => floorplans.id, { onDelete: "cascade" }),
+    userId: text("user_id").notNull(),
+    role: projectRole("role").notNull(),
+  },
+  (t) => [
+    primaryKey({ columns: [t.projectId, t.userId] }),
+    index("floorplan_project_members_user_idx").on(t.userId, t.projectId),
+  ],
+);
+
+export const floorplanClientGrants = pgTable(
+  "floorplan_client_grants",
+  {
+    ownerId: text("owner_id").notNull(),
+    clientId: text("client_id").notNull(),
+    id: uuid("id").notNull().defaultRandom(),
+    floorplanId: uuid("floorplan_id").references(() => floorplans.id, {
+      onDelete: "set null",
+    }),
+    enabled: boolean("enabled").notNull(),
+  },
+  (t) => [
+    primaryKey({ columns: [t.ownerId, t.clientId] }),
+    index("floorplan_client_grants_plan_idx").on(t.floorplanId),
+  ],
+);
+
+export const projectActorKind = pgEnum("project_actor_kind", ["human", "ai"]);
+export const floorplanReviewNotes = pgTable(
+  "floorplan_review_notes",
+  {
+    id: uuid("id").primaryKey(),
+    floorplanId: uuid("floorplan_id")
+      .notNull()
+      .references(() => floorplans.id, { onDelete: "cascade" }),
+    revision: integer("revision").notNull(),
+    actorKind: projectActorKind("actor_kind").notNull(),
+    actorId: text("actor_id").notNull(),
+    kind: text("kind", { enum: ["comment", "request"] }).notNull(),
+    body: text("body").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (t) => [
+    index("floorplan_review_notes_plan_idx").on(
+      t.floorplanId,
+      t.createdAt,
+      t.id,
+    ),
+    check(
+      "floorplan_review_notes_kind",
+      sql`${t.kind} IN ('comment', 'request')`,
+    ),
+    check("floorplan_review_notes_revision", sql`${t.revision} >= 0`),
+  ],
+);
+
+export const floorplanRevisionRestores = pgTable(
+  "floorplan_revision_restores",
+  {
+    floorplanId: uuid("floorplan_id")
+      .notNull()
+      .references(() => floorplans.id, { onDelete: "cascade" }),
+    revision: integer("revision").notNull(),
+    sourceRevision: integer("source_revision").notNull(),
+    actorKind: projectActorKind("actor_kind").notNull(),
+    actorId: text("actor_id").notNull(),
+    restoredAt: timestamp("restored_at", { withTimezone: true })
+      .defaultNow()
+      .notNull(),
+  },
+  (t) => [
+    primaryKey({ columns: [t.floorplanId, t.revision] }),
+    check(
+      "floorplan_revision_restores_source",
+      sql`${t.sourceRevision} >= 0 AND ${t.sourceRevision} < ${t.revision}`,
+    ),
   ],
 );

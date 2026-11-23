@@ -1,6 +1,8 @@
 import { and, desc, eq, sql } from "drizzle-orm";
 import { openDatabase } from "../../db/client";
 import { floorplanEditBatches, floorplans } from "../../db/schema";
+import { floorplanProjectMembers as members } from "../../db/schema";
+import { planPermission, projectKey } from "./project-access";
 import {
   areaM2,
   initialGraph,
@@ -38,13 +40,20 @@ export const plans = {
       .where(owned(owner, id));
     return row?.revision ?? null;
   },
-  async list(owner: string) {
+  async list(user: string) {
     const rows = await openDatabase()
-      .select()
+      .select({ plan: floorplans, role: members.role })
       .from(floorplans)
-      .where(eq(floorplans.ownerId, owner))
+      .leftJoin(
+        members,
+        sql`${members.projectId} = ${projectKey} and ${members.userId} = ${user}`,
+      )
+      .where(planPermission(user, "read"))
       .orderBy(desc(floorplans.updatedAt), desc(floorplans.id));
-    return rows.map(card);
+    return rows.map(({ plan, role }) => ({
+      ...card(plan),
+      ...(plan.ownerId !== user && role && { shared: role }),
+    }));
   },
   async get(owner: string, id: string) {
     const [row] = await openDatabase()
@@ -93,6 +102,7 @@ export const plans = {
     const atRevision = and(
       owned(owner, id),
       eq(floorplans.revision, input.revision),
+      author.kind === "human" ? planPermission(author.id, "edit") : undefined,
     );
     const [row] = await db
       .select({ graph: floorplans.graph })
@@ -151,7 +161,13 @@ export const plans = {
   async remove(owner: string, id: string, revision: number) {
     const rows = await openDatabase()
       .delete(floorplans)
-      .where(and(owned(owner, id), eq(floorplans.revision, revision)))
+      .where(
+        and(
+          owned(owner, id),
+          eq(floorplans.revision, revision),
+          sql`not exists (select 1 from public.floorplans alternative where alternative.project_id = ${floorplans.id})`,
+        ),
+      )
       .returning({ id: floorplans.id });
     return rows.length > 0;
   },

@@ -21,6 +21,7 @@ import { createMcpHttp } from "../../lib/server/mcp-http";
 import { localWindow } from "../../lib/server/rate-limit";
 import type { LivePeer, PresenceInput } from "../../lib/plans/live";
 import type { Blueprint, BlueprintRequest } from "../../lib/plans/exports";
+import type { ProjectRole } from "../../lib/plans/projects";
 
 test.use({ hasTouch: true });
 
@@ -48,6 +49,7 @@ function studioWorkspace() {
     peers: new Map<string, LivePeer>(),
     gate: undefined as Promise<void> | undefined,
     signedIn: true,
+    projectRole: "owner" as ProjectRole,
   };
 }
 
@@ -74,7 +76,7 @@ async function studio(
       contentType: "text/html",
       body: `<!doctype html><meta name="viewport" content="width=device-width, initial-scale=1">
         ${styles.map((href) => `<link rel="stylesheet" href="${href}">`).join("")}
-        <style>${css}</style><div id="root" data-document='${fixture}'></div><script defer src="/tests/studio.js"></script>`,
+        <style>${css}</style><div id="root" data-document='${fixture}' data-project-role="${workspace.projectRole}"></div><script defer src="/tests/studio.js"></script>`,
     });
   });
   const graphEndpoint = "**/api/floorplans/" + id;
@@ -1573,4 +1575,72 @@ test("two tabs show cursors and autosave concurrent independent edits", async ({
     release();
     await other.close();
   }
+});
+
+test("posts revision feedback in a shared read-only option", async ({
+  page,
+}) => {
+  const workspace = studioWorkspace();
+  workspace.projectRole = "reviewer";
+  workspace.document.revision = 4;
+  const notes: object[] = [];
+  await page.route("**/api/floorplans/" + id + "/project", (route) =>
+    route.fulfill({
+      json: {
+        projectId: id,
+        role: "reviewer",
+        options: [
+          {
+            id,
+            name: "Corner study",
+            revision: 4,
+            forkFromPlanId: null,
+            forkFromRevision: null,
+          },
+        ],
+      },
+    }),
+  );
+  await page.route("**/api/floorplans/" + id + "/project/reviews", (route) => {
+    if (route.request().method() === "GET")
+      return route.fulfill({ json: notes });
+    const input = route.request().postDataJSON();
+    expect(input).toMatchObject({
+      kind: "comment",
+      revision: 4,
+      body: "Keep the entry wide.",
+    });
+    notes.push({
+      ...input,
+      actorId: "studio-test",
+      actorKind: "human",
+      createdAt: new Date().toISOString(),
+    });
+    return route.fulfill({ status: 201, json: { id: input.id } });
+  });
+  await studio(page, false, workspace);
+  await expect(
+    page.getByRole("button", { name: "Save", exact: true }),
+  ).toBeDisabled();
+  await expect(
+    page.getByRole("button", { name: "Wall", exact: true }),
+  ).toHaveCount(0);
+  await page.getByRole("button", { name: "Project", exact: true }).click();
+  const panel = page.getByRole("complementary", { name: "Project" });
+  await expect(panel.getByText("Project role · reviewer")).toBeVisible();
+  await expect(
+    panel.getByRole("link", { name: "Corner study" }),
+  ).toHaveAttribute("aria-current", "page");
+  await panel.getByRole("button", { name: "Review", exact: true }).click();
+  await panel
+    .getByRole("textbox", { name: "Review note" })
+    .fill("Keep the entry wide.");
+  await panel.getByRole("button", { name: "Post review" }).click();
+  await expect(panel.getByRole("list", { name: "Review notes" })).toContainText(
+    "Keep the entry wide.",
+  );
+  await expect(panel.getByRole("list", { name: "Review notes" })).toContainText(
+    "Comment · r4",
+  );
+  await frame(page);
 });

@@ -1649,3 +1649,31 @@
 .cad-equipment-zone { fill: #ab683226; stroke: #955c34; stroke-width: 1.4; stroke-dasharray: 6 4; }
 .cad-coordination-finding { fill: #c6333026; stroke: #b12725; stroke-width: 2; }
 .cad-coordination-finding circle:last-child { fill: #b12725; }
+
+.studio-project-list {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.studio-project-list li {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+  padding: 8px;
+  overflow-wrap: anywhere;
+  border: 1px solid var(--studio-rule);
+  border-radius: 7px;
+}
+.studio-project-list [aria-current="page"] { font-weight: 700; }
+.studio-project-list span,
+.studio-project-list small { font-size: 12px; }
+.studio-project-list p { white-space: pre-wrap; }
+.studio-project-list button { justify-self: start; }
+.studio-views select {
+  min-width: 0;
+  max-width: min(125px, 31vw);
+  font: inherit;
+}

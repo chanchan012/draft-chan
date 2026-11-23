@@ -374,6 +374,8 @@ it("lays out a two-bedroom plan using all MCP resources and tools over HTTP", as
       "calculate_bom",
       "calibrate_underlay",
       "check_clearance_codes",
+      "compare_options",
+      "create_design_option",
       "create_elevation",
       "create_floor_opening",
       "create_issue",
@@ -407,6 +409,7 @@ it("lays out a two-bedroom plan using all MCP resources and tools over HTTP", as
       "inspect_import",
       "list_coordination",
       "list_references",
+      "list_revisions",
       "list_sheet_issues",
       "list_underlays",
       "manage_layer",
@@ -430,8 +433,10 @@ it("lays out a two-bedroom plan using all MCP resources and tools over HTTP", as
       "remove_document_items",
       "remove_underlay",
       "reproduce_issue",
+      "request_review",
       "resolve_issue",
       "resolve_snap",
+      "restore_revision",
       "route_service",
       "save_named_view",
       "set_driving_dimension",
@@ -1305,7 +1310,7 @@ it("bridges stdio to the authenticated HTTP tools without sharing the database c
         },
       }),
     );
-    expect((await client.listTools()).tools).toHaveLength(85);
+    expect((await client.listTools()).tools).toHaveLength(90);
     expect((await client.listResources()).resources).toHaveLength(3);
     expect(
       (await client.readResource({ uri: "draft://floorplan-graph" })).contents,
@@ -1781,5 +1786,245 @@ it("replays versioned code review through MCP and owner-scoped Hono RPC", async 
     expect((await member("other-owner").request(url)).status).toBe(404);
   } finally {
     await client.close();
+  }
+});
+
+it("shares a project with reviewers and keeps client grants and restores option-scoped", async () => {
+  const session = await planWithToken();
+  const reviewer = member("user_reviewer");
+  const viewer = member("user_viewer");
+  const editor = member("user_editor");
+  const root = session.path + "/project";
+  const reviewerId = "user_reviewer";
+  const clientId = "client_m12_option";
+  expect((await reviewer.request(root)).status).toBe(404);
+  for (const [userId, role] of [
+    [reviewerId, "reviewer"],
+    ["user_viewer", "viewer"],
+    ["user_editor", "editor"],
+  ]) {
+    const response = await session.api.request(
+      root + "/members",
+      payload("PUT", { userId, role }),
+    );
+    expect(response.status, await response.text()).toBe(200);
+  }
+  expect(
+    (
+      await reviewer.request(
+        root + "/members",
+        payload("PUT", { userId: reviewerId, role: "editor" }),
+      )
+    ).status,
+  ).toBe(403);
+
+  const rootConnection = await connect(
+    createMcpHttp(localWindow(100)),
+    session.token,
+  );
+  const alternativeId = crypto.randomUUID();
+  try {
+    const created = await rootConnection.callTool({
+      name: "create_design_option",
+      arguments: { id: alternativeId, name: "North entry", sourceRevision: 0 },
+    });
+    expect(created).toMatchObject({
+      isError: false,
+      structuredContent: { option: { id: alternativeId, revision: 0 } },
+    });
+  } finally {
+    await rootConnection.close();
+  }
+  const optionPath = "/api/floorplans/" + alternativeId;
+  const alternative = optionPath + "/project";
+  expect(await (await reviewer.request(alternative)).json()).toMatchObject({
+    projectId: session.planId,
+    role: "reviewer",
+    options: [{ id: session.planId }, { id: alternativeId }],
+  });
+  expect(await (await reviewer.request("/api/floorplans")).json()).toEqual(
+    expect.arrayContaining([
+      expect.objectContaining({ id: alternativeId, shared: "reviewer" }),
+    ]),
+  );
+  const baseline = (await (
+    await reviewer.request(optionPath + "/graph")
+  ).json()) as StudioDocument;
+  const graphEdit = payload("PATCH", {
+    revision: 0,
+    ...studioSnapshot(baseline.graph, "in"),
+  });
+  expect(
+    (await reviewer.request(optionPath + "/graph", graphEdit)).status,
+  ).toBe(403);
+  expect((await editor.request(optionPath + "/graph", graphEdit)).status).toBe(
+    200,
+  );
+  const comment = payload("POST", {
+    id: crypto.randomUUID(),
+    kind: "comment",
+    revision: 1,
+    body: "Check the north entry.",
+  });
+  expect((await viewer.request(alternative + "/reviews", comment)).status).toBe(
+    403,
+  );
+  expect(
+    (await reviewer.request(alternative + "/reviews", comment)).status,
+  ).toBe(201);
+  expect(
+    (await reviewer.request(alternative + "/reviews", comment)).status,
+  ).toBe(201);
+  expect(
+    await (await viewer.request(alternative + "/reviews")).json(),
+  ).toMatchObject([
+    {
+      body: "Check the north entry.",
+      revision: 1,
+      actorId: reviewerId,
+      kind: "comment",
+    },
+  ]);
+
+  const grant = payload("PUT", { clientId, enabled: true });
+  expect(
+    (await reviewer.request(alternative + "/agent-clients", grant)).status,
+  ).toBe(403);
+  expect(
+    (await session.api.request(alternative + "/agent-clients", grant)).status,
+  ).toBe(200);
+  const otherId = "client_m12_root";
+  expect(
+    (
+      await session.api.request(
+        root + "/agent-clients",
+        payload("PUT", { clientId: otherId, enabled: true }),
+      )
+    ).status,
+  ).toBe(200);
+  const options = [
+    await resolveFloorplanOAuth(owner, clientId),
+    await resolveFloorplanOAuth(owner, otherId),
+  ];
+  expect(options).toMatchObject([
+    { planId: alternativeId },
+    { planId: session.planId },
+  ]);
+  const agent = await connect(
+    createMcpHttp(localWindow(100), async () =>
+      resolveFloorplanOAuth(owner, clientId),
+    ),
+    "opaque_scope",
+  );
+  try {
+    const call = (name: string, args: Record<string, unknown>) =>
+      agent.callTool({ name, arguments: args });
+    const { contents } = await agent.readResource({
+      uri: "draft://floorplan-graph",
+    });
+    if (!("text" in contents[0])) throw new Error("Expected a graph");
+    expect(JSON.parse(contents[0].text)).toMatchObject({
+      id: alternativeId,
+      revision: 1,
+      unit: "in",
+    });
+    expect(
+      await call("compare_options", { beforeRevision: 0, afterRevision: 1 }),
+    ).toMatchObject({
+      isError: false,
+      structuredContent: {
+        before: { id: alternativeId },
+        after: { id: alternativeId },
+      },
+    });
+    const rejected = await call("restore_revision", {
+      planId: session.planId,
+      sourceRevision: 0,
+      expectedRevision: 1,
+    });
+    expect(rejected.isError).toBe(true);
+    expect(
+      await call("request_review", {
+        id: crypto.randomUUID(),
+        revision: 1,
+        body: "Ready for the next review.",
+      }),
+    ).toMatchObject({
+      isError: false,
+      structuredContent: { planId: alternativeId },
+    });
+    const restore = payload("POST", { expectedRevision: 1, sourceRevision: 0 });
+    expect(
+      (await reviewer.request(alternative + "/restore", restore)).status,
+    ).toBe(403);
+    expect(
+      await call("restore_revision", {
+        sourceRevision: 0,
+        expectedRevision: 1,
+      }),
+    ).toMatchObject({
+      isError: false,
+      structuredContent: {
+        planId: alternativeId,
+        sourceRevision: 0,
+        revision: 2,
+      },
+    });
+    expect(await call("list_revisions", {})).toMatchObject({
+      isError: false,
+      structuredContent: {
+        revisions: [
+          {
+            revision: 2,
+            actorKind: "ai",
+            actorId: options[0]?.agentId,
+            sourceRevision: 0,
+          },
+          { revision: 1 },
+          { revision: 0 },
+        ],
+      },
+    });
+    expect(
+      await (await reviewer.request(optionPath + "/graph")).json(),
+    ).toMatchObject({ id: alternativeId, revision: 2, unit: "mm" });
+    expect(
+      await (await session.api.request(session.path + "/graph")).json(),
+    ).toMatchObject({ revision: 0, unit: "mm" });
+    expect(
+      (
+        await session.api.request(
+          root + "/agent-clients",
+          payload("PUT", { clientId, enabled: false }),
+        )
+      ).status,
+    ).toBe(409);
+    await session.api.request(
+      alternative + "/agent-clients",
+      payload("PUT", { clientId, enabled: false }),
+    );
+    expect(await resolveFloorplanOAuth(owner, clientId)).toBeNull();
+    expect(await resolveFloorplanOAuth(owner, otherId)).toMatchObject({
+      planId: session.planId,
+    });
+    expect(
+      (
+        await session.api.request(root + "/members/" + reviewerId, {
+          method: "DELETE",
+        })
+      ).status,
+    ).toBe(204);
+    expect((await reviewer.request(optionPath + "/graph")).status).toBe(404);
+    expect((await reviewer.request(alternative + "/reviews")).status).toBe(404);
+    expect(
+      (
+        await session.api.request(
+          session.path,
+          payload("DELETE", { revision: 0 }),
+        )
+      ).status,
+    ).toBe(409);
+  } finally {
+    await agent.close();
   }
 });

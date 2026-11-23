@@ -10,6 +10,7 @@ import {
   FileDown,
   FileStack,
   Files,
+  FolderOpen,
   Layers3,
   Component,
   Building2,
@@ -60,6 +61,7 @@ import { createDraftPlanStore } from "@/lib/plans/command-store";
 import { authModalHref } from "@/lib/auth-navigation";
 import type { DraftActor, PlanCommand, Point, Sheet } from "@/lib/plans/model";
 import type { StudioDocument } from "@/lib/plans/studio-document";
+import { mayEdit, type ProjectRole } from "@/lib/plans/projects";
 import {
   isSelected,
   moveSelection,
@@ -80,6 +82,7 @@ import { AuditPanel } from "./audit-panel";
 import { StudioPanel } from "./studio-panel";
 import { ExportPanel } from "./export-panel";
 import { McpSetup } from "./mcp-setup";
+import { ProjectPanel } from "./project-panel";
 import { usePlanLive } from "./use-plan-live";
 import { useStudioSync } from "./use-studio-sync";
 import {
@@ -105,16 +108,22 @@ type RightPanel =
   | "clearance"
   | "coordination"
   | "exports"
+  | "project"
   | "edit"
   | "constraints";
 
 export function Studio({
   initial,
   actor,
+  projectRole = "owner",
+  alternative = false,
 }: {
   initial: StudioDocument;
   actor: DraftActor;
+  projectRole?: ProjectRole;
+  alternative?: boolean;
 }) {
+  const editable = mayEdit(projectRole);
   const [store] = useState(() => createDraftPlanStore(initial.graph));
   const {
     plan: building,
@@ -219,6 +228,7 @@ export function Studio({
   const editControl = useRef<HTMLButtonElement>(null);
   const auditControl = useRef<HTMLButtonElement>(null);
   const coordinationControl = useRef<HTMLButtonElement>(null);
+  const projectControl = useRef<HTMLButtonElement>(null);
   const [coordinationFinding, setCoordinationFinding] =
     useState<CoordinationFinding>();
   const inspectorControl = useRef<HTMLButtonElement>(null);
@@ -260,20 +270,31 @@ export function Studio({
     return () => window.removeEventListener("beforeunload", beforeUnload);
   }, [dirty]);
 
-  const switchTool = useCallback((next: Tool) => {
-    setTool(next);
-    setSheetId(undefined);
-    setBuildingViewId(undefined);
-    if (next !== "select") setMulti(false);
-    setRightPanel((panel) => (panel === "clearance" ? "inspector" : panel));
-    setFinding(undefined);
-    setSelection([]);
-    setMessage("");
-    if (next !== "pan") setIso(false);
-  }, []);
+  const switchTool = useCallback(
+    (next: Tool) => {
+      if (
+        !editable &&
+        next !== "select" &&
+        next !== "pan" &&
+        next !== "measure"
+      )
+        return;
+      setTool(next);
+      setSheetId(undefined);
+      setBuildingViewId(undefined);
+      if (next !== "select") setMulti(false);
+      setRightPanel((panel) => (panel === "clearance" ? "inspector" : panel));
+      setFinding(undefined);
+      setSelection([]);
+      setMessage("");
+      if (next !== "pan") setIso(false);
+    },
+    [editable],
+  );
 
   const edit = useCallback(
     (commands: readonly PlanCommand[]) => {
+      if (!editable) return false;
       try {
         const changed = executeBatch(
           commands.map((command) => onStorey(command, level.id)),
@@ -290,7 +311,7 @@ export function Studio({
         return false;
       }
     },
-    [executeBatch, actor, level.id],
+    [editable, executeBatch, actor, level.id],
   );
   function command(input: PlanCommand) {
     return edit([input]);
@@ -314,7 +335,7 @@ export function Studio({
     function keydown(event: globalThis.KeyboardEvent) {
       const key = event.key.toLowerCase();
       const modifier = event.metaKey || event.ctrlKey;
-      if (modifier && key === "s") {
+      if (editable && modifier && key === "s") {
         event.preventDefault();
         void save();
         return;
@@ -324,7 +345,7 @@ export function Studio({
         event.target.closest("input, select, textarea, [contenteditable]")
       )
         return;
-      if (modifier && (key === "z" || key === "y")) {
+      if (editable && modifier && (key === "z" || key === "y")) {
         event.preventDefault();
         if (key === "y" || event.shiftKey) redo();
         else undo();
@@ -333,6 +354,7 @@ export function Studio({
       if (modifier || event.altKey) return;
       if (
         (key === "backspace" || key === "delete") &&
+        editable &&
         selection.length &&
         !iso
       ) {
@@ -345,7 +367,7 @@ export function Studio({
     }
     window.addEventListener("keydown", keydown);
     return () => window.removeEventListener("keydown", keydown);
-  }, [save, redo, undo, switchTool, selection.length, iso, remove]);
+  }, [editable, save, redo, undo, switchTool, selection.length, iso, remove]);
 
   function drawWall(start: Point, end: Point) {
     return command({
@@ -467,7 +489,7 @@ export function Studio({
               title="Undo"
               aria-label="Undo"
               onClick={() => undo()}
-              disabled={!past.length}
+              disabled={!editable || !past.length}
             >
               <Undo2 size={18} />
             </button>
@@ -475,7 +497,7 @@ export function Studio({
               title="Redo"
               aria-label="Redo"
               onClick={() => redo()}
-              disabled={!future.length}
+              disabled={!editable || !future.length}
             >
               <Redo2 size={18} />
             </button>
@@ -486,7 +508,9 @@ export function Studio({
             title="Save"
             aria-label="Save"
             onClick={() => void save()}
-            disabled={!dirty || activity !== null || block !== null}
+            disabled={
+              !editable || !dirty || activity !== null || block !== null
+            }
           >
             <Save size={16} /> <span>Save</span>
           </button>
@@ -505,6 +529,7 @@ export function Studio({
             aria-expanded={leftPanel === "layers"}
             aria-label="Layers"
             title="Layers"
+            disabled={!editable}
             onClick={() => {
               if (window.matchMedia(overlayPanels).matches) closeRightPanel();
               setLeftPanel(leftPanel === "layers" ? null : "layers");
@@ -518,6 +543,7 @@ export function Studio({
             aria-expanded={leftPanel === "blocks"}
             aria-label="Blocks"
             title="Blocks"
+            disabled={!editable}
             onClick={() => {
               if (window.matchMedia(overlayPanels).matches) closeRightPanel();
               setLeftPanel(leftPanel === "blocks" ? null : "blocks");
@@ -530,6 +556,7 @@ export function Studio({
             aria-controls="studio-layers"
             aria-label="Building"
             title="Building"
+            disabled={!editable}
             aria-expanded={leftPanel === "building"}
             onClick={() => {
               if (window.matchMedia(overlayPanels).matches) closeRightPanel();
@@ -544,6 +571,7 @@ export function Studio({
             aria-expanded={leftPanel === "sheets"}
             aria-label="Sheets"
             title="Sheets"
+            disabled={!editable}
             onClick={() => {
               if (window.matchMedia(overlayPanels).matches) closeRightPanel();
               setLeftPanel(leftPanel === "sheets" ? null : "sheets");
@@ -557,6 +585,7 @@ export function Studio({
             aria-expanded={leftPanel === "interchange"}
             aria-label="Interchange"
             title="Interchange"
+            disabled={!editable}
             onClick={() => {
               if (window.matchMedia(overlayPanels).matches) closeRightPanel();
               setLeftPanel(leftPanel === "interchange" ? null : "interchange");
@@ -701,14 +730,32 @@ export function Studio({
             >
               <Box size={15} /> Isometric
             </button>
-            <button
-              className="studio-ortho"
-              aria-pressed={ortho}
-              onClick={() => setOrtho(!ortho)}
-              disabled={iso || Boolean(buildingView) || Boolean(sheet)}
-            >
-              Ortho
-            </button>
+            {editable ? (
+              <button
+                className="studio-ortho"
+                aria-pressed={ortho}
+                onClick={() => setOrtho(!ortho)}
+                disabled={iso || Boolean(buildingView) || Boolean(sheet)}
+              >
+                Ortho
+              </button>
+            ) : (
+              <select
+                aria-label="Review storey"
+                value={level.id}
+                onChange={(event) => {
+                  setActiveStorey(event.target.value);
+                  setSelection([]);
+                  setFinding(undefined);
+                }}
+              >
+                {planStoreys(building).map(({ id, name }) => (
+                  <option key={id} value={id}>
+                    {name}
+                  </option>
+                ))}
+              </select>
+            )}
           </div>
 
           {sheet ? (
@@ -729,18 +776,26 @@ export function Studio({
                 role="group"
                 aria-label="Drawing tools"
               >
-                {tools.map(({ id, label, icon: Icon, shortcut }) => (
-                  <button
-                    key={id}
-                    aria-label={label}
-                    aria-pressed={tool === id && (!iso || id === "pan")}
-                    onClick={() => switchTool(id)}
-                    aria-keyshortcuts={shortcut}
-                    title={`${label} (${shortcut})`}
-                  >
-                    <Icon size={19} />
-                  </button>
-                ))}
+                {tools
+                  .filter(
+                    ({ id }) =>
+                      editable ||
+                      id === "select" ||
+                      id === "measure" ||
+                      id === "pan",
+                  )
+                  .map(({ id, label, icon: Icon, shortcut }) => (
+                    <button
+                      key={id}
+                      aria-label={label}
+                      aria-pressed={tool === id && (!iso || id === "pan")}
+                      onClick={() => switchTool(id)}
+                      aria-keyshortcuts={shortcut}
+                      title={`${label} (${shortcut})`}
+                    >
+                      <Icon size={19} />
+                    </button>
+                  ))}
               </div>
 
               <div
@@ -762,7 +817,7 @@ export function Studio({
                 <button
                   aria-label="Delete selection"
                   title="Delete selection (Backspace or Delete)"
-                  disabled={!selection.length || iso}
+                  disabled={!editable || !selection.length || iso}
                   onClick={remove}
                 >
                   <Trash2 size={17} />
@@ -859,6 +914,7 @@ export function Studio({
             aria-controls="studio-inspector"
             aria-label="Inspector"
             title="Inspector"
+            disabled={!editable}
             onClick={() => toggleRightPanel("inspector")}
           >
             <PanelRight size={20} />
@@ -869,6 +925,7 @@ export function Studio({
             aria-controls="studio-inspector"
             aria-label="Edit geometry"
             title="Edit geometry"
+            disabled={!editable}
             onClick={() => {
               setTool("select");
               setIso(false);
@@ -883,6 +940,7 @@ export function Studio({
             aria-controls="studio-inspector"
             aria-label="Constraints"
             title="Constraints"
+            disabled={!editable}
             onClick={() => {
               setTool("select");
               setIso(false);
@@ -897,6 +955,7 @@ export function Studio({
             aria-controls="studio-inspector"
             aria-label="Coordination"
             title="Coordination"
+            disabled={!editable}
             onClick={() => {
               setIso(false);
               setSheetId(undefined);
@@ -927,11 +986,23 @@ export function Studio({
             <FileDown size={20} />
           </button>
           <button
+            ref={projectControl}
+            aria-expanded={rightPanel === "project"}
+            aria-controls="studio-inspector"
+            aria-label="Project"
+            title="Project"
+            onClick={() => toggleRightPanel("project")}
+          >
+            <FolderOpen size={20} />
+          </button>
+          <button
             type="button"
             aria-haspopup="dialog"
             aria-label="Connect an agent"
             title="Connect an agent"
-            disabled={block === "auth" || block === "deleted"}
+            disabled={
+              projectRole !== "owner" || block === "auth" || block === "deleted"
+            }
             onClick={() => setAgentsOpen(true)}
           >
             <Bot size={20} />
@@ -953,36 +1024,49 @@ export function Studio({
           side="right"
           id="studio-inspector"
           label={
-            rightPanel === "coordination"
-              ? "Coordination"
-              : rightPanel === "exports"
-                ? "Exports"
-                : rightPanel === "constraints"
-                  ? "Constraints"
-                  : rightPanel === "edit"
-                    ? "Edit geometry"
-                    : "Inspector"
+            rightPanel === "project"
+              ? "Project"
+              : rightPanel === "coordination"
+                ? "Coordination"
+                : rightPanel === "exports"
+                  ? "Exports"
+                  : rightPanel === "constraints"
+                    ? "Constraints"
+                    : rightPanel === "edit"
+                      ? "Edit geometry"
+                      : "Inspector"
           }
           title={rightPanel === "clearance" ? "Clearance check" : undefined}
           open={rightPanel !== null}
           onClose={() => {
             closeRightPanel();
             const trigger =
-              rightPanel === "coordination"
-                ? coordinationControl
-                : rightPanel === "constraints"
-                  ? constraintControl
-                  : rightPanel === "edit"
-                    ? editControl
-                    : rightPanel === "exports"
-                      ? exportsControl
-                      : rightPanel === "clearance"
-                        ? auditControl
-                        : inspectorControl;
+              rightPanel === "project"
+                ? projectControl
+                : rightPanel === "coordination"
+                  ? coordinationControl
+                  : rightPanel === "constraints"
+                    ? constraintControl
+                    : rightPanel === "edit"
+                      ? editControl
+                      : rightPanel === "exports"
+                        ? exportsControl
+                        : rightPanel === "clearance"
+                          ? auditControl
+                          : inspectorControl;
             trigger.current?.focus();
           }}
         >
-          {rightPanel === "coordination" ? (
+          {rightPanel === "project" ? (
+            <ProjectPanel
+              planId={initial.id}
+              userId={actor.id}
+              role={projectRole}
+              revision={checkpoint.revision}
+              dirty={dirty}
+              onRestore={observeRevision}
+            />
+          ) : rightPanel === "coordination" ? (
             <CoordinationPanel
               plan={building}
               planId={initial.id}
@@ -1039,6 +1123,7 @@ export function Studio({
               name={checkpoint.name}
               revision={checkpoint.revision}
               dirty={dirty}
+              readOnly={!editable}
             />
           ) : rightPanel === "clearance" && audit ? (
             <AuditPanel
@@ -1188,7 +1273,11 @@ export function Studio({
         )}
       </main>
       {agentsOpen && (
-        <McpSetup planId={initial.id} onClose={() => setAgentsOpen(false)} />
+        <McpSetup
+          planId={initial.id}
+          alternative={alternative}
+          onClose={() => setAgentsOpen(false)}
+        />
       )}
     </div>
   );

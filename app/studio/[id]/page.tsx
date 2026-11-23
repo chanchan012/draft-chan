@@ -5,6 +5,7 @@ import { Studio } from "@/components/studio/studio";
 import { authModalHref } from "@/lib/auth-navigation";
 import { clerkEnabled } from "@/lib/server/auth";
 import { plans } from "@/lib/server/plans";
+import { projectAccess } from "@/lib/server/project-access";
 import "./studio.css";
 
 export default async function StudioPage({
@@ -17,9 +18,16 @@ export default async function StudioPage({
   if (!session.isAuthenticated)
     redirect(authModalHref("sign-in", "/studio/" + encodeURIComponent(id)));
   if (!z.uuid().safeParse(id).success) notFound();
-  const document = await plans.getStudio(session.userId, id);
+  const access = await projectAccess(session.userId, id);
+  if (!access) notFound();
+  const document = await plans.getStudio(access.owner, id);
   if (!document) notFound();
   return (
-    <Studio initial={document} actor={{ kind: "human", id: session.userId }} />
+    <Studio
+      initial={document}
+      actor={{ kind: "human", id: session.userId }}
+      projectRole={access.role}
+      alternative={access.projectId !== id}
+    />
   );
 }
