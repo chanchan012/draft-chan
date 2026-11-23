@@ -6,6 +6,7 @@ import {
   unconfirmedBlueprints,
   type BlueprintAttempt,
 } from "./blueprint-store";
+import { traceOperation } from "./operations";
 
 export const blueprintEvent = "draft/floorplan.blueprint.requested";
 const attemptSchema = z.strictObject({
@@ -21,8 +22,15 @@ function eventFor(data: BlueprintAttempt) {
   };
 }
 
-export function queueBlueprint(input: BlueprintAttempt) {
-  return inngest.send(eventFor(input));
+export async function queueBlueprint(input: BlueprintAttempt) {
+  const sent = await inngest.send(eventFor(input));
+  traceOperation({
+    kind: "export",
+    id: input.id,
+    stage: "dispatched",
+    attempt: input.attempt,
+  });
+  return sent;
 }
 
 export const blueprintJob = inngest.createFunction(

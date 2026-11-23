@@ -403,6 +403,7 @@ it("lays out a two-bedroom plan using all MCP resources and tools over HTTP", as
       "furnish_room_preset",
       "generate_schedule",
       "get_job_status",
+      "get_operation_status",
       "import_dxf",
       "insert_block",
       "inspect_entity",
@@ -1310,7 +1311,7 @@ it("bridges stdio to the authenticated HTTP tools without sharing the database c
         },
       }),
     );
-    expect((await client.listTools()).tools).toHaveLength(90);
+    expect((await client.listTools()).tools).toHaveLength(91);
     expect((await client.listResources()).resources).toHaveLength(3);
     expect(
       (await client.readResource({ uri: "draft://floorplan-graph" })).contents,
@@ -1474,6 +1475,16 @@ it("schedules openings and publishes a pinned PDF issue over MCP", async () => {
       isError: false,
       structuredContent: {
         job: { id: issue.id, status: "ready", revision: 1 },
+      },
+    });
+    expect(
+      await call("get_operation_status", { kind: "export", id: issue.id }),
+    ).toMatchObject({
+      isError: false,
+      structuredContent: {
+        operation: { kind: "export", id: issue.id },
+        status: "ready",
+        revision: 1,
       },
     });
     expect(await call("list_sheet_issues", {})).toMatchObject({
@@ -2026,5 +2037,80 @@ it("shares a project with reviewers and keeps client grants and restores option-
     ).toBe(409);
   } finally {
     await agent.close();
+  }
+});
+
+it("stores one durable edit receipt for concurrent retries and scopes operation status", async () => {
+  const session = await planWithToken();
+  const otherToken = await session.api.request(
+    session.path + "/agent-tokens",
+    payload("POST", { name: "Other agent" }),
+  );
+  const { token } = (await otherToken.json()) as { token: string };
+  const api = createMcpHttp(localWindow(100));
+  const [a, b, other] = await Promise.all([
+    connect(api, session.token),
+    connect(api, session.token),
+    connect(api, token),
+  ]);
+  const operationId = crypto.randomUUID();
+  const input = {
+    operationId,
+    expectedRevision: 0,
+    start: { x: 0, y: 0 },
+    end: { x: 3000, y: 0 },
+    thicknessMm: 120,
+    kind: "interior",
+  };
+  try {
+    const [first, replay] = await Promise.all(
+      [a, b].map((client) =>
+        client.callTool({ name: "draw_wall", arguments: input }),
+      ),
+    );
+    const operation = { kind: "edit", id: operationId };
+    expect(first).toMatchObject({
+      isError: false,
+      structuredContent: { operation, revision: 1 },
+    });
+    expect(replay.structuredContent).toEqual(first.structuredContent);
+    expect(
+      await a.callTool({ name: "get_operation_status", arguments: operation }),
+    ).toMatchObject({
+      isError: false,
+      structuredContent: {
+        operation,
+        status: "saved",
+        tool: "draw_wall",
+        baseRevision: 0,
+        revision: 1,
+        receipt: first.structuredContent,
+      },
+    });
+    expect(
+      await other.callTool({
+        name: "get_operation_status",
+        arguments: operation,
+      }),
+    ).toMatchObject({
+      isError: true,
+      structuredContent: { code: "operation_unavailable" },
+    });
+    expect(
+      await a.callTool({
+        name: "draw_wall",
+        arguments: { ...input, end: { x: 4000, y: 0 } },
+      }),
+    ).toMatchObject({
+      isError: true,
+      structuredContent: { code: "operation_id_conflict" },
+    });
+    const graph = await session.api.request(session.path + "/graph");
+    expect(await graph.json()).toMatchObject({
+      revision: 1,
+      graph: { walls: [{ thicknessMm: 120 }] },
+    });
+  } finally {
+    await Promise.all([a.close(), b.close(), other.close()]);
   }
 });

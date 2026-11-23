@@ -8,6 +8,7 @@ import { issueSheets } from "../plans/construction-schedules";
 import { revisionStore } from "./revision-store";
 import { renderSheetSet } from "./sheet-pdf";
 import type { StudioDocument } from "../plans/studio-document";
+import { traceOperation } from "./operations";
 
 const job = floorplanExports;
 const summary = {
@@ -242,14 +243,30 @@ export async function renderQueuedBlueprint(input: BlueprintAttempt) {
     .set({ status: "ready", snapshot: null, artifact })
     .where(pending(input))
     .returning({ id: job.id });
+  if (written.length)
+    traceOperation({
+      kind: "export",
+      id: input.id,
+      stage: "ready",
+      attempt: input.attempt,
+      revision: row.revision,
+    });
   return { written: written.length > 0 };
 }
 
 export async function failBlueprint(input: BlueprintAttempt) {
-  await openDatabase()
+  const [failed] = await openDatabase()
     .update(job)
     .set({ status: "failed" })
-    .where(pending(input));
+    .where(pending(input))
+    .returning({ id: job.id });
+  if (failed)
+    traceOperation({
+      kind: "export",
+      id: input.id,
+      stage: "failed",
+      attempt: input.attempt,
+    });
 }
 
 export function unconfirmedBlueprints() {

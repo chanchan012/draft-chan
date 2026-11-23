@@ -50,6 +50,8 @@ function studioWorkspace() {
     gate: undefined as Promise<void> | undefined,
     signedIn: true,
     projectRole: "owner" as ProjectRole,
+    dropSaveResponse: false,
+    liveAvailable: true,
   };
 }
 
@@ -82,6 +84,7 @@ async function studio(
   const graphEndpoint = "**/api/floorplans/" + id;
   await page.route(graphEndpoint + "/live", (route) => {
     if (!workspace.signedIn) return route.fulfill({ status: 401 });
+    if (!workspace.liveAvailable) return route.abort("connectionreset");
     return route.fulfill({
       contentType: "text/event-stream",
       body:
@@ -147,6 +150,11 @@ async function studio(
         utilities: input.utilities ?? current.graph.utilities,
       },
     };
+    if (workspace.dropSaveResponse) {
+      workspace.dropSaveResponse = false;
+      workspace.liveAvailable = false;
+      return route.abort("connectionreset");
+    }
     return route.fulfill({ json: { revision: workspace.document.revision } });
   });
   await page.goto(path);
@@ -1642,5 +1650,36 @@ test("posts revision feedback in a shared read-only option", async ({
   await expect(panel.getByRole("list", { name: "Review notes" })).toContainText(
     "Comment · r4",
   );
+  await frame(page);
+});
+
+test("recovers a save whose response was lost and sends the next edit once", async ({
+  page,
+}) => {
+  const workspace = studioWorkspace();
+  workspace.dropSaveResponse = true;
+  await studio(page, false, workspace);
+  const tool = page.getByRole("button", { name: "Wall", exact: true });
+  await tool.click();
+  await point(page, 0.2, 0.42);
+  await point(page, 0.75, 0.42);
+  await page.getByRole("button", { name: "Save", exact: true }).click();
+  await expect.poll(() => workspace.document.revision).toBe(1);
+  await expect(page.locator(".studio-save-status")).toHaveText(
+    "Sync interrupted",
+  );
+  await point(page, 0.2, 0.61);
+  await point(page, 0.75, 0.61);
+  await expect(page.locator("[data-wall]")).toHaveCount(2);
+  workspace.liveAvailable = true;
+  await page.evaluate(() => window.dispatchEvent(new Event("online")));
+  await expect.poll(() => workspace.document.revision).toBe(2);
+  await expect(page.locator(".studio-save-status")).toHaveText("Saved");
+  expect(workspace.document.graph.walls).toHaveLength(2);
+  expect(workspace.edits.filter(({ revision }) => revision === 1)).toHaveLength(
+    1,
+  );
+  await page.reload();
+  await expect(page.locator("[data-wall]")).toHaveCount(2);
   await frame(page);
 });
