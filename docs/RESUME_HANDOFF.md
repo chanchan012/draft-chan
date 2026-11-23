@@ -1,5 +1,25 @@
 # Resume handoff
 
+## M12.1 release checkpoint
+
+Feature branch `feat/m12-1-team-projects` at `d1a126eda3c69d7b0c903062419f63b1b901b2a9` merged as `de0784fb377a6a6e4631553b2dbbc08fe33dabfa`. The optimized Next build, 110 Vitest tests and 160 Playwright checks passed. The shared Neon database has migration `0007_team_projects.sql` recorded at `1795397939689` with SHA-256 `d18d3e644ccb94435b661fbe79267c487e104663f12792f28f588e11e1129d58`. The runtime role was verified on isolation branch `br-ancient-mountain-be6mka65`. Graph v1 and the existing environment variables carry the release.
+
+Vercel Preview `dpl_E3Ktp2s7pYKBgnzMnRZ2YdWoM7uf` and Production `dpl_HjLPnBtcNWXusRYNDbzmnDmTsPBx` reached Ready. Production returned 200 for landing, 307 for signed-out Studio, and 401 for project reads, member assignment, and MCP. The signed-in project workflow was verified with local integration and browser fixtures. [Production](https://draft-chan.vercel.app) · [Preview](https://draft-chan-rojwy4vns-chanchans-projects-aada625f.vercel.app)
+
+Open Studio → Project. Under Members, add a collaborator using the Clerk ID from their signed-in `/api/account`. Fork the current revision in Options, open the named option, and use Review to add a revision-linked note. An owner can assign a client to that option under Agent access. History restores geometry as a new revision. MCP exposes 90 tools and three resources.
+
+```sh
+git switch main
+git pull --ff-only
+npm ci
+npm run typecheck
+npm test -- tests/mcp.unit.test.ts -t 'shares a project'
+npm run test:e2e -- --grep 'posts revision feedback'
+npm run build
+```
+
+M12.2 next covers the large-plan benchmark, interrupted save recovery, the backup restore drill, and MCP operation tracing.
+
 ## M11.2 release checkpoint
 
 Feature branch `feat/m11-2-code-review` at `36e6a7e35ad74cd3b6dea718498cf58507bfe3b6` merged as `1351c2fb66923c30288a1c1deff08e392dbdbab0`. The optimized Next build, 109 Vitest tests and 155 Playwright checks passed. MCP exposes 85 tools and three resources. Graph v1 adds profile, egress, approach and turning records to optional `coordination`. Neon stays at migration 0006 and the existing environment variables are sufficient.
@@ -73,7 +93,7 @@ The release passed all 85 Vitest tests and 125 Playwright checks. Playwright use
 
 ## Next proposed subgoal
 
-M12.1 covers project membership, viewer/editor/reviewer roles, per-client grants, named alternatives, review comments and revision restore. Start from the [CAD roadmap](CAD_ROADMAP.md), the owner-scoped plan repository, the MCP grants and the revision store.
+M12.2 covers large-plan benchmarks, reconnect and recovery checks, backup restore drills, and MCP operation tracing. Start from the [CAD roadmap](CAD_ROADMAP.md), the Studio sync hooks, the revision store and the Inngest blueprint worker.
 
 The visual track starts at M13.1 in the [CAD roadmap](CAD_ROADMAP.md). Inspect the current renderer with `rg --files components/studio lib/plans | rg "isometric|wall-mesh"`. Use the MCP-furnished apartment in `tests/e2e/studio.spec.ts` as the first reference scene.
 

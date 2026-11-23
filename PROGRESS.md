@@ -319,3 +319,11 @@ Feature `36e6a7e35ad74cd3b6dea718498cf58507bfe3b6` merged as `1351c2fb66923c3028
 The optimized Next build, 109 Vitest tests and 155 Playwright checks across five viewport sizes passed. Coverage includes the slab clash, blocked door approach, missing occupancy and historical issue replay through Studio, MCP and Hono. MCP exposes 85 tools and three resources. Graph v1 extends optional `coordination` without a database migration or new environment variables.
 
 Vercel Preview `dpl_2TNV8Jk52opb5JZofZaehMkpBP86` and Production `dpl_HKVdgDq5BRwxVWmcAk5eNGEgBEBU` reached Ready. Public production returned 200 for landing, 307 for signed-out Studio and 401 for both issue replay and MCP. The MCP response included the OAuth discovery challenge. Signed-in review and replay were verified with the browser and integration fixtures. [Production](https://draft-chan.vercel.app) · [Application merge](https://github.com/chanchan012/draft-chan/commit/1351c2fb66923c30288a1c1deff08e392dbdbab0)
+
+## M12.1 · Team projects
+
+Feature `d1a126eda3c69d7b0c903062419f63b1b901b2a9` merged as `de0784fb377a6a6e4631553b2dbbc08fe33dabfa`. Studio’s Project panel adds member roles, revision-linked review comments, named options, saved geometry comparisons, client-specific Clerk OAuth access, and attributed revision restore. MCP adds five tools, reaching 90 tools and three resources.
+
+The production build, 110 Vitest tests and 160 Playwright checks passed. Migration `0007_team_projects.sql` passed on an isolated Neon branch using the `draft_app` role and was applied to the shared `draft` database. Graph v1 and the existing environment variables carry the release.
+
+Vercel Preview `dpl_E3Ktp2s7pYKBgnzMnRZ2YdWoM7uf` and Production `dpl_HjLPnBtcNWXusRYNDbzmnDmTsPBx` reached Ready. Public smoke checks passed for landing, Studio sign-in, protected project routes, and the MCP OAuth challenge. [Production](https://draft-chan.vercel.app)
