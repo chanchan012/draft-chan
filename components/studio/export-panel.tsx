@@ -26,11 +26,13 @@ export function ExportPanel({
   name,
   revision,
   dirty,
+  readOnly = false,
 }: {
   id: string;
   name: string;
   revision: number;
   dirty: boolean;
+  readOnly?: boolean;
 }) {
   const base = `/api/floorplans/${id}`;
   const statusUrl = `${base}/exports?revision=${revision}`;
@@ -195,7 +197,7 @@ export function ExportPanel({
                 >
                   <Download size={15} /> Download
                 </button>
-              ) : (
+              ) : readOnly ? null : (
                 <button
                   type="button"
                   aria-label={`${job?.status === "failed" ? "Retry" : "Generate"} ${label}`}

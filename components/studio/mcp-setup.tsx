@@ -13,9 +13,11 @@ const expiry = new Intl.DateTimeFormat(undefined, {
 
 export function McpSetup({
   planId,
+  alternative = false,
   onClose,
 }: {
   planId: string;
+  alternative?: boolean;
   onClose(): void;
 }) {
   const dialog = useRef<HTMLDialogElement>(null);
@@ -37,16 +39,17 @@ export function McpSetup({
     dialog.current?.showModal();
     setEndpoint(window.location.origin + "/api/mcp");
     const abort = new AbortController();
-    void fetch(oauthPath, { signal: abort.signal })
-      .then(async (response) => {
-        if (!response.ok) throw new Error();
-        const result = (await response.json()) as { state: OAuthState };
-        setOauth(result.state);
-      })
-      .catch(() => {
-        if (!abort.signal.aborted)
-          setOauthError("Could not load OAuth access.");
-      });
+    if (!alternative)
+      void fetch(oauthPath, { signal: abort.signal })
+        .then(async (response) => {
+          if (!response.ok) throw new Error();
+          const result = (await response.json()) as { state: OAuthState };
+          setOauth(result.state);
+        })
+        .catch(() => {
+          if (!abort.signal.aborted)
+            setOauthError("Could not load OAuth access.");
+        });
     void fetch(base, { signal: abort.signal })
       .then(async (response) => {
         if (!response.ok) throw new Error("Could not load agent tokens.");
@@ -59,7 +62,7 @@ export function McpSetup({
         if (!abort.signal.aborted) setBusy(false);
       });
     return () => abort.abort();
-  }, [base, oauthPath]);
+  }, [base, oauthPath, alternative]);
 
   async function updateOAuth(enable: boolean) {
     setOauthBusy(true);
@@ -183,7 +186,12 @@ export function McpSetup({
         aria-labelledby="draft-agent-oauth"
       >
         <h3 id="draft-agent-oauth">Sign in with Clerk</h3>
-        {oauth === "unavailable" ? (
+        {alternative ? (
+          <p>
+            Assign a Clerk OAuth client under Project → Agent access, then
+            connect from the registered Draft address.
+          </p>
+        ) : oauth === "unavailable" ? (
           <p>Clerk OAuth is available at the registered Draft address.</p>
         ) : oauth === "other_plan" ? (
           <p>

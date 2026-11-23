@@ -13,6 +13,8 @@ import {
   requestBlueprintSchema,
 } from "../plans/exports";
 import { plans } from "./plans";
+import { projectAccess } from "./project-access";
+import { mayEdit } from "../plans/projects";
 import { queueThumbnail } from "./thumbnails";
 import {
   getBlueprintFile,
@@ -73,8 +75,24 @@ export function planRoutes(
     await next();
   });
   const validateId: MiddlewareHandler<PlanEnvironment> = async (c, next) => {
-    if (!z.uuid().safeParse(c.req.param("id")).success)
+    const id = c.req.param("id")!;
+    if (!z.uuid().safeParse(id).success)
       return c.json({ error: "Invalid plan ID" }, 400);
+    const access = await projectAccess(c.get("identity")!.userId, id);
+    if (access) {
+      const direct = c.req.path.endsWith("/" + id);
+      const presence = c.req.path.endsWith("/presence");
+      if (
+        c.req.method !== "GET" &&
+        !presence &&
+        (direct ? access.role !== "owner" : !mayEdit(access.role))
+      )
+        return c.json(
+          { error: "Your project role does not allow this change." },
+          403,
+        );
+      c.set("owner", access.owner);
+    }
     await next();
   };
   app.use("/:id", validateId);
@@ -108,7 +126,10 @@ export function planRoutes(
         bus,
         key: planChannel(owner, id),
         revision,
-        currentRevision: () => repo.revision(owner, id),
+        currentRevision: async () => {
+          const access = await projectAccess(c.get("identity")!.userId, id);
+          return access ? repo.revision(access.owner, id) : null;
+        },
         expiresAt: c.get("identityExpiresAt"),
         signal: c.req.raw.signal,
       });
@@ -127,7 +148,7 @@ export function planRoutes(
         await publishPlanPresence(
           owner,
           id,
-          { kind: "human", id: owner },
+          { kind: "human", id: c.get("identity")!.userId },
           parsed.data,
           bus,
         );
@@ -300,7 +321,10 @@ export function planRoutes(
       if (!parsed.success)
         return c.json({ error: "Invalid plan geometry or revision" }, 400);
       const id = c.req.param("id");
-      const result = await repo.saveStudio(c.get("owner"), id, parsed.data);
+      const result = await repo.saveStudio(c.get("owner"), id, parsed.data, {
+        kind: "human",
+        id: c.get("identity")!.userId,
+      });
       if (result.status === "invalid")
         return c.json({ error: result.error }, 400);
       if (result.status === "conflict")

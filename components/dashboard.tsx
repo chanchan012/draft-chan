@@ -313,13 +313,18 @@ export function Dashboard({ account }: { account: ReactNode }) {
                         <div className="dash-card-body">
                           <strong>{plan.name}</strong>
                           <ArrowUpRight size={16} />
-                          <span>{area(plan.areaM2)}</span>
+                          <span>
+                            {area(plan.areaM2)}
+                            {plan.shared ? " · " + plan.shared : ""}
+                          </span>
                         </div>
                       </Link>
-                      <PlanActions
-                        plan={plan}
-                        onEdit={(mode) => open({ mode, plan })}
-                      />
+                      {!plan.shared && (
+                        <PlanActions
+                          plan={plan}
+                          onEdit={(mode) => open({ mode, plan })}
+                        />
+                      )}
                     </article>
                   ))}
                 </div>

@@ -140,6 +140,14 @@ import { queueBlueprint } from "./blueprint-jobs";
 import { liveBus, planChannel, publishPlanPresence } from "./live-bus";
 import { plans } from "./plans";
 import { queueThumbnail } from "./thumbnails";
+import { optionInput, restoreInput, reviewInput } from "../plans/projects";
+import {
+  compareDesignOptions,
+  createDesignOption,
+  listPlanRevisions,
+  restorePlanRevision,
+  writeReviewNote,
+} from "./projects";
 
 const objectId = z.string().trim().min(1).max(128);
 const preciseCoordinate = z.number().finite().min(-1_010_000).max(1_010_000);
@@ -390,6 +398,85 @@ export function createDraftMcp(scope: AgentScope, backend = draftMcpBackend) {
             doc.graph.drawingReferences?.map(referenceMetadata),
         },
       };
+    },
+  );
+
+  tool(
+    "create_design_option",
+    "Fork a saved revision of the connected plan into a named option with a new ID. The connection stays scoped to its current plan.",
+    optionInput,
+    false,
+    async (input) => {
+      const option = await createDesignOption(scope, input);
+      if (!option)
+        throw new ToolFailure(
+          "option_unavailable",
+          "The source revision or new option ID is unavailable.",
+        );
+      await queueThumbnail(option.id).catch(() => {});
+      return { option };
+    },
+  );
+  tool(
+    "compare_options",
+    "Compare an option’s baseline or an earlier saved revision with another saved revision of the connected plan.",
+    z.strictObject({
+      beforeRevision: exportRevision.default(0),
+      afterRevision: exportRevision,
+    }),
+    true,
+    async ({ beforeRevision, afterRevision }) => {
+      const diff = await compareDesignOptions(
+        { ...scope, revision: beforeRevision },
+        { ...scope, revision: afterRevision },
+      );
+      if (!diff)
+        throw new ToolFailure(
+          "revision_unavailable",
+          "Choose saved revisions of the connected option.",
+        );
+      return diff;
+    },
+  );
+  tool(
+    "request_review",
+    "Save a review request on a revision of the connected option so project reviewers can respond in Studio.",
+    reviewInput,
+    false,
+    async (input) => {
+      const note = await writeReviewNote(scope, input, "request", actor);
+      if (!note)
+        throw new ToolFailure(
+          "review_unavailable",
+          "The review revision or note ID is unavailable.",
+        );
+      return { planId, ...note, revision: input.revision };
+    },
+  );
+  tool(
+    "list_revisions",
+    "List saved revisions of the connected option, with attribution when a revision restores an earlier snapshot.",
+    z.strictObject({ before: exportRevision.optional() }),
+    true,
+    async ({ before }) => {
+      await current();
+      return { planId, revisions: await listPlanRevisions(scope, before) };
+    },
+  );
+  tool(
+    "restore_revision",
+    "Restore an earlier revision of the connected option as a new, attributed revision. The current revision must match.",
+    restoreInput,
+    false,
+    async (input) => {
+      const restored = await restorePlanRevision(scope, input, actor);
+      if (!restored)
+        throw new ToolFailure(
+          "revision_conflict",
+          "The source or current revision changed.",
+        );
+      await backend.publish(scope, restored.revision).catch(() => {});
+      return { planId, ...restored };
     },
   );
   resource(

@@ -116,6 +116,7 @@ export function thumbnailSvg(graph: unknown) {
   );
 }
 export interface PlanCard {
+  shared?: "viewer" | "reviewer" | "editor";
   id: string;
   name: string;
   revision: number;
